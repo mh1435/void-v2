@@ -462,10 +462,24 @@ body::before {
 .hub-detail-main-title { font-family: var(--hub-display); font-weight: 700; font-size: 18px; color: #fff; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hub-detail-rarity-badge { align-self: flex-start; font-family: var(--hub-mono); font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); }
 
+.item-type-tabs {
+  display: flex; gap: 4px; padding: 8px 0 10px 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.item-type-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--muted);
+  font-family: var(--hub-display); font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 6px 14px; border-radius: 20px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.item-type-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.item-type-grid { display: none; }
+.item-type-grid.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+
 .hub-detail-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.hub-detail-stat-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.hub-detail-stat-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.hub-detail-stat-tile-img { width: 38px; height: 38px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #0b0c10; }
+.hub-detail-stat-tile-text { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
 .hub-detail-stat-label { font-size: 9px; font-family: var(--hub-mono); color: var(--muted); letter-spacing: 0.04em; }
-.hub-detail-stat-value { font-family: var(--hub-display); font-weight: 700; font-size: 14px; color: var(--accent); }
+.hub-detail-stat-value { font-family: var(--hub-display); font-weight: 700; font-size: 13px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .hub-detail-desc-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
 .hub-detail-section-name { font-family: var(--hub-display); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 8px; }

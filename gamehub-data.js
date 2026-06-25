@@ -320,6 +320,15 @@ const MLBB_ITEM_DATA_RAW = [
   { id: 'enchanted_talisman', name: 'Enchanted Talisman', type: 'Magic' },
   { id: 'winter_crown', name: 'Winter Crown', type: 'Magic' },
 
+  // Physical Attack — additional
+  { id: 'golden_staff', name: 'Golden Staff', type: 'Physical' },
+  { id: 'scarlet_phantom', name: 'Scarlet Phantom', type: 'Physical' },
+
+  // Magic Power — additional
+  { id: 'calamity_reaper', name: 'Calamity Reaper', type: 'Magic' },
+  { id: 'concentrated_energy', name: 'Concentrated Energy', type: 'Magic' },
+  { id: 'necklace_of_durance', name: 'Necklace of Durance', type: 'Magic' },
+
   // Defense / Protective Armour Items
   { id: 'radiant_armor', name: 'Radiant Armor', type: 'Defense' },
   { id: 'twilight_armor', name: 'Twilight Armor', type: 'Defense' },
@@ -332,7 +341,16 @@ const MLBB_ITEM_DATA_RAW = [
   { id: 'guardian_helmet', name: 'Guardian Helmet', type: 'Defense' },
   { id: 'blade_armor', name: 'Blade Armor', type: 'Defense' },
   { id: 'thunder_belt', name: 'Thunder Belt', type: 'Defense' },
-  { id: 'cursed_helmet', name: 'Cursed Helmet', type: 'Defense' }
+  { id: 'cursed_helmet', name: 'Cursed Helmet', type: 'Defense' },
+
+  // Movement / Boots
+  { id: 'warrior_boots', name: 'Warrior Boots', type: 'Movement' },
+  { id: 'tough_boots', name: 'Tough Boots', type: 'Movement' },
+  { id: 'arcane_boots', name: 'Arcane Boots', type: 'Movement' },
+  { id: 'magic_shoes', name: 'Magic Shoes', type: 'Movement' },
+  { id: 'swift_boots', name: 'Swift Boots', type: 'Movement' },
+  { id: 'rapid_boots', name: 'Rapid Boots', type: 'Movement' },
+  { id: 'demon_shoes', name: 'Demon Shoes', type: 'Movement' }
 ];
 
 function buildHeroTitleString(id) {
@@ -350,6 +368,9 @@ function resolveHeroFilename(id) {
   if (id === 'cecilision') return 'Cecillion.png';
   if (id === 'luo-yi') return 'Luo Yi.png';
   if (id === 'iridhel') return 'Irithel.png';
+  // heroes with SVG placeholder images
+  const svgHeroes = ['nolan','sora','hirara','khaleed','cici','suyou','lukas','kalea','ixia','obsidia','novaria','zhuxin','zetian','chip','marcel'];
+  if (svgHeroes.includes(id)) return id.charAt(0).toUpperCase() + id.slice(1) + '.svg';
   return id.charAt(0).toUpperCase() + id.slice(1) + '.png';
 }
 
@@ -395,6 +416,18 @@ const ITEM_FILENAME_MAP = {
   blade_armor:            'blade-armor-png.png',
   thunder_belt:           'thunder-belt-png.png',
   cursed_helmet:          'cursed-helmet-png.png',
+  golden_staff:           'golden-staff-png.png',
+  scarlet_phantom:        'scarlet-phantom-png.png',
+  calamity_reaper:        'calamity-reaper-png.png',
+  concentrated_energy:    'concentrated-energy-png.png',
+  necklace_of_durance:    'necklace-of-durance-png.png',
+  warrior_boots:          'warrior-boots-png-min.png',
+  tough_boots:            'tough-boots-png-min.png',
+  arcane_boots:           'arcane-boots-png-min.png',
+  magic_shoes:            'magic-shoes-png-min.png',
+  swift_boots:            'swift-boots-png-min.png',
+  rapid_boots:            'rapid-boots-png-min.png',
+  demon_shoes:            'demon-shoes-png-min.png',
 };
 
 function resolveItemFilename(id) {

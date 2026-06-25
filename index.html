@@ -102,7 +102,16 @@ if ('serviceWorker' in navigator) {
           <div class="gamehub-search-box">
             <input type="text" class="text-input" id="item-search-input" placeholder="Search item cores...">
           </div>
-          <div class="hub-grid" id="item-grid"></div>
+          <div class="item-type-tabs">
+            <button class="item-type-btn active" data-itype="Physical">PHYSICAL</button>
+            <button class="item-type-btn" data-itype="Magic">MAGIC</button>
+            <button class="item-type-btn" data-itype="Defense">DEFENSE</button>
+            <button class="item-type-btn" data-itype="Movement">MOVEMENT</button>
+          </div>
+          <div class="hub-grid item-type-grid active" id="item-grid-physical"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-magic"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-defense"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-movement"></div>
         </div>
       </div>
     </div>

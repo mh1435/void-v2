@@ -695,17 +695,26 @@ function setupGameHub() {
     });
   });
 
+  // item type sub-tabs
+  document.querySelectorAll('.item-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.item-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.item-type-grid').forEach(g => g.classList.remove('active'));
+      document.getElementById(`item-grid-${btn.dataset.itype.toLowerCase()}`).classList.add('active');
+    });
+  });
+
   renderHeroGrid(GameHubData.heroes);
-  renderItemGrid(GameHubData.items);
+  renderAllItemGrids(GameHubData.items);
 
   const heroSearch = document.getElementById('hero-search-input');
   if (heroSearch) {
     heroSearch.addEventListener('input', () => {
       const q = heroSearch.value.trim().toLowerCase();
-      const filtered = GameHubData.heroes.filter(h =>
+      renderHeroGrid(GameHubData.heroes.filter(h =>
         h.name.toLowerCase().includes(q) || h.role.toLowerCase().includes(q)
-      );
-      renderHeroGrid(filtered);
+      ));
     });
   }
 
@@ -713,14 +722,13 @@ function setupGameHub() {
   if (itemSearch) {
     itemSearch.addEventListener('input', () => {
       const q = itemSearch.value.trim().toLowerCase();
-      const filtered = GameHubData.items.filter(i =>
-        i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q)
+      renderAllItemGrids(q
+        ? GameHubData.items.filter(i => i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q))
+        : GameHubData.items
       );
-      renderItemGrid(filtered);
     });
   }
 }
-
 
 function renderHeroGrid(heroes) {
   const grid = document.getElementById('hero-grid');
@@ -746,8 +754,8 @@ function renderHeroGrid(heroes) {
   });
 }
 
-function renderItemGrid(items) {
-  const grid = document.getElementById('item-grid');
+function renderTypeGrid(gridId, items) {
+  const grid = document.getElementById(gridId);
   if (!grid) return;
   if (items.length === 0) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;">No matching item cores found.</p>`;
@@ -764,10 +772,16 @@ function renderItemGrid(items) {
       </div>
     </div>
   `).join('');
-
   grid.querySelectorAll('.hub-card').forEach(card => {
     card.addEventListener('click', () => openItemDetail(card.dataset.itemId));
   });
+}
+
+function renderAllItemGrids(items) {
+  renderTypeGrid('item-grid-physical',  items.filter(i => i.type === 'Physical'));
+  renderTypeGrid('item-grid-magic',     items.filter(i => i.type === 'Magic'));
+  renderTypeGrid('item-grid-defense',   items.filter(i => i.type === 'Defense'));
+  renderTypeGrid('item-grid-movement',  items.filter(i => i.type === 'Movement'));
 }
 
 function findHero(id) { return GameHubData.heroes.find(h => h.id === id); }
@@ -776,8 +790,11 @@ function findItem(id) { return GameHubData.items.find(i => i.id === id); }
 function statTileHTML(label, name, img) {
   return `
     <div class="hub-detail-stat-tile hub-detail-stat-tile-clickable" data-stat-name="${name}">
-      <span class="hub-detail-stat-label">${label}</span>
-      <span class="hub-detail-stat-value">${name}</span>
+      ${img ? `<img class="hub-detail-stat-tile-img" src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+      <div class="hub-detail-stat-tile-text">
+        <span class="hub-detail-stat-label">${label}</span>
+        <span class="hub-detail-stat-value">${name}</span>
+      </div>
     </div>
   `;
 }
