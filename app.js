@@ -835,7 +835,7 @@ function openHeroDetail(id) {
   `).join('');
 
   const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
-  const ytSearch = `https://www.youtube.com/results?search_query=mobile+legends+${encodeURIComponent(hero.name)}+combo+guide`;
+  const ytSearch = `https://www.youtube.com/results?search_query=mlbb+${encodeURIComponent(hero.name)}+combo+montage+player+2025`;
   const comboSection = `
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">COMBOS</div>

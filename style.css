@@ -470,7 +470,7 @@ body::before {
   font-family: var(--hub-display); font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
   padding: 6px 14px; border-radius: 20px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
-.item-type-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.item-type-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .item-type-grid { display: none; }
 .item-type-grid.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
 
