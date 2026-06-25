@@ -6,7 +6,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- ASSASSINS / JUNGLERS ---
   { 
     id: 'saber', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['khufra', 'tigreal', 'athena_shield'],
     builds: {
       'One-Shot Burst': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'immortality'],
@@ -15,7 +15,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'karina', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['athena_shield', 'khufra', 'lolita'],
     builds: {
       'Full Magic Burst': ['genius_wand', 'lightning_truncheon', 'holy_crystal', 'divine_glaive', 'winter_crown', 'blood_wings'],
@@ -24,7 +24,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'fanny', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['khufra', 'masha', 'chou', 'saber'],
     builds: {
       'S-Tier Hyper DMG': ['blade_of_the_heptaseas', 'hunter_strike', 'blade_of_despair', 'malefic_roar', 'rose_gold_meteor', 'immortality'],
@@ -33,7 +33,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'hayabusa', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['khufra', 'saber', 'winter_crown'],
     builds: {
       'Hyper Carry Jungle': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'immortality'],
@@ -42,7 +42,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'natalia', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['hylos', 'baxia', 'rafaela'],
     builds: {
       'Roam Roamer Execute': ['blade_of_the_heptaseas', 'hunter_strike', 'windtalker', 'berserker_fury', 'malefic_roar', 'blade_of_despair']
@@ -50,7 +50,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'lancelot', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['khufra', 'phoveus', 'masha'],
     builds: {
       'Full Physical DMG': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'endless_battle', 'malefic_roar', 'immortality'],
@@ -59,7 +59,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'helcurt', 
-    role: 'Assassin'
+    role: 'Assassin',
     counters: ['hylos', 'baxia', 'tigreal'],
     builds: {
       'Burst Damage': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'malefic_roar', 'windtalker', 'immortality']
@@ -67,7 +67,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'gusion', 
-    role: 'Assassin/Mage'
+    role: 'Assassin/Mage',
     counters: ['athena_shield', 'khufra', 'lolita'],
     builds: {
       'Magic Core Dmg': ['genius_wand', 'lightning_truncheon', 'holy_crystal', 'divine_glaive', 'winter_crown', 'blood_wings']
@@ -75,7 +75,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'selena', 
-    role: 'Assassin/Mage'
+    role: 'Assassin/Mage',
     counters: ['diggie', 'radiant_armor', 'lolita'],
     builds: {
       'Roam Dire Hit Poke': ['enchanted_talisman', 'genius_wand', 'lightning_truncheon', 'holy_crystal', 'divine_glaive', 'winter_crown']
@@ -93,7 +93,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- FIGHTERS / EXP LANE ---
   { 
     id: 'balmond', 
-    role: 'Fighter'
+    role: 'Fighter',
     counters: ['baxia', 'valir', 'dominance_ice'],
     builds: {
       'Jungle Utility Tank': ['war_axe', 'cursed_helmet', 'dominance_ice', 'guardian_helmet', 'radiant_armor', 'immortality'],
@@ -102,7 +102,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'chou', 
-    role: 'Fighter'
+    role: 'Fighter',
     counters: ['khufra', 'phoveus', 'diggie'],
     builds: {
       'One-Shot Damage': ['blade_of_the_heptaseas', 'hunter_strike', 'endless_battle', 'blade_of_despair', 'malefic_roar', 'immortality'],
@@ -111,7 +111,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'ruby', 
-    role: 'Fighter'
+    role: 'Fighter',
     counters: ['baxia', 'valir', 'dominance_ice'],
     builds: {
       'EXP Spellvamp Offlane': ['war_axe', 'bloodlust_axe', 'dominance_ice', 'oracle', 'brute_force_breastplate', 'immortality'],
@@ -120,7 +120,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'lapu-lapu', 
-    role: 'Fighter'
+    role: 'Fighter',
     counters: ['baxia', 'valir', 'dominance_ice'],
     builds: {
       'Sustain Offlane DMG': ['bloodlust_axe', 'hunter_strike', 'war_axe', 'brute_force_breastplate', 'oracle', 'immortality'],
@@ -165,7 +165,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- MARKSMEN / GOLD LANE ---
   { 
     id: 'miya', 
-    role: 'Marksman'
+    role: 'Marksman',
     counters: ['saber', 'blade_armor', 'wind_of_nature'],
     builds: {
       'Crit Attack Speed': ['windtalker', 'berserker_fury', 'haas_claws', 'corrosion_scythe', 'malefic_roar', 'wind_of_nature'],
@@ -174,7 +174,7 @@ const MLBB_HERO_DATA_RAW = [
   },
   { 
     id: 'popol', 
-    role: 'Marksman'
+    role: 'Marksman',
     counters: ['saber', 'gusion', 'wind_of_nature'],
     builds: {
       'Gold Lane Tower Push': ['blade_of_the_heptaseas', 'hunter_strike', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'wind_of_nature'],
@@ -203,7 +203,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- MAGES / MID LANE ---
   { 
     id: 'alice', 
-    role: 'Mage'
+    role: 'Mage',
     counters: ['baxia', 'dominance_ice', 'divine_glaive'],
     builds: {
       'Sustain Magic Tank': ['clock_of_destiny', 'lightning_truncheon', 'dominance_ice', 'glowing_wand', 'oracle', 'winter_crown'],
@@ -240,7 +240,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- TANKS / ROAM ---
   { 
     id: 'tigreal', 
-    role: 'Tank'
+    role: 'Tank',
     counters: ['diggie', 'valir'],
     builds: {
       'Full Defense Roam': ['dominance_ice', 'athena_shield', 'antique_cuirass', 'radiant_armor', 'immortality', 'guardian_helmet']
@@ -266,7 +266,7 @@ const MLBB_HERO_DATA_RAW = [
   // --- SUPPORTS / ROAM ---
   { 
     id: 'angela', 
-    role: 'Support'
+    role: 'Support',
     counters: ['saber', 'natalia', 'gusion'],
     builds: {
       'Pocket Shield Heal': ['enchanted_talisman', 'glowing_wand', 'ice_queen_wand', 'oracle', 'athena_shield', 'immortality']
@@ -346,7 +346,59 @@ function resolveHeroFilename(id) {
   if (id === 'popol') return 'Popol and Kupa.png';
   if (id === 'yu-zhong') return 'Yu Zhong.png';
   if (id === 'x-borg') return 'X-Borg.png';
+  if (id === 'chang-e') return "Chang'e.png";
+  if (id === 'cecilision') return 'Cecillion.png';
+  if (id === 'luo-yi') return 'Luo Yi.png';
+  if (id === 'iridhel') return 'Irithel.png';
   return id.charAt(0).toUpperCase() + id.slice(1) + '.png';
+}
+
+const ITEM_FILENAME_MAP = {
+  sea_halberd:            'sea-healberd-png.png',
+  rose_gold_meteor:       'rose-gold-meteor-png.png',
+  bloodlust_axe:          'blood-axe-png.png',
+  hunter_strike:          'hunter-strike-png.png',
+  blade_of_despair:       'blade-of-despair-png.png',
+  blade_of_the_heptaseas: 'blade-of-heptaseas-png.png',
+  windtalker:             'windtalker-png.png',
+  endless_battle:         'endless-battle-png.png',
+  berserker_fury:         'bersekers-fury-png.png',
+  haas_claws:             'haas-claw-png.png',
+  malefic_roar:           'malefic-roar-png.png',
+  war_axe:                'war-axe-png.png',
+  wind_of_nature:         'wind-of-nature-png.png',
+  corrosion_scythe:       'corrosion-scythe.png',
+  demon_hunter_sword:     'demon-hunter-sword-png.png',
+  great_dragon_spear:     'great-dragon-spear-png.png',
+  genius_wand:            'genius-wand-png.png',
+  lightning_truncheon:    'lightning-truncheon-png.png',
+  fleeting_time:          'fleeting-time-png.png',
+  blood_wings:            'blood-wings-png.png',
+  clock_of_destiny:       'clock-of-destiny-png.png',
+  holy_crystal:           'holy-crystal-png.png',
+  divine_glaive:          'divine-glaive-png.png',
+  glowing_wand:           'glowing-wand-png.png',
+  ice_queen_wand:         'ice-queen-wand-png.png',
+  feather_of_heaven:      'feather-of-heaven-png.png',
+  star_shard:             'starlium-scythe-png.png',
+  enchanted_talisman:     'enhanched-talisman-png.png',
+  winter_crown:           'winter-crown-png.png',
+  radiant_armor:          'radiant-armor-png.png',
+  twilight_armor:         'twilight-armor-png.png',
+  brute_force_breastplate:'brute-force-breastplate-png.png',
+  immortality:            'immortality-png.png',
+  dominance_ice:          'dominance-ace-png.png',
+  athena_shield:          'athena-shield-png.png',
+  oracle:                 'oracle-png.png',
+  antique_cuirass:        'antique-cuirass-png.png',
+  guardian_helmet:        'guardian-helmet-png.png',
+  blade_armor:            'blade-armor-png.png',
+  thunder_belt:           'thunder-belt-png.png',
+  cursed_helmet:          'cursed-helmet-png.png',
+};
+
+function resolveItemFilename(id) {
+  return ITEM_FILENAME_MAP[id] || (id + '.png');
 }
 
 const GameHubData = {
@@ -363,7 +415,7 @@ const GameHubData = {
     id: i.id,
     name: i.name,
     type: i.type,
-    img: `images/items/${i.id}.png`,
+    img: `images/items/${resolveItemFilename(i.id)}`,
     desc: `GameHub equipment profile tracking baseline metrics for tier matrix core: [${i.name.toUpperCase()}].`
   }))
 };
