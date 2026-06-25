@@ -431,6 +431,46 @@ function resolveItemFilename(id) {
   return ITEM_FILENAME_MAP[id] || (id + '.png');
 }
 
+const HERO_COMBO_VIDEOS = {
+  gusion:       '7-OKttjfkJM',
+  fanny:        'apwMlNU17E4',
+  ling:         'tROvSzZsqY4',
+  lancelot:     'eDcN2jKAMkU',
+  hayabusa:     'Q7VmCGJLoI0',
+  karina:       'T-7hkRcjYiU',
+  aldous:       'x3a4eud-oJ4',
+  valentina:    'WJGo10s2EiM',
+  eudora:       'HD1SAHJRA8U',
+  chou:         'qnQoXox_9xM',
+  alucard:      'QFs1oricOQ4',
+  zilong:       '-DH4VPDl-3o',
+  argus:        '2PV0ZRNE16Q',
+  roger:        'pXsG6flAFCE',
+  beatrix:      '3tZc1L3uSAc',
+  brody:        'vDy9VzBG-RA',
+  lesley:       '464WIbS_xbg',
+  claude:       'q1EcS1pgiMI',
+  granger:      'uTj1rB3WibA',
+  moskov:       'wZHCRnQkNkI',
+  melissa:      'PWqJv_aNEkE',
+  nolan:        '4IY-cL3Flkk',
+  sora:         'fzY7qyp8ark',
+  cici:         'ZaFJu2a00to',
+  novaria:      '4-3W_31e4sQ',
+  kalea:        'AeZhpFlNBPo',
+  obsidia:      'S5mG0dGpYqU',
+  marcel:       'f886VQnx_Tc',
+  arlott:       '1whGketigsE',
+  joy:          'yum0MBIx5C8',
+  xavier:       'el3WGLp56z4',
+  julian:       'wgvJGRM3DOk',
+  fredrinn:     'kotoKtOjByM',
+  yin:          'eUpffD1WvM4',
+  minsitthar:   'uN-1rVrjtfM',
+  lolita:       '56lTWQC22kA',
+  hanabi:       '2CwsnrxVrZM',
+};
+
 const GameHubData = {
   heroes: MLBB_HERO_DATA_RAW.map(h => ({
     id: h.id,

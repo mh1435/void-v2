@@ -808,20 +808,46 @@ function openHeroDetail(id) {
 
   const counterTiles = (hero.counters || []).map(cId => {
     const c = findHero(cId);
-    return c ? statTileHTML('COUNTER', c.name, c.img) : '';
+    if (c) return statTileHTML('COUNTER', c.name, c.img);
+    const it = findItem(cId);
+    if (it) return statTileHTML('ITEM', it.name, it.img);
+    return statTileHTML('COUNTER', cId.replace(/_/g, ' ').toUpperCase(), '');
   }).join('');
 
   const buildBlocks = Object.entries(hero.builds || {}).map(([buildName, itemIds]) => `
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">${buildName.toUpperCase()}</div>
-      <div class="hub-detail-stats-grid">
-        ${itemIds.map(iid => {
+      <div class="hub-detail-build-list">
+        ${itemIds.map((iid, idx) => {
           const item = findItem(iid);
-          return item ? statTileHTML('ITEM', item.name, item.img) : '';
+          return item ? `
+            <div class="build-step hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
+              <span class="build-step-num">${idx + 1}</span>
+              <img class="build-step-img" src="${item.img}" alt="" onerror="this.style.display='none'">
+              <div class="hub-detail-stat-tile-text">
+                <span class="hub-detail-stat-label">ITEM</span>
+                <span class="hub-detail-stat-value">${item.name}</span>
+              </div>
+            </div>` : '';
         }).join('')}
       </div>
     </div>
   `).join('');
+
+  const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
+  const ytSearch = `https://www.youtube.com/results?search_query=mobile+legends+${encodeURIComponent(hero.name)}+combo+guide`;
+  const comboSection = `
+    <div class="hub-detail-desc-card">
+      <div class="hub-detail-section-name">COMBOS</div>
+      ${comboVid ? `
+        <div class="combo-video-wrap">
+          <iframe src="https://www.youtube.com/embed/${comboVid}?rel=0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen loading="lazy"></iframe>
+        </div>` : ''}
+      <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">▶ WATCH COMBO VIDEOS</a>
+    </div>
+  `;
 
   document.getElementById('hub-detail-content').innerHTML = `
     <div class="hub-detail-header-card">
@@ -851,6 +877,8 @@ function openHeroDetail(id) {
     ` : ''}
 
     ${buildBlocks}
+
+    ${comboSection}
   `;
 
   bindStatTileNav();
