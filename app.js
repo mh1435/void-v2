@@ -721,16 +721,6 @@ function setupGameHub() {
   }
 }
 
-function rarityClass(rarity) {
-  return ''; // existing CSS doesn't define rarity color variants; badge styling is neutral
-}
-
-function rarityLabel(rarity) {
-  if (!rarity) return '';
-  if (rarity.includes('S-TIER')) return 'LEGENDARY';
-  if (rarity.includes('A-TIER')) return 'EPIC';
-  return 'RARE';
-}
 
 function renderHeroGrid(heroes) {
   const grid = document.getElementById('hero-grid');
@@ -743,7 +733,6 @@ function renderHeroGrid(heroes) {
     <div class="hub-card" data-hero-id="${h.id}">
       <div class="hub-card-media">
         <img src="${h.img}" alt="${h.name}" class="hub-card-img" onerror="this.style.display='none';">
-        <span class="hub-card-badge">${rarityLabel(h.rarity)}</span>
         <div class="hub-card-overlay">
           <div class="hub-card-title">${h.name}</div>
           <div class="hub-card-sub">${h.role}</div>
@@ -768,7 +757,6 @@ function renderItemGrid(items) {
     <div class="hub-card" data-item-id="${i.id}">
       <div class="hub-card-media">
         <img src="${i.img}" alt="${i.name}" class="hub-card-img" onerror="this.style.display='none';">
-        <span class="hub-card-badge">${i.tier}</span>
         <div class="hub-card-overlay">
           <div class="hub-card-title">${i.name}</div>
           <div class="hub-card-sub">${i.type}</div>
@@ -825,7 +813,6 @@ function openHeroDetail(id) {
       </div>
       <div class="hub-detail-title-area">
         <div class="hub-detail-main-title">${hero.name}</div>
-        <span class="hub-detail-rarity-badge">${hero.rarity}</span>
       </div>
     </div>
 
@@ -867,7 +854,6 @@ function openItemDetail(id) {
       </div>
       <div class="hub-detail-title-area">
         <div class="hub-detail-main-title">${item.name}</div>
-        <span class="hub-detail-rarity-badge">${item.tier}</span>
       </div>
     </div>
 
