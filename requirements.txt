@@ -1,0 +1,3 @@
+# Void's server uses only Python's built-in standard library — no external
+# packages are required. This file exists so hosting platforms (Render, etc.)
+# reliably detect this as a Python project.
