@@ -368,9 +368,6 @@ function resolveHeroFilename(id) {
   if (id === 'cecilision') return 'Cecillion.png';
   if (id === 'luo-yi') return 'Luo Yi.png';
   if (id === 'iridhel') return 'Irithel.png';
-  // heroes with SVG placeholder images
-  const svgHeroes = ['nolan','sora','hirara','khaleed','cici','suyou','lukas','kalea','ixia','obsidia','novaria','zhuxin','zetian','chip','marcel'];
-  if (svgHeroes.includes(id)) return id.charAt(0).toUpperCase() + id.slice(1) + '.svg';
   return id.charAt(0).toUpperCase() + id.slice(1) + '.png';
 }
 
