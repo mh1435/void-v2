@@ -2,18 +2,10 @@ name = "void-proxy"
 main = "index.js"
 compatibility_date = "2025-01-01"
 
-# Cloudflare Workers AI binding — free, no key needed, always works
-[ai]
-binding = "AI"
-
-# ─── SECRETS (set these in Cloudflare Dashboard, never in this file) ──────────
+# ── Secrets (Cloudflare Dashboard → Workers → void-proxy → Settings → Variables) ──
 #
-# Dashboard → Workers → void-proxy → Settings → Variables → Add variable (Secret)
+#  HF_SPACE_URL  →  https://YOUR_USERNAME-void-core.hf.space
+#                   (your Space URL, found on the HF Space page after deploying)
 #
-#   GROQ_KEY       →  https://console.groq.com          (free account, 1 min)
-#   OPENROUTER_KEY →  https://openrouter.ai              (free account, 1 min)
-#
-# Both are optional — the Worker still works without them (falls back to
-# Cloudflare Workers AI + Pollinations). But adding both keys unlocks
-# Llama 3.3 70B (the best free model) across two separate rate limit pools.
-# ──────────────────────────────────────────────────────────────────────────────
+#  HF_TOKEN      →  get free token at huggingface.co/settings/tokens
+#                   (used as backup when Space is busy — same Phi-3-mini model)
