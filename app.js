@@ -993,6 +993,11 @@ function renderTasks() {
 /* ============ GameHub ============ */
 
 function setupGameHub() {
+  const studyBtn = document.getElementById('btn-open-study');
+  if (studyBtn) {
+    studyBtn.addEventListener('click', () => openStudyPanel());
+  }
+
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.gamehub-tab-btn').forEach(b => b.classList.remove('active'));
@@ -1035,6 +1040,10 @@ function setupGameHub() {
       );
     });
   }
+}
+
+function openStudyPanel() {
+  // Study panel — to be designed
 }
 
 function renderHeroGrid(heroes) {
