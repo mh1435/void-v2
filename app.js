@@ -29,8 +29,8 @@ const App = {
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
 
-const _vc = (function(){const _a=atob,_p=['aHR0cHM6Ly9yZXZlcnQt','bmllY2UtY29waWVkLm5n','cm9rLWZyZWUuZGV2L3Yx','L2NoYXQ='];return _a(_p.join(''));})();
-const VOID_CORE_API = { url: _vc, key: '', model: 'microsoft/Phi-3-mini-4k-instruct' };
+// Replace this URL with your Cloudflare Worker URL after deploying worker/index.js
+const VOID_CORE_API = { url: 'https://void-proxy.YOUR_SUBDOMAIN.workers.dev', key: '', model: 'microsoft/Phi-3-mini-4k-instruct' };
 
 /* ============ Boot ============ */
 

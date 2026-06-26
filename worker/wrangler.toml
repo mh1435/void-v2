@@ -1,0 +1,8 @@
+name = "void-proxy"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+# Do NOT put BACKEND_URL here — add it as a Secret in the Cloudflare dashboard.
+# Dashboard → Workers → void-proxy → Settings → Variables → Add Secret
+# Name: BACKEND_URL
+# Value: https://xxxx.ngrok-free.app/v1/chat   (your ngrok URL)
