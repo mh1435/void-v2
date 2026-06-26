@@ -20,15 +20,61 @@ const App = {
   },
   tasks: [],
   commands: [],
+  chatHistory: [],
   msgCount: 0,
   location: null,
   hubDetailReturnTab: 'tab-gamehub',
+  currentUser: null,
 };
+
+const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
 
 /* ============ Boot ============ */
 
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadSettings();
+document.addEventListener('DOMContentLoaded', () => {
+  setupLogin();
+});
+
+/* ============ Login System ============ */
+
+function setupLogin() {
+  const modal = document.getElementById('login-modal');
+  const emailInput = document.getElementById('login-email-input');
+  const submitBtn = document.getElementById('login-submit-btn');
+
+  const saved = localStorage.getItem('void_current_user');
+  if (saved) {
+    App.currentUser = saved;
+    if (modal) modal.style.display = 'none';
+    bootApp();
+    return;
+  }
+
+  if (modal) modal.style.display = 'flex';
+
+  function doLogin() {
+    const email = emailInput.value.trim();
+    if (!email || !email.includes('@')) {
+      emailInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    App.currentUser = email;
+    localStorage.setItem('void_current_user', email);
+    if (modal) modal.style.display = 'none';
+    bootApp();
+  }
+
+  if (submitBtn) submitBtn.addEventListener('click', doLogin);
+  if (emailInput) {
+    emailInput.addEventListener('keydown', (e) => {
+      emailInput.style.borderColor = '';
+      if (e.key === 'Enter') doLogin();
+    });
+  }
+}
+
+function bootApp() {
+  loadSettings();
   applyTheme(App.settings.theme);
   setupNav();
   setupSettingsPanels();
@@ -39,33 +85,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCommandsPanel();
   setupTasksPanel();
   setupPreferencesPanel();
-  await loadTasks();
-  await loadCommands();
-});
-
-/* ============ Settings persistence ============ */
-
-async function loadSettings() {
-  try {
-    const res = await fetch('/api/settings');
-    if (res.ok) {
-      const data = await res.json();
-      App.settings = { ...App.settings, ...data };
-    }
-  } catch (e) { /* fresh defaults are fine */ }
+  setupProviderPicker();
+  setupMemoryPanel();
+  loadTasks();
+  loadCommands();
+  loadChatHistory();
+  updateUserDisplay();
 }
 
-async function saveSettings() {
+/* ============ Settings persistence (localStorage) ============ */
+
+function userKey(suffix) {
+  return `void_${suffix}_${App.currentUser || 'guest'}`;
+}
+
+function loadSettings() {
   try {
-    const res = await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(App.settings),
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
+    const raw = localStorage.getItem(userKey('settings'));
+    if (raw) App.settings = { ...App.settings, ...JSON.parse(raw) };
+  } catch(e) {}
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(userKey('settings'), JSON.stringify(App.settings));
+    return true;
+  } catch(e) { return false; }
 }
 
 /* ============ Theme ============ */
@@ -87,7 +132,7 @@ function setupThemePicker() {
   });
 }
 
-/* ============ Top-level nav: Intelligence / Workspace pill + settings ============ */
+/* ============ Top-level nav ============ */
 
 function setupNav() {
   document.querySelectorAll('.tab-pill').forEach(pill => {
@@ -119,8 +164,6 @@ function switchTab(targetId) {
   }
 }
 
-// Like switchTab but doesn't touch pill highlight state (used when pushing
-// the detail view, which isn't one of the two top-level pills).
 function switchTabRaw(targetId) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(targetId).classList.add('active');
@@ -140,13 +183,13 @@ function setupSettingsPanels() {
 
   const saveKeysBtn = document.getElementById('save-keys-btn');
   if (saveKeysBtn) {
-    saveKeysBtn.addEventListener('click', async () => {
+    saveKeysBtn.addEventListener('click', () => {
       App.settings.geminiKey = document.getElementById('input-gemini-key').value.trim() || App.settings.geminiKey;
       App.settings.groqKey = document.getElementById('input-groq-key').value.trim() || App.settings.groqKey;
       App.settings.apiKey = document.getElementById('input-api-key').value.trim() || App.settings.apiKey;
       App.settings.togetherKey = document.getElementById('input-together-key').value.trim() || App.settings.togetherKey;
       App.settings.mistralKey = document.getElementById('input-mistral-key').value.trim() || App.settings.mistralKey;
-      const ok = await saveSettings();
+      const ok = saveSettings();
       flashButton(saveKeysBtn, ok ? 'SAVED' : 'FAILED');
       updateModelIndicator();
     });
@@ -154,14 +197,14 @@ function setupSettingsPanels() {
 
   const saveModelsBtn = document.getElementById('save-models-btn');
   if (saveModelsBtn) {
-    saveModelsBtn.addEventListener('click', async () => {
+    saveModelsBtn.addEventListener('click', () => {
       App.settings.geminiModel = document.getElementById('input-gemini-model').value.trim();
       App.settings.groqModel = document.getElementById('input-groq-model').value.trim();
       App.settings.model = document.getElementById('input-model').value.trim();
       App.settings.togetherModel = document.getElementById('input-together-model').value.trim();
       App.settings.mistralModel = document.getElementById('input-mistral-model').value.trim();
-      const ok = await saveSettings();
-      flashButton(saveModelsBtn, ok ? 'SAVED' : 'FAILED');
+      saveSettings();
+      flashButton(saveModelsBtn, 'SAVED');
     });
   }
 }
@@ -183,6 +226,8 @@ function openSettingsPanel(panelId) {
     setVal('input-model', App.settings.model);
     setVal('input-together-model', App.settings.togetherModel);
     setVal('input-mistral-model', App.settings.mistralModel);
+  } else if (panelId === 'panel-memory') {
+    renderMemoryInfo();
   }
 }
 
@@ -278,10 +323,10 @@ function setupVoice() {
   }
   if (rateRange) {
     rateRange.value = App.settings.voiceRate;
-    if (rateValue) rateValue.textContent = App.settings.voiceRate.toFixed(1) + '×';
+    if (rateValue) rateValue.textContent = App.settings.voiceRate.toFixed(1) + 'x';
     rateRange.addEventListener('input', () => {
       App.settings.voiceRate = parseFloat(rateRange.value);
-      if (rateValue) rateValue.textContent = App.settings.voiceRate.toFixed(1) + '×';
+      if (rateValue) rateValue.textContent = App.settings.voiceRate.toFixed(1) + 'x';
     });
     rateRange.addEventListener('change', saveSettings);
   }
@@ -334,92 +379,152 @@ function speak(text) {
 function setupChat() {
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-msg-btn');
-  const clearBtn = document.getElementById('util-clear-btn');
-  const micBtn = document.getElementById('util-mic-btn');
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let listening = false;
+
+  if (SpeechRecognition) {
+    recognizer = new SpeechRecognition();
+    recognizer.continuous = false;
+    recognizer.interimResults = false;
+    recognizer.addEventListener('result', (e) => {
+      const text = e.results[0][0].transcript;
+      input.value = (input.value ? input.value + ' ' : '') + text;
+      input.dispatchEvent(new Event('input'));
+    });
+    recognizer.addEventListener('end', () => {
+      listening = false;
+      sendBtn.classList.remove('mic-active');
+      updateSendMicBtn();
+    });
+    recognizer.addEventListener('error', () => {
+      listening = false;
+      sendBtn.classList.remove('mic-active');
+    });
+  }
 
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = input.scrollHeight + 'px';
+    updateSendMicBtn();
   });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      if (input.value.trim()) sendMessage();
     }
   });
 
-  sendBtn.addEventListener('click', sendMessage);
-
-  clearBtn.addEventListener('click', async () => {
-    try {
-      await fetch('/api/clear', { method: 'POST' });
-    } catch (e) { /* ignore */ }
-    document.getElementById('messages-box').innerHTML = `
-      <div class="matrix-welcome">
-        <div class="welcome-logo">VOID</div>
-        <p>Memory engine cleared. Localized terminal core re-initialized.</p>
-        <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div>
-      </div>
-    `;
-    App.msgCount = 0;
+  sendBtn.addEventListener('click', () => {
+    if (sendBtn.dataset.mode === 'send') {
+      sendMessage();
+    } else {
+      if (!recognizer) return;
+      if (listening) {
+        recognizer.stop();
+        return;
+      }
+      try {
+        recognizer.start();
+        listening = true;
+        sendBtn.classList.add('mic-active');
+      } catch(e) {}
+    }
   });
 
-  if (micBtn) setupMic(micBtn, input);
-
+  updateSendMicBtn();
   updateModelIndicator();
 }
 
-function setupMic(micBtn, input) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    micBtn.addEventListener('click', () => flashButton(micBtn, 'UNSUPPORTED'));
-    return;
+function updateSendMicBtn() {
+  const input = document.getElementById('chat-input');
+  const btn = document.getElementById('send-msg-btn');
+  if (!btn || !input) return;
+  const hasText = input.value.trim().length > 0;
+  const micIcon = btn.querySelector('.btn-icon-mic');
+  const sendIcon = btn.querySelector('.btn-icon-send');
+  if (hasText) {
+    if (micIcon) micIcon.style.display = 'none';
+    if (sendIcon) sendIcon.style.display = '';
+    btn.dataset.mode = 'send';
+  } else {
+    if (micIcon) micIcon.style.display = '';
+    if (sendIcon) sendIcon.style.display = 'none';
+    btn.dataset.mode = 'mic';
   }
-  const recognizer = new SpeechRecognition();
-  recognizer.continuous = false;
-  recognizer.interimResults = false;
-
-  let listening = false;
-  micBtn.addEventListener('click', () => {
-    if (listening) {
-      recognizer.stop();
-      return;
-    }
-    try {
-      recognizer.start();
-      listening = true;
-      micBtn.classList.add('active');
-    } catch (e) { /* already running */ }
-  });
-
-  recognizer.addEventListener('result', (e) => {
-    const text = e.results[0][0].transcript;
-    input.value = (input.value ? input.value + ' ' : '') + text;
-    input.dispatchEvent(new Event('input'));
-  });
-  recognizer.addEventListener('end', () => {
-    listening = false;
-    micBtn.classList.remove('active');
-  });
-  recognizer.addEventListener('error', () => {
-    listening = false;
-    micBtn.classList.remove('active');
-  });
 }
 
 function updateModelIndicator() {
   const indicator = document.getElementById('active-model-indicator');
   if (!indicator) return;
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const firstConfigured = order.find(p => {
+  const labels = {
+    gemini: 'GEMINI', groq: 'GROQ', openrouter: 'OPENROUTER',
+    together: 'TOGETHER', mistral: 'MISTRAL', pollinations: 'FREE AI'
+  };
+  const firstConfigured = [...order, 'pollinations'].find(p => {
     if (p === 'gemini') return !!App.settings.geminiKey;
     if (p === 'groq') return !!App.settings.groqKey;
     if (p === 'openrouter') return !!App.settings.apiKey;
+    if (p === 'together') return !!App.settings.togetherKey;
+    if (p === 'mistral') return !!App.settings.mistralKey;
+    if (p === 'pollinations') return true;
     return false;
   });
-  const labels = { gemini: 'GEMINI', groq: 'GROQ', openrouter: 'OPENROUTER' };
-  indicator.textContent = firstConfigured ? labels[firstConfigured] : 'NO KEY SET';
+  indicator.textContent = labels[firstConfigured] || 'FREE AI';
+}
+
+/* ============ AI Provider Calls ============ */
+
+async function callGemini(messages) {
+  const key = App.settings.geminiKey;
+  const model = App.settings.geminiModel || 'gemini-2.5-flash';
+  const system = messages.find(m => m.role === 'system');
+  const contents = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+  const body = { contents };
+  if (system) body.systemInstruction = { parts: [{ text: system.content }] };
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gemini ${res.status}`);
+  }
+  const data = await res.json();
+  return data.candidates[0].content.parts[0].text;
+}
+
+async function callOpenAICompat(url, key, model, messages) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (key) headers['Authorization'] = `Bearer ${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ model, messages, max_tokens: 1024 })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `${res.status}`);
+  }
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+async function callPollinations(messages) {
+  const res = await fetch('https://text.pollinations.ai/openai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'openai', messages, max_tokens: 1024 })
+  });
+  if (!res.ok) throw new Error(`Pollinations ${res.status}`);
+  const data = await res.json();
+  return data.choices[0].message.content;
 }
 
 async function sendMessage() {
@@ -427,44 +532,54 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
+  App.chatHistory.push({ role: 'user', content: text });
   appendMessage('user', text);
   input.value = '';
   input.style.height = 'auto';
+  updateSendMicBtn();
 
   const typingId = appendTyping();
+  const messages = [{ role: 'system', content: VOID_SYSTEM }, ...App.chatHistory.slice(-20)];
 
-  try {
-    const payload = {
-      message: text,
-      openrouter_key: App.settings.apiKey,
-      model: App.settings.model,
-      gemini_key: App.settings.geminiKey,
-      gemini_model: App.settings.geminiModel,
-      groq_key: App.settings.groqKey,
-      groq_model: App.settings.groqModel,
-      provider_order: App.settings.providerOrder,
-      lang: App.settings.lang,
-      response_mode: App.settings.responseMode,
-      location: App.location,
-    };
+  let reply = null;
+  let lastError = null;
+  const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
+  const tryProviders = [...order, 'together', 'mistral', 'pollinations'];
+  const tried = new Set();
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    removeTyping(typingId);
+  for (const p of tryProviders) {
+    if (tried.has(p)) continue;
+    tried.add(p);
+    try {
+      if (p === 'gemini' && App.settings.geminiKey) {
+        reply = await callGemini(messages); break;
+      } else if (p === 'groq' && App.settings.groqKey) {
+        reply = await callOpenAICompat('https://api.groq.com/openai/v1/chat/completions',
+          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages); break;
+      } else if (p === 'openrouter' && App.settings.apiKey) {
+        reply = await callOpenAICompat('https://openrouter.ai/api/v1/chat/completions',
+          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages); break;
+      } else if (p === 'together' && App.settings.togetherKey) {
+        reply = await callOpenAICompat('https://api.together.xyz/v1/chat/completions',
+          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages); break;
+      } else if (p === 'mistral' && App.settings.mistralKey) {
+        reply = await callOpenAICompat('https://api.mistral.ai/v1/chat/completions',
+          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages); break;
+      } else if (p === 'pollinations') {
+        reply = await callPollinations(messages); break;
+      }
+    } catch(e) { lastError = e; }
+  }
 
-    if (data.status === 'success') {
-      appendMessage('system', data.reply);
-      speak(data.reply);
-    } else {
-      appendMessage('system', `ERROR :: ${data.reply || 'Unknown failure.'}`);
-    }
-  } catch (e) {
-    removeTyping(typingId);
-    appendMessage('system', `ERROR :: Connection to Void core failed. ${e.message}`);
+  removeTyping(typingId);
+
+  if (reply) {
+    App.chatHistory.push({ role: 'assistant', content: reply });
+    saveChatHistory();
+    appendMessage('system', reply);
+    speak(reply);
+  } else {
+    appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
 }
 
@@ -501,7 +616,7 @@ function appendTyping() {
   const el = document.createElement('div');
   el.className = 'chat-bubble assistant';
   el.id = id;
-  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body">···</div>`;
+  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body">...</div>`;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return id;
@@ -518,6 +633,152 @@ function escapeHTML(str) {
   );
 }
 
+/* ============ Chat History Persistence ============ */
+
+function saveChatHistory() {
+  try {
+    localStorage.setItem(userKey('chat'), JSON.stringify(App.chatHistory.slice(-100)));
+  } catch(e) {}
+}
+
+function loadChatHistory() {
+  try {
+    const raw = localStorage.getItem(userKey('chat'));
+    if (raw) {
+      App.chatHistory = JSON.parse(raw) || [];
+      if (App.chatHistory.length > 0) {
+        const box = document.getElementById('messages-box');
+        box.innerHTML = '';
+        App.chatHistory.forEach(msg => {
+          appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content);
+        });
+      }
+    }
+  } catch(e) { App.chatHistory = []; }
+}
+
+/* ============ Provider Picker ============ */
+
+function setupProviderPicker() {
+  const btn = document.getElementById('provider-pick-btn');
+  const picker = document.getElementById('provider-picker');
+  if (!btn || !picker) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = picker.classList.contains('open');
+    if (isOpen) {
+      picker.classList.remove('open');
+    } else {
+      renderProviderPicker();
+      picker.classList.add('open');
+    }
+  });
+
+  document.addEventListener('click', () => picker.classList.remove('open'));
+  picker.addEventListener('click', (e) => e.stopPropagation());
+}
+
+function renderProviderPicker() {
+  const list = document.getElementById('provider-list');
+  if (!list) return;
+
+  const providers = [
+    { id: 'gemini', name: 'Gemini', sub: 'Google AI - fast & capable', configured: !!App.settings.geminiKey },
+    { id: 'groq', name: 'Groq', sub: 'Ultra-fast inference', configured: !!App.settings.groqKey },
+    { id: 'openrouter', name: 'OpenRouter', sub: 'Multi-model gateway', configured: !!App.settings.apiKey },
+    { id: 'together', name: 'Together AI', sub: 'Open-source models', configured: !!App.settings.togetherKey },
+    { id: 'mistral', name: 'Mistral', sub: 'European AI', configured: !!App.settings.mistralKey },
+    { id: 'pollinations', name: 'Pollinations.ai', sub: 'Free - no key needed', configured: true, free: true },
+  ];
+
+  const active = (App.settings.providerOrder || [])[0];
+
+  list.innerHTML = providers.map(p => `
+    <div class="provider-item${p.id === active ? ' selected' : ''}${!p.configured ? ' unconfigured' : ''}" data-id="${p.id}">
+      <span class="provider-dot${p.configured ? ' on' : ''}"></span>
+      <div class="provider-info">
+        <span class="provider-name">${p.name}</span>
+        <span class="provider-sub">${p.sub}</span>
+      </div>
+      <div class="provider-tags">
+        ${p.free ? '<span class="provider-tag free-tag">FREE</span>' : ''}
+        ${p.id === active ? '<span class="provider-tag active-tag">ACTIVE</span>' : ''}
+        ${!p.configured && !p.free ? '<span class="provider-tag setup-tag">ADD KEY</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.provider-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const pid = item.dataset.id;
+      const pr = providers.find(p => p.id === pid);
+      if (!pr || !pr.configured) {
+        document.getElementById('provider-picker').classList.remove('open');
+        document.getElementById('view-main').classList.remove('active');
+        document.getElementById('view-settings').classList.add('active');
+        openSettingsPanel('panel-keys');
+        return;
+      }
+      App.settings.providerOrder = [pid, ...App.settings.providerOrder.filter(x => x !== pid)];
+      saveSettings();
+      updateModelIndicator();
+      document.getElementById('provider-picker').classList.remove('open');
+    });
+  });
+}
+
+/* ============ Memory Panel ============ */
+
+function setupMemoryPanel() {
+  const clearBtn = document.getElementById('clear-memory-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      App.chatHistory = [];
+      saveChatHistory();
+      App.msgCount = 0;
+      const box = document.getElementById('messages-box');
+      box.innerHTML = `
+        <div class="matrix-welcome">
+          <div class="welcome-logo">VOID</div>
+          <p>Memory cleared. Fresh session started.</p>
+          <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div>
+        </div>
+      `;
+      closeSettingsPanel();
+      renderMemoryInfo();
+    });
+  }
+}
+
+function renderMemoryInfo() {
+  const info = document.getElementById('memory-info');
+  if (!info) return;
+  const msgs = App.chatHistory.length;
+  const user = App.currentUser || 'guest';
+  info.innerHTML = `
+    <div class="memory-stat-row">
+      <span class="memory-stat-label">Account</span>
+      <span class="memory-stat-value">${escapeHTML(user)}</span>
+    </div>
+    <div class="memory-stat-row">
+      <span class="memory-stat-label">Messages stored</span>
+      <span class="memory-stat-value">${msgs}</span>
+    </div>
+    <div class="memory-stat-row">
+      <span class="memory-stat-label">Context window</span>
+      <span class="memory-stat-value">last 20 msgs</span>
+    </div>
+  `;
+}
+
+function updateUserDisplay() {
+  const statusEl = document.getElementById('hud-status');
+  if (statusEl && App.currentUser) {
+    statusEl.textContent = App.currentUser.split('@')[0].toUpperCase() + '::ONLINE';
+  }
+}
+
 /* ============ Commands panel ============ */
 
 function setupCommandsPanel() {
@@ -526,7 +787,7 @@ function setupCommandsPanel() {
   const addBtn = document.getElementById('add-command-btn');
 
   if (addBtn) {
-    addBtn.addEventListener('click', async () => {
+    addBtn.addEventListener('click', () => {
       const label = labelInput.value.trim();
       const action = actionInput.value.trim();
       if (!label || !action) return;
@@ -534,30 +795,21 @@ function setupCommandsPanel() {
       labelInput.value = '';
       actionInput.value = '';
       renderCommands();
-      await saveCommands();
+      saveCommands();
     });
   }
 }
 
-async function loadCommands() {
+function loadCommands() {
   try {
-    const res = await fetch('/api/commands');
-    if (res.ok) {
-      const data = await res.json();
-      App.commands = data.commands || [];
-    }
-  } catch (e) { /* keep empty */ }
+    const raw = localStorage.getItem(userKey('commands'));
+    if (raw) App.commands = JSON.parse(raw) || [];
+  } catch(e) { App.commands = []; }
   renderCommands();
 }
 
-async function saveCommands() {
-  try {
-    await fetch('/api/commands', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commands: App.commands }),
-    });
-  } catch (e) { /* ignore */ }
+function saveCommands() {
+  try { localStorage.setItem(userKey('commands'), JSON.stringify(App.commands)); } catch(e) {}
 }
 
 function renderCommands() {
@@ -586,10 +838,10 @@ function renderCommands() {
   });
 
   list.querySelectorAll('.command-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       App.commands.splice(parseInt(btn.dataset.index, 10), 1);
       renderCommands();
-      await saveCommands();
+      saveCommands();
     });
   });
 }
@@ -601,13 +853,13 @@ function setupTasksPanel() {
   const addBtn = document.getElementById('add-task-btn');
 
   if (addBtn) {
-    addBtn.addEventListener('click', async () => {
+    addBtn.addEventListener('click', () => {
       const text = taskInput.value.trim();
       if (!text) return;
       App.tasks.push({ text, done: false });
       taskInput.value = '';
       renderTasks();
-      await saveTasks();
+      saveTasks();
     });
   }
   if (taskInput) {
@@ -617,25 +869,16 @@ function setupTasksPanel() {
   }
 }
 
-async function loadTasks() {
+function loadTasks() {
   try {
-    const res = await fetch('/api/tasks');
-    if (res.ok) {
-      const data = await res.json();
-      App.tasks = data.tasks || [];
-    }
-  } catch (e) { /* keep empty */ }
+    const raw = localStorage.getItem(userKey('tasks'));
+    if (raw) App.tasks = JSON.parse(raw) || [];
+  } catch(e) { App.tasks = []; }
   renderTasks();
 }
 
-async function saveTasks() {
-  try {
-    await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: App.tasks }),
-    });
-  } catch (e) { /* ignore */ }
+function saveTasks() {
+  try { localStorage.setItem(userKey('tasks'), JSON.stringify(App.tasks)); } catch(e) {}
 }
 
 function renderTasks() {
@@ -668,22 +911,22 @@ function renderTasks() {
   });
 
   list.querySelectorAll('.task-check').forEach(box => {
-    box.addEventListener('change', async () => {
+    box.addEventListener('change', () => {
       App.tasks[parseInt(box.dataset.index, 10)].done = box.checked;
       renderTasks();
-      await saveTasks();
+      saveTasks();
     });
   });
   list.querySelectorAll('.task-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       App.tasks.splice(parseInt(btn.dataset.index, 10), 1);
       renderTasks();
-      await saveTasks();
+      saveTasks();
     });
   });
 }
 
-/* ============ GameHub (Hero Files / Item Cores) ============ */
+/* ============ GameHub ============ */
 
 function setupGameHub() {
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
@@ -695,17 +938,25 @@ function setupGameHub() {
     });
   });
 
+  document.querySelectorAll('.item-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.item-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.item-type-grid').forEach(g => g.classList.remove('active'));
+      document.getElementById(`item-grid-${btn.dataset.itype.toLowerCase()}`).classList.add('active');
+    });
+  });
+
   renderHeroGrid(GameHubData.heroes);
-  renderItemGrid(GameHubData.items);
+  renderAllItemGrids(GameHubData.items);
 
   const heroSearch = document.getElementById('hero-search-input');
   if (heroSearch) {
     heroSearch.addEventListener('input', () => {
       const q = heroSearch.value.trim().toLowerCase();
-      const filtered = GameHubData.heroes.filter(h =>
+      renderHeroGrid(GameHubData.heroes.filter(h =>
         h.name.toLowerCase().includes(q) || h.role.toLowerCase().includes(q)
-      );
-      renderHeroGrid(filtered);
+      ));
     });
   }
 
@@ -713,23 +964,12 @@ function setupGameHub() {
   if (itemSearch) {
     itemSearch.addEventListener('input', () => {
       const q = itemSearch.value.trim().toLowerCase();
-      const filtered = GameHubData.items.filter(i =>
-        i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q)
+      renderAllItemGrids(q
+        ? GameHubData.items.filter(i => i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q))
+        : GameHubData.items
       );
-      renderItemGrid(filtered);
     });
   }
-}
-
-function rarityClass(rarity) {
-  return ''; // existing CSS doesn't define rarity color variants; badge styling is neutral
-}
-
-function rarityLabel(rarity) {
-  if (!rarity) return '';
-  if (rarity.includes('S-TIER')) return 'LEGENDARY';
-  if (rarity.includes('A-TIER')) return 'EPIC';
-  return 'RARE';
 }
 
 function renderHeroGrid(heroes) {
@@ -743,7 +983,7 @@ function renderHeroGrid(heroes) {
     <div class="hub-card" data-hero-id="${h.id}">
       <div class="hub-card-media">
         <img src="${h.img}" alt="${h.name}" class="hub-card-img" onerror="this.style.display='none';">
-        <span class="hub-card-badge">${rarityLabel(h.rarity)}</span>
+        ${h.tier ? `<div class="hero-tier-badge tier-${h.tier}">${h.tier}</div>` : ''}
         <div class="hub-card-overlay">
           <div class="hub-card-title">${h.name}</div>
           <div class="hub-card-sub">${h.role}</div>
@@ -757,8 +997,8 @@ function renderHeroGrid(heroes) {
   });
 }
 
-function renderItemGrid(items) {
-  const grid = document.getElementById('item-grid');
+function renderTypeGrid(gridId, items) {
+  const grid = document.getElementById(gridId);
   if (!grid) return;
   if (items.length === 0) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;">No matching item cores found.</p>`;
@@ -768,7 +1008,6 @@ function renderItemGrid(items) {
     <div class="hub-card" data-item-id="${i.id}">
       <div class="hub-card-media">
         <img src="${i.img}" alt="${i.name}" class="hub-card-img" onerror="this.style.display='none';">
-        <span class="hub-card-badge">${i.tier}</span>
         <div class="hub-card-overlay">
           <div class="hub-card-title">${i.name}</div>
           <div class="hub-card-sub">${i.type}</div>
@@ -776,10 +1015,16 @@ function renderItemGrid(items) {
       </div>
     </div>
   `).join('');
-
   grid.querySelectorAll('.hub-card').forEach(card => {
     card.addEventListener('click', () => openItemDetail(card.dataset.itemId));
   });
+}
+
+function renderAllItemGrids(items) {
+  renderTypeGrid('item-grid-physical',  items.filter(i => i.type === 'Physical'));
+  renderTypeGrid('item-grid-magic',     items.filter(i => i.type === 'Magic'));
+  renderTypeGrid('item-grid-defense',   items.filter(i => i.type === 'Defense'));
+  renderTypeGrid('item-grid-movement',  items.filter(i => i.type === 'Movement'));
 }
 
 function findHero(id) { return GameHubData.heroes.find(h => h.id === id); }
@@ -788,8 +1033,11 @@ function findItem(id) { return GameHubData.items.find(i => i.id === id); }
 function statTileHTML(label, name, img) {
   return `
     <div class="hub-detail-stat-tile hub-detail-stat-tile-clickable" data-stat-name="${name}">
-      <span class="hub-detail-stat-label">${label}</span>
-      <span class="hub-detail-stat-value">${name}</span>
+      ${img ? `<img class="hub-detail-stat-tile-img" src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+      <div class="hub-detail-stat-tile-text">
+        <span class="hub-detail-stat-label">${label}</span>
+        <span class="hub-detail-stat-value">${name}</span>
+      </div>
     </div>
   `;
 }
@@ -803,20 +1051,46 @@ function openHeroDetail(id) {
 
   const counterTiles = (hero.counters || []).map(cId => {
     const c = findHero(cId);
-    return c ? statTileHTML('COUNTER', c.name, c.img) : '';
+    if (c) return statTileHTML('COUNTER', c.name, c.img);
+    const it = findItem(cId);
+    if (it) return statTileHTML('ITEM', it.name, it.img);
+    return statTileHTML('COUNTER', cId.replace(/_/g, ' ').toUpperCase(), '');
   }).join('');
 
   const buildBlocks = Object.entries(hero.builds || {}).map(([buildName, itemIds]) => `
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">${buildName.toUpperCase()}</div>
-      <div class="hub-detail-stats-grid">
-        ${itemIds.map(iid => {
+      <div class="hub-detail-build-list">
+        ${itemIds.map((iid, idx) => {
           const item = findItem(iid);
-          return item ? statTileHTML('ITEM', item.name, item.img) : '';
+          return item ? `
+            <div class="build-step hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
+              <span class="build-step-num">${idx + 1}</span>
+              <img class="build-step-img" src="${item.img}" alt="" onerror="this.style.display='none'">
+              <div class="hub-detail-stat-tile-text">
+                <span class="hub-detail-stat-label">ITEM</span>
+                <span class="hub-detail-stat-value">${item.name}</span>
+              </div>
+            </div>` : '';
         }).join('')}
       </div>
     </div>
   `).join('');
+
+  const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
+  const ytSearch = `https://www.youtube.com/results?search_query=mlbb+${encodeURIComponent(hero.name)}+combo+2025`;
+  const comboSection = `
+    <div class="hub-detail-desc-card">
+      <div class="hub-detail-section-name">COMBOS</div>
+      ${comboVid ? `
+        <div class="combo-video-wrap">
+          <iframe src="https://www.youtube.com/embed/${comboVid}?rel=0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen loading="lazy"></iframe>
+        </div>` : ''}
+      <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">WATCH COMBO VIDEOS</a>
+    </div>
+  `;
 
   document.getElementById('hub-detail-content').innerHTML = `
     <div class="hub-detail-header-card">
@@ -825,28 +1099,34 @@ function openHeroDetail(id) {
       </div>
       <div class="hub-detail-title-area">
         <div class="hub-detail-main-title">${hero.name}</div>
-        <span class="hub-detail-rarity-badge">${hero.rarity}</span>
+        ${hero.tier ? `
+          <div class="hero-tier-detail">
+            <span class="hero-tier-badge tier-${hero.tier}">${hero.tier}-TIER</span>
+            ${hero.wr ? `<span class="hero-tier-wr">${hero.wr}% WIN RATE</span>` : ''}
+          </div>` : ''}
       </div>
     </div>
-
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">ROLE</div>
       <div class="hub-detail-text-body">${hero.role}</div>
     </div>
-
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">FILE LOG</div>
-      <div class="hub-detail-text-body monospace">${hero.desc}</div>
-    </div>
-
+    ${(hero.synergies || []).length ? `
+      <div class="hub-detail-desc-card">
+        <div class="hub-detail-section-name">BEST MATCHES</div>
+        <div class="hub-detail-stats-grid">
+          ${hero.synergies.map(sid => {
+            const s = findHero(sid);
+            return s ? statTileHTML('SYNERGY', s.name, s.img) : '';
+          }).join('')}
+        </div>
+      </div>` : ''}
     ${counterTiles ? `
       <div class="hub-detail-desc-card">
         <div class="hub-detail-section-name">COUNTERED BY</div>
         <div class="hub-detail-stats-grid">${counterTiles}</div>
-      </div>
-    ` : ''}
-
+      </div>` : ''}
     ${buildBlocks}
+    ${comboSection}
   `;
 
   bindStatTileNav();
@@ -867,15 +1147,12 @@ function openItemDetail(id) {
       </div>
       <div class="hub-detail-title-area">
         <div class="hub-detail-main-title">${item.name}</div>
-        <span class="hub-detail-rarity-badge">${item.tier}</span>
       </div>
     </div>
-
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">TYPE</div>
       <div class="hub-detail-text-body">${item.type}</div>
     </div>
-
     <div class="hub-detail-desc-card">
       <div class="hub-detail-section-name">CORE LOG</div>
       <div class="hub-detail-text-body monospace">${item.desc}</div>
@@ -885,10 +1162,6 @@ function openItemDetail(id) {
   switchTabRaw('tab-hub-detail');
 }
 
-// Stat tiles in the detail view (counters / build items) are clickable —
-// tapping a counter or build-item tile navigates to that hero/item's own
-// detail page, since both heroes and items share the same id namespace
-// lookup pattern (findHero falls through to findItem).
 function bindStatTileNav() {
   document.querySelectorAll('#hub-detail-content .hub-detail-stat-tile-clickable').forEach(tile => {
     tile.addEventListener('click', () => {
