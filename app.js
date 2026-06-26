@@ -72,12 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLogin();
 });
 
-/* ============ Login System ============ */
+/* ============ Login System (multi-step) ============ */
 
 function setupLogin() {
   const modal = document.getElementById('login-modal');
-  const emailInput = document.getElementById('login-email-input');
-  const submitBtn = document.getElementById('login-submit-btn');
 
   const saved = localStorage.getItem('void_current_user');
   if (saved) {
@@ -89,25 +87,149 @@ function setupLogin() {
 
   if (modal) modal.style.display = 'flex';
 
-  function doLogin() {
-    const email = emailInput.value.trim();
+  let pendingCode = '';
+  let pendingEmail = '';
+
+  const emailInput  = document.getElementById('login-email-input');
+  const sendBtn     = document.getElementById('login-send-code-btn');
+  const step1       = document.getElementById('login-step-1');
+  const step2       = document.getElementById('login-step-2');
+  const toLabel     = document.getElementById('login-to-label');
+  const demoHint    = document.getElementById('login-demo-hint');
+  const verifyBtn   = document.getElementById('login-verify-btn');
+  const backBtn     = document.getElementById('login-back-btn');
+  const error1      = document.getElementById('login-error-1');
+  const error2      = document.getElementById('login-error-2');
+  const codeDigits  = document.querySelectorAll('.login-code-digit');
+
+  function sendCode() {
+    const email = (emailInput?.value || '').trim();
     if (!email || !email.includes('@')) {
-      emailInput.style.borderColor = 'var(--danger)';
+      if (error1) error1.textContent = 'Please enter a valid email address.';
       return;
     }
-    App.currentUser = email;
-    localStorage.setItem('void_current_user', email);
-    if (modal) modal.style.display = 'none';
-    bootApp();
+    if (error1) error1.textContent = '';
+    pendingEmail = email;
+    pendingCode  = String(Math.floor(100000 + Math.random() * 900000));
+
+    if (toLabel) toLabel.textContent = email;
+    if (demoHint) demoHint.textContent = `Demo: your code is ${pendingCode}`;
+
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'flex';
+    codeDigits.forEach(d => { d.value = ''; });
+    if (codeDigits[0]) codeDigits[0].focus();
   }
 
-  if (submitBtn) submitBtn.addEventListener('click', doLogin);
-  if (emailInput) {
-    emailInput.addEventListener('keydown', (e) => {
-      emailInput.style.borderColor = '';
-      if (e.key === 'Enter') doLogin();
-    });
+  function verify() {
+    const entered = Array.from(codeDigits).map(d => d.value).join('');
+    if (entered !== pendingCode) {
+      if (error2) error2.textContent = 'Incorrect code — try again.';
+      return;
+    }
+    if (error2) error2.textContent = '';
+    App.currentUser = pendingEmail;
+    localStorage.setItem('void_current_user', pendingEmail);
+    if (modal) modal.style.display = 'none';
+
+    const profileKey = `void_profile_${pendingEmail}`;
+    if (!localStorage.getItem(profileKey)) {
+      showOnboarding();
+    } else {
+      bootApp();
+    }
   }
+
+  if (sendBtn) sendBtn.addEventListener('click', sendCode);
+  if (emailInput) emailInput.addEventListener('keydown', e => {
+    if (error1) error1.textContent = '';
+    if (e.key === 'Enter') sendCode();
+  });
+  if (verifyBtn) verifyBtn.addEventListener('click', verify);
+  if (backBtn) backBtn.addEventListener('click', () => {
+    if (step2) step2.style.display = 'none';
+    if (step1) step1.style.display = 'flex';
+    if (error2) error2.textContent = '';
+  });
+
+  codeDigits.forEach((input, i, all) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(-1);
+      if (input.value && i < all.length - 1) all[i + 1].focus();
+      if (Array.from(all).every(d => d.value.length === 1)) verify();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !input.value && i > 0) all[i - 1].focus();
+    });
+    input.addEventListener('paste', e => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+      all.forEach((d, j) => { d.value = text[j] || ''; });
+      const next = all[Math.min(text.length, 5)];
+      if (next) next.focus();
+      if (text.length === 6) verify();
+    });
+  });
+}
+
+/* ============ Onboarding (first-time user) ============ */
+
+function showOnboarding() {
+  const modal = document.getElementById('onboard-modal');
+  if (modal) modal.style.display = 'flex';
+
+  const steps = [
+    document.getElementById('onboard-step-1'),
+    document.getElementById('onboard-step-2'),
+    document.getElementById('onboard-step-3'),
+  ];
+
+  const nameInput     = document.getElementById('onboard-name-input');
+  const callsignInput = document.getElementById('onboard-callsign-input');
+  const nameNext      = document.getElementById('onboard-name-next');
+  const callsignNext  = document.getElementById('onboard-callsign-next');
+  const callsignBack  = document.getElementById('onboard-callsign-back');
+  const themeBack     = document.getElementById('onboard-theme-back');
+  const finishBtn     = document.getElementById('onboard-finish-btn');
+
+  let profile = { name: '', callsign: '', theme: 'frost' };
+
+  function goStep(n) {
+    steps.forEach((s, i) => { if (s) s.style.display = i === n ? 'flex' : 'none'; });
+  }
+
+  if (nameNext) nameNext.addEventListener('click', () => {
+    const name = nameInput?.value.trim();
+    if (!name) { nameInput?.focus(); return; }
+    profile.name = name;
+    if (callsignInput) callsignInput.placeholder = name;
+    goStep(1);
+    callsignInput?.focus();
+  });
+  if (nameInput) nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameNext?.click(); });
+
+  if (callsignNext) callsignNext.addEventListener('click', () => {
+    profile.callsign = callsignInput?.value.trim() || profile.name;
+    goStep(2);
+  });
+  if (callsignBack) callsignBack.addEventListener('click', () => goStep(0));
+  if (themeBack) themeBack.addEventListener('click', () => goStep(1));
+
+  document.querySelectorAll('.onboard-theme-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.onboard-theme-opt').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      profile.theme = opt.dataset.theme;
+    });
+  });
+
+  if (finishBtn) finishBtn.addEventListener('click', () => {
+    const profileKey = `void_profile_${App.currentUser}`;
+    localStorage.setItem(profileKey, JSON.stringify(profile));
+    App.settings.theme = profile.theme;
+    if (modal) modal.style.display = 'none';
+    bootApp();
+  });
 }
 
 function bootApp() {
@@ -197,6 +319,7 @@ function setupNav() {
 
   document.getElementById('hub-detail-back-btn').addEventListener('click', () => {
     switchTab(App.hubDetailReturnTab);
+    if (App.hubDetailReturnTab === 'tab-gamehub') openMLBBContent();
   });
 }
 
@@ -849,11 +972,17 @@ function renderMemoryInfo() {
   `;
 }
 
+function getUserProfile() {
+  if (!App.currentUser) return null;
+  try { return JSON.parse(localStorage.getItem(`void_profile_${App.currentUser}`)); } catch(e) { return null; }
+}
+
 function updateUserDisplay() {
   const statusEl = document.getElementById('hud-status');
-  if (statusEl && App.currentUser) {
-    statusEl.textContent = App.currentUser.split('@')[0].toUpperCase() + '::ONLINE';
-  }
+  if (!statusEl || !App.currentUser) return;
+  const profile = getUserProfile();
+  const displayName = profile?.name || App.currentUser.split('@')[0];
+  statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
 }
 
 /* ============ Commands panel ============ */
@@ -1005,7 +1134,30 @@ function renderTasks() {
 
 /* ============ GameHub ============ */
 
+function openMLBBContent() {
+  const picker  = document.getElementById('games-picker-view');
+  const content = document.getElementById('mlbb-content-view');
+  if (picker)  picker.style.display = 'none';
+  if (content) content.classList.add('active');
+}
+
+function closeMLBBContent() {
+  const picker  = document.getElementById('games-picker-view');
+  const content = document.getElementById('mlbb-content-view');
+  if (content) content.classList.remove('active');
+  if (picker)  picker.style.display = '';
+}
+
 function setupGameHub() {
+  const mlbbTile = document.getElementById('mlbb-tile');
+  if (mlbbTile) {
+    mlbbTile.addEventListener('click', openMLBBContent);
+    mlbbTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openMLBBContent(); });
+  }
+
+  const backToGames = document.getElementById('mlbb-back-to-games');
+  if (backToGames) backToGames.addEventListener('click', closeMLBBContent);
+
   const studyBtn = document.getElementById('btn-open-study');
   if (studyBtn) {
     studyBtn.addEventListener('click', () => openStudyPanel());
@@ -1185,9 +1337,12 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Set video
+  // Set video — allow pointer events so user can interact if autoplay is blocked
   const iframe = document.getElementById('study-iframe');
-  if (iframe) iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1`;
+  if (iframe) {
+    iframe.style.pointerEvents = 'auto';
+    iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&enablejsapi=0`;
+  }
 
   startStudyClock();
   startWakeWord();
@@ -1197,6 +1352,7 @@ function closeStudyVideo() {
   const overlay = document.getElementById('study-overlay');
   if (!overlay) return;
   overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
   studyState.active = false;
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
@@ -1204,6 +1360,8 @@ function closeStudyVideo() {
 
   const iframe = document.getElementById('study-iframe');
   if (iframe) iframe.src = '';
+
+  switchTab('tab-study-grid');
 }
 
 /* renderStudyGrid — builds the location card grid */

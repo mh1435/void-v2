@@ -507,6 +507,12 @@ function resolveHeroImg(id) {
   return `images/heroes/${resolveHeroFilename(id)}`;
 }
 
+/* Hero stats — win/pick/ban rates and attributes from mlbbhub.
+   Keys match hero IDs in MLBB_HERO_DATA_RAW.
+   Fields: wr (win%), pr (pick%), br (ban%), dur, off, ctrl, diff (0-100),
+   tier ('S'|'A'|'B'|'C'|'D'), weak [], strong [] */
+const HERO_STATS = {};
+
 function rarityToTier(rarity) {
   if (!rarity) return null;
   const m = rarity.match(/^([A-Z](?:\+)?)-TIER/);

@@ -39,7 +39,7 @@ if ('serviceWorker' in navigator) {
     <div class="hud-center">
       <div class="tab-pill-box">
         <button class="tab-pill active" data-target="tab-chat">INTELLIGENCE</button>
-        <button class="tab-pill" data-target="tab-gamehub">WORKSPACE</button>
+        <button class="tab-pill" data-target="tab-gamehub">GAMES</button>
       </div>
     </div>
     <div class="hud-right">
@@ -96,24 +96,93 @@ if ('serviceWorker' in navigator) {
     <div class="view-tab" id="tab-gamehub">
       <div class="gamehub-container">
 
-        <div class="gamehub-header-row">
-          <div class="mlbb-pill">
-            <svg class="mlbb-pill-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L3 7v5c0 4.97 3.87 9.62 9 10.93C17.13 21.62 21 16.97 21 12V7L12 2z" fill="rgba(255,140,0,0.18)" stroke="#ff8c00" stroke-width="1.5" stroke-linejoin="round"/>
-              <path d="M8 11l2.5 2.5L16 8" stroke="#ff8c00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M7 15h10" stroke="rgba(255,140,0,0.5)" stroke-width="1" stroke-linecap="round"/>
-            </svg>
-            <span class="mlbb-pill-text">MOBILE LEGENDS</span>
+        <!-- GAMES PICKER (default view) -->
+        <div class="games-picker-view" id="games-picker-view">
+          <div class="games-lib-header">GAME LIBRARY</div>
+          <div class="games-grid">
+
+            <div class="game-tile" id="mlbb-tile" data-game="mlbb" role="button" tabindex="0" aria-label="Mobile Legends Bang Bang">
+              <div class="game-tile-media">
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L3 7v5c0 4.97 3.87 9.62 9 10.93C17.13 21.62 21 16.97 21 12V7L12 2z" fill="rgba(255,140,0,0.22)" stroke="#ff8c00" stroke-width="1.4" stroke-linejoin="round"/>
+                  <path d="M8 11l2.5 2.5L16 8" stroke="#ff8c00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="game-tile-info">
+                <div class="game-tile-name">MLBB</div>
+                <div class="game-tile-sub">Mobile Legends Bang Bang</div>
+              </div>
+            </div>
+
+            <div class="game-tile game-tile-soon" data-game="valorant">
+              <div class="game-tile-soon-tag">SOON</div>
+              <div class="game-tile-media">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+                  <polygon points="12,2 22,8 22,16 12,22 2,16 2,8" stroke="rgba(255,70,85,0.5)" stroke-width="1.4" fill="rgba(255,70,85,0.1)"/>
+                  <line x1="12" y1="2" x2="12" y2="22" stroke="rgba(255,70,85,0.4)" stroke-width="1"/>
+                </svg>
+              </div>
+              <div class="game-tile-info">
+                <div class="game-tile-name">VALORANT</div>
+                <div class="game-tile-sub">Mobile</div>
+              </div>
+            </div>
+
+            <div class="game-tile game-tile-soon" data-game="clash">
+              <div class="game-tile-soon-tag">SOON</div>
+              <div class="game-tile-media">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="3" width="18" height="18" rx="3" stroke="rgba(100,200,255,0.5)" stroke-width="1.4" fill="rgba(100,200,255,0.08)"/>
+                  <path d="M8 12l3 3 5-6" stroke="rgba(100,200,255,0.5)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="game-tile-info">
+                <div class="game-tile-name">CLASH ROYALE</div>
+                <div class="game-tile-sub">Card battle</div>
+              </div>
+            </div>
+
+            <div class="game-tile game-tile-add" aria-disabled="true">
+              <div class="game-tile-media">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.2)" stroke-width="1.4" stroke-dasharray="4 2"/>
+                  <line x1="12" y1="8" x2="12" y2="16" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                  <line x1="8" y1="12" x2="16" y2="12" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="game-tile-info">
+                <div class="game-tile-name">ADD GAME</div>
+                <div class="game-tile-sub">Coming soon</div>
+              </div>
+            </div>
+
           </div>
-          <button class="study-pill-btn" id="btn-open-study">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-            STUDY
-          </button>
         </div>
 
-        <div class="gamehub-tabs">
+        <!-- MLBB CONTENT VIEW (shown after clicking MLBB tile) -->
+        <div class="mlbb-content-view" id="mlbb-content-view">
+
+          <div class="gamehub-header-row">
+            <button class="mlbb-back-games-btn" id="mlbb-back-to-games" aria-label="Back to games">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              GAMES
+            </button>
+            <div class="mlbb-pill">
+              <svg class="mlbb-pill-icon" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L3 7v5c0 4.97 3.87 9.62 9 10.93C17.13 21.62 21 16.97 21 12V7L12 2z" fill="rgba(255,140,0,0.18)" stroke="#ff8c00" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M8 11l2.5 2.5L16 8" stroke="#ff8c00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="mlbb-pill-text">MOBILE LEGENDS</span>
+            </div>
+            <button class="study-pill-btn" id="btn-open-study">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+              STUDY
+            </button>
+          </div>
+
+          <div class="gamehub-tabs">
           <button class="gamehub-tab-btn active" data-hub-tab="heroes">HERO FILES</button>
           <button class="gamehub-tab-btn" data-hub-tab="items">ITEM CORES</button>
           <button class="gamehub-tab-btn" data-hub-tab="maps">MAPS</button>
@@ -335,8 +404,9 @@ if ('serviceWorker' in navigator) {
           </div>
         </div>
 
-      </div>
-    </div>
+        </div><!-- /mlbb-content-view -->
+      </div><!-- /gamehub-container -->
+    </div><!-- /tab-gamehub -->
 
     <div class="view-tab" id="tab-hub-detail">
       <div class="hud-header" style="border-bottom: 1px solid var(--border);">
@@ -379,8 +449,8 @@ if ('serviceWorker' in navigator) {
 <div id="study-overlay" class="study-overlay" aria-hidden="true">
   <!-- Full-screen YouTube background -->
   <iframe id="study-iframe" class="study-iframe"
-    allow="autoplay; encrypted-media; picture-in-picture"
-    allowfullscreen></iframe>
+    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+    allowfullscreen referrerpolicy="no-referrer"></iframe>
 
   <!-- Gradient scrims for readability -->
   <div class="study-scrim study-scrim-top"></div>
@@ -761,11 +831,98 @@ if ('serviceWorker' in navigator) {
 </div>
 
 <div class="login-modal" id="login-modal" style="display:none">
-  <div class="login-card">
+
+  <!-- Step 1: Email input -->
+  <div class="login-card" id="login-step-1">
     <div class="login-logo">VOID</div>
     <p class="login-sub">Enter your email to access your personal AI session</p>
     <input type="email" class="text-input" id="login-email-input" placeholder="your@email.com" autocomplete="email">
-    <button class="primary-btn full" id="login-submit-btn">ENTER VOID</button>
+    <button class="primary-btn full" id="login-send-code-btn">SEND CODE</button>
+    <p class="login-error" id="login-error-1"></p>
+  </div>
+
+  <!-- Step 2: Code verification -->
+  <div class="login-card" id="login-step-2" style="display:none">
+    <div class="login-logo">VOID</div>
+    <p class="login-sub">Enter the 6-digit code</p>
+    <p class="login-email-show" id="login-to-label"></p>
+    <div class="login-code-row" id="login-code-row">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <p class="login-demo-hint" id="login-demo-hint"></p>
+    <button class="primary-btn full" id="login-verify-btn">VERIFY →</button>
+    <button class="login-link-btn" id="login-back-btn">← Change email</button>
+    <p class="login-error" id="login-error-2"></p>
+  </div>
+
+</div>
+
+<!-- Onboarding modal — shown once after first login -->
+<div class="onboard-modal" id="onboard-modal" style="display:none">
+  <div class="onboard-card">
+
+    <!-- Step 1: Name -->
+    <div class="onboard-step" id="onboard-step-1">
+      <div class="onboard-progress">
+        <div class="onboard-dot active"></div>
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot"></div>
+      </div>
+      <div class="onboard-emoji">👋</div>
+      <h2 class="onboard-title">Welcome to VOID</h2>
+      <p class="onboard-sub">What's your name?</p>
+      <input class="text-input" id="onboard-name-input" placeholder="Your full name" autocomplete="name">
+      <button class="primary-btn full" id="onboard-name-next">NEXT →</button>
+    </div>
+
+    <!-- Step 2: Callsign -->
+    <div class="onboard-step" id="onboard-step-2" style="display:none">
+      <div class="onboard-progress">
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot active"></div>
+        <div class="onboard-dot"></div>
+      </div>
+      <div class="onboard-emoji">🎮</div>
+      <h2 class="onboard-title">Your Callsign</h2>
+      <p class="onboard-sub">What should VOID call you? (nickname or gamer tag)</p>
+      <input class="text-input" id="onboard-callsign-input" placeholder="Leave blank to use your name">
+      <button class="primary-btn full" id="onboard-callsign-next">NEXT →</button>
+      <button class="login-link-btn" id="onboard-callsign-back">← Back</button>
+    </div>
+
+    <!-- Step 3: Theme -->
+    <div class="onboard-step" id="onboard-step-3" style="display:none">
+      <div class="onboard-progress">
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot active"></div>
+      </div>
+      <div class="onboard-emoji">🎨</div>
+      <h2 class="onboard-title">Choose Your Style</h2>
+      <p class="onboard-sub">Pick an interface theme</p>
+      <div class="onboard-themes">
+        <div class="onboard-theme-opt active" data-theme="frost">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#0a0a0c,#1a1a22)"></div>
+          <div class="onboard-theme-label">FROST</div>
+        </div>
+        <div class="onboard-theme-opt" data-theme="light">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#ededf2,#ffffff)"></div>
+          <div class="onboard-theme-label">LIGHT</div>
+        </div>
+        <div class="onboard-theme-opt" data-theme="auto">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#0a0a0c 50%,#ededf2 50%)"></div>
+          <div class="onboard-theme-label">AUTO</div>
+        </div>
+      </div>
+      <button class="primary-btn full" id="onboard-finish-btn">LAUNCH VOID →</button>
+      <button class="login-link-btn" id="onboard-theme-back">← Back</button>
+    </div>
+
   </div>
 </div>
 

@@ -407,6 +407,59 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: rgba(255,255,255,0.08); color: var(--text); border-color: rgba(255,255,255,0.2);
 }
 
+/* ===========================================================
+   GAMES PICKER
+   =========================================================== */
+.games-picker-view {
+  flex: 1; overflow-y: auto; padding: 20px 14px 24px; -webkit-overflow-scrolling: touch;
+}
+.games-lib-header {
+  font-family: var(--hub-display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--muted); margin-bottom: 14px;
+}
+.games-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px;
+}
+.game-tile {
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  overflow: hidden; cursor: pointer; position: relative;
+  transition: border-color 0.15s, transform 0.12s;
+  display: flex; flex-direction: column;
+}
+.game-tile:not(.game-tile-soon):not(.game-tile-add):hover { border-color: rgba(255,140,0,0.45); }
+.game-tile:not(.game-tile-soon):not(.game-tile-add):active { transform: scale(0.97); }
+.game-tile-media {
+  width: 100%; aspect-ratio: 16/10; background: rgba(255,140,0,0.08);
+  display: flex; align-items: center; justify-content: center;
+}
+.game-tile-info { padding: 11px 12px 13px; }
+.game-tile-name {
+  font-family: var(--hub-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.05em; color: var(--text);
+}
+.game-tile-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.game-tile-soon { opacity: 0.45; cursor: default; }
+.game-tile-soon-tag {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18);
+  color: var(--muted); font-family: var(--hub-display); font-size: 8px; font-weight: 700;
+  letter-spacing: 0.08em; padding: 3px 7px; border-radius: 8px;
+}
+.game-tile-add { border-style: dashed; opacity: 0.35; cursor: default; }
+.mlbb-content-view {
+  display: none; flex-direction: column; flex: 1; overflow: hidden;
+  min-height: 0;
+}
+.mlbb-content-view.active { display: flex; }
+.mlbb-back-games-btn {
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted); font-family: var(--hub-display); font-size: 10px;
+  font-weight: 700; letter-spacing: 0.08em; padding: 0; line-height: 1;
+  transition: color 0.15s;
+}
+.mlbb-back-games-btn:hover { color: var(--text); }
+
 .gamehub-tabs {
   display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.15); padding: 0 4px;
   overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-shrink: 0;
@@ -856,6 +909,86 @@ body.reduced-motion *::after {
   letter-spacing: 0.2em; color: var(--accent); margin-bottom: 4px;
 }
 .login-sub { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.6; }
+.login-email-show {
+  font-family: var(--hub-mono); font-size: 12px; color: var(--accent);
+  text-align: center; margin: -4px 0 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.login-code-row {
+  display: flex; gap: 8px; justify-content: center;
+}
+.login-code-digit {
+  width: 42px; height: 52px; text-align: center;
+  font-family: var(--hub-display); font-size: 22px; font-weight: 700;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text); outline: none; caret-color: var(--accent);
+  transition: border-color 0.15s;
+}
+.login-code-digit:focus { border-color: var(--accent); }
+.login-demo-hint {
+  font-family: var(--hub-mono); font-size: 10px; color: var(--muted);
+  text-align: center; margin: -4px 0 0; opacity: 0.7;
+}
+.login-error {
+  color: var(--danger); font-size: 12px; text-align: center;
+  margin: 0; min-height: 14px;
+}
+.login-link-btn {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 12px; cursor: pointer; text-decoration: underline;
+  padding: 2px 0; align-self: center; font-family: var(--hub-body);
+  transition: color 0.15s;
+}
+.login-link-btn:hover { color: var(--text); }
+
+/* ===========================================================
+   ONBOARDING MODAL
+   =========================================================== */
+.onboard-modal {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.96);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; box-sizing: border-box;
+}
+.onboard-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 22px;
+  padding: 40px 26px; width: 100%; max-width: 360px;
+}
+.onboard-step {
+  display: flex; flex-direction: column; gap: 16px; text-align: center;
+}
+.onboard-emoji { font-size: 46px; margin-bottom: 2px; }
+.onboard-title {
+  font-family: var(--hub-display); font-size: 22px; font-weight: 700;
+  color: var(--text); margin: 0; letter-spacing: 0.02em;
+}
+.onboard-sub { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.6; }
+.onboard-progress {
+  display: flex; gap: 6px; justify-content: center; margin-bottom: 4px;
+}
+.onboard-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border); transition: background 0.2s;
+}
+.onboard-dot.active { background: var(--accent); }
+.onboard-themes {
+  display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+}
+.onboard-theme-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.onboard-theme-swatch {
+  width: 56px; height: 56px; border-radius: 14px;
+  border: 2px solid var(--border); transition: border-color 0.15s, transform 0.12s;
+}
+.onboard-theme-opt.active .onboard-theme-swatch { border-color: var(--accent); }
+.onboard-theme-opt:active .onboard-theme-swatch { transform: scale(0.94); }
+.onboard-theme-label {
+  font-family: var(--hub-mono); font-size: 9px; letter-spacing: 0.07em;
+  color: var(--muted);
+}
 
 /* ===========================================================
    SEND / MIC BUTTON STATES
@@ -975,7 +1108,7 @@ body.reduced-motion *::after {
 .study-iframe {
   position: absolute; inset: -60px -2px; /* extend past edges to hide YT border */
   width: calc(100% + 4px); height: calc(100% + 120px);
-  border: none; pointer-events: none;
+  border: none; pointer-events: none; /* JS sets pointer-events:auto after load */
 }
 
 /* Gradient scrims — always dark regardless of app theme */
