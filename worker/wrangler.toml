@@ -2,5 +2,17 @@ name = "void-proxy"
 main = "index.js"
 compatibility_date = "2025-01-01"
 
-# Secret to set in Cloudflare Dashboard → Workers → void-proxy → Settings → Variables:
-#   HF_SPACE_URL  →  https://YOUR_USERNAME-void-core.hf.space
+# ── Add these as Secrets in Cloudflare Dashboard ──────────────────────────────
+# Workers → void-proxy → Settings → Variables → Add variable → select "Secret"
+#
+#   GROQ_KEY        free at  console.groq.com
+#   SAMBANOVA_KEY   free at  cloud.sambanova.ai
+#   DEEPSEEK_KEY    free at  platform.deepseek.com
+#   OPENROUTER_KEY  free at  openrouter.ai/keys
+#   TOGETHER_KEY    free at  api.together.ai
+#   MISTRAL_KEY     free at  console.mistral.ai
+#   GEMINI_KEY      free at  aistudio.google.com/apikey
+#
+# Add as many or as few as you have. The Worker skips any that aren't set.
+# Keys are encrypted — only you can see them in Cloudflare. Users see nothing.
+# ──────────────────────────────────────────────────────────────────────────────

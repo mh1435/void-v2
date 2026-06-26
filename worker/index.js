@@ -1,12 +1,68 @@
 /**
  * VOID Intelligence Router — Cloudflare Worker
  *
- * Routes to the owner's Phi-3-mini-4k-instruct running on HF Spaces (CPU).
- * Falls back to Pollinations.ai if the Space is restarting.
+ * API keys live ONLY in Cloudflare secrets — users can never see them.
+ * Shuffles across all configured providers so no single rate limit is hit.
+ * Providers with no key set are automatically skipped.
+ * Pollinations is the unlimited no-key safety net at the end.
  *
- * Secrets — Cloudflare Dashboard → Workers → void-proxy → Settings → Variables:
- *   HF_SPACE_URL  →  https://YOUR_USERNAME-void-core.hf.space
+ * Add your keys in Cloudflare Dashboard:
+ *   Workers → void-proxy → Settings → Variables → Add variable (Secret type)
+ *
+ *   GROQ_KEY        → console.groq.com
+ *   SAMBANOVA_KEY   → cloud.sambanova.ai
+ *   DEEPSEEK_KEY    → platform.deepseek.com
+ *   OPENROUTER_KEY  → openrouter.ai/keys
+ *   TOGETHER_KEY    → api.together.ai
+ *   MISTRAL_KEY     → console.mistral.ai
+ *   GEMINI_KEY      → aistudio.google.com/apikey
  */
+
+const PROVIDERS = [
+  {
+    id: 'groq',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama-3.3-70b-versatile',
+    keyEnv: 'GROQ_KEY',
+  },
+  {
+    id: 'sambanova',
+    url: 'https://api.sambanova.ai/v1/chat/completions',
+    model: 'Meta-Llama-3.3-70B-Instruct',
+    keyEnv: 'SAMBANOVA_KEY',
+  },
+  {
+    id: 'deepseek',
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    keyEnv: 'DEEPSEEK_KEY',
+  },
+  {
+    id: 'openrouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    keyEnv: 'OPENROUTER_KEY',
+    extra: { 'HTTP-Referer': 'https://void-app.pages.dev', 'X-Title': 'VOID' },
+  },
+  {
+    id: 'together',
+    url: 'https://api.together.xyz/v1/chat/completions',
+    model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    keyEnv: 'TOGETHER_KEY',
+  },
+  {
+    id: 'mistral',
+    url: 'https://api.mistral.ai/v1/chat/completions',
+    model: 'mistral-small-latest',
+    keyEnv: 'MISTRAL_KEY',
+  },
+  {
+    id: 'gemini',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    model: 'gemini-2.0-flash',
+    keyEnv: 'GEMINI_KEY',
+  },
+];
 
 export default {
   async fetch(request, env) {
@@ -18,25 +74,38 @@ export default {
     catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
 
     const messages = body.messages || [];
-    const max_tokens = body.max_tokens || 512;
+    const max_tokens = body.max_tokens || 1024;
 
-    // Primary: your HF Space (Phi-3-mini, always on CPU)
-    if (env.HF_SPACE_URL) {
+    // Only use providers that have a key configured
+    const available = PROVIDERS.filter(p => env[p.keyEnv]);
+
+    // Shuffle so load spreads across providers and rate limits are hit evenly
+    const order = shuffle(available);
+
+    for (const p of order) {
       try {
-        const res = await fetch(
-          `${env.HF_SPACE_URL.replace(/\/$/, '')}/v1/chat/completions`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages, max_tokens }),
-            signal: AbortSignal.timeout(120000), // 2 min — CPU is slow
-          }
-        );
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${env[p.keyEnv]}`,
+          ...( p.extra || {} ),
+        };
+
+        const res = await fetch(p.url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ model: p.model, messages, max_tokens }),
+          signal: AbortSignal.timeout(30000),
+        });
+
         if (res.ok) return cors(await res.text());
-      } catch { /* fall through */ }
+
+        // Rate limited — try next provider
+        if (res.status === 429) continue;
+
+      } catch { continue; }
     }
 
-    // Fallback: Pollinations (if Space is restarting / cold start)
+    // Final fallback — Pollinations (unlimited, no key, always works)
     try {
       const res = await fetch('https://text.pollinations.ai/openai', {
         method: 'POST',
@@ -45,11 +114,20 @@ export default {
         signal: AbortSignal.timeout(30000),
       });
       if (res.ok) return cors(await res.text());
-    } catch { /* fall through */ }
+    } catch {}
 
-    return cors(JSON.stringify({ error: 'VOID Core unavailable' }), 502);
+    return cors(JSON.stringify({ error: 'All providers unavailable' }), 502);
   },
 };
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 function cors(body, status = 200) {
   return new Response(body, {
