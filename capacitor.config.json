@@ -1,0 +1,17 @@
+{
+  "appId": "com.mlbbhub.app",
+  "appName": "MLBB Hub",
+  "webDir": "www",
+  "android": {
+    "buildOptions": {
+      "keystorePath": null,
+      "keystorePassword": null,
+      "keystoreAlias": null,
+      "keystoreAliasPassword": null,
+      "releaseType": "APK"
+    }
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

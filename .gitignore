@@ -1,0 +1,13 @@
+
+# Node
+node_modules/
+
+# Capacitor build cache
+www/
+
+# Android build outputs
+android/app/build/
+android/.gradle/
+android/build/
+*.apk
+*.aab

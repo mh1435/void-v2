@@ -1,0 +1,16 @@
+{
+  "name": "mlbb-hub",
+  "version": "1.0.0",
+  "description": "MLBB Game Hub - Hero files, items, tier list, maps and references",
+  "private": true,
+  "scripts": {
+    "build": "echo 'Static app - no build step'",
+    "sync": "npx cap sync",
+    "android": "npx cap run android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1"
+  }
+}
