@@ -30,6 +30,13 @@ const App = {
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
 
+/* ============ Shared AI Core (update URL when ngrok restarts) ============ */
+const VOID_CORE_API = {
+  url: '',        // <-- paste your ngrok URL here, e.g. 'https://xxxx.ngrok-free.app/v1/chat/completions'
+  key: '',        // leave blank if your server doesn't require a key
+  model: 'gpt-3.5-turbo', // change to match your model name
+};
+
 /* ============ Boot ============ */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -466,6 +473,7 @@ function updateSendMicBtn() {
 function updateModelIndicator() {
   const indicator = document.getElementById('active-model-indicator');
   if (!indicator) return;
+  if (VOID_CORE_API.url) { indicator.textContent = 'VOID CORE'; return; }
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
   const labels = {
     gemini: 'GEMINI', groq: 'GROQ', openrouter: 'OPENROUTER',
@@ -552,6 +560,15 @@ async function sendMessage() {
 
   let reply = null;
   let lastError = null;
+
+  // Always try the shared VOID core first
+  if (VOID_CORE_API.url) {
+    try {
+      reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
+    } catch(e) { lastError = e; }
+  }
+
+  if (!reply) {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
   const tryProviders = [...order, 'together', 'mistral', 'custom', 'pollinations'];
   const tried = new Set();
@@ -582,6 +599,7 @@ async function sendMessage() {
       }
     } catch(e) { lastError = e; }
   }
+  } // end if (!reply) fallback chain
 
   removeTyping(typingId);
 
@@ -698,7 +716,11 @@ function renderProviderPicker() {
   let customSub = 'Your ngrok / Colab endpoint';
   try { if (App.settings.customUrl) customSub = new URL(App.settings.customUrl).hostname; } catch(e) {}
 
+  let voidCoreSub = 'Offline / restarting';
+  try { if (VOID_CORE_API.url) voidCoreSub = new URL(VOID_CORE_API.url).hostname; } catch(e) {}
+
   const providers = [
+    ...(VOID_CORE_API.url ? [{ id: 'void-core', name: 'VOID Core', sub: voidCoreSub, configured: true, voidCore: true }] : []),
     { id: 'custom', name: 'Custom API', sub: customSub, configured: !!App.settings.customUrl, own: true },
     { id: 'gemini', name: 'Gemini', sub: 'Google AI - fast & capable', configured: !!App.settings.geminiKey },
     { id: 'groq', name: 'Groq', sub: 'Ultra-fast inference', configured: !!App.settings.groqKey },
@@ -718,10 +740,11 @@ function renderProviderPicker() {
         <span class="provider-sub">${p.sub}</span>
       </div>
       <div class="provider-tags">
+        ${p.voidCore ? '<span class="provider-tag core-tag">VOID CORE</span>' : ''}
         ${p.free ? '<span class="provider-tag free-tag">FREE</span>' : ''}
         ${p.own ? '<span class="provider-tag own-tag">YOUR MODEL</span>' : ''}
         ${p.id === active ? '<span class="provider-tag active-tag">ACTIVE</span>' : ''}
-        ${!p.configured && !p.free ? '<span class="provider-tag setup-tag">SETUP</span>' : ''}
+        ${!p.configured && !p.free && !p.voidCore ? '<span class="provider-tag setup-tag">SETUP</span>' : ''}
       </div>
     </div>
   `).join('');
