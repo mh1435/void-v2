@@ -699,6 +699,20 @@ body.reduced-motion *::after {
 .active-tag { background: rgba(238,240,243,0.12); color: var(--accent); }
 .setup-tag { background: rgba(255,93,93,0.15); color: var(--danger); }
 
+.void-core-status { padding: 14px; }
+.void-core-status-row { display: flex; align-items: center; gap: 10px; }
+.void-core-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  background: #00cc55; box-shadow: 0 0 6px #00cc55;
+}
+.void-core-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.void-core-name { font-family: var(--hub-display); font-size: 14px; font-weight: 800; color: var(--accent); letter-spacing: 0.04em; }
+.void-core-sub { font-size: 10px; color: var(--muted); }
+.void-core-note {
+  margin: 10px 0 0 0; font-size: 11px; color: var(--muted);
+  line-height: 1.5; padding-top: 10px; border-top: 1px solid var(--border);
+}
+
 .util-badge.provider-btn {
   font-family: var(--hub-display); font-size: 10px; font-weight: 700;
   color: var(--accent); border-color: rgba(238,240,243,0.2);
