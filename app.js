@@ -10,6 +10,7 @@ const App = {
     groqKey: '', groqModel: 'llama-3.3-70b-versatile',
     togetherKey: '', togetherModel: 'meta-llama/Llama-3.2-70B-Instruct-Turbo',
     mistralKey: '', mistralModel: 'mistral-large-latest',
+    customUrl: '', customKey: '', customModel: 'gpt-3.5-turbo',
     providerOrder: ['gemini', 'groq', 'openrouter'],
     mapProvider: 'google',
     lang: 'auto',
@@ -189,6 +190,9 @@ function setupSettingsPanels() {
       App.settings.apiKey = document.getElementById('input-api-key').value.trim() || App.settings.apiKey;
       App.settings.togetherKey = document.getElementById('input-together-key').value.trim() || App.settings.togetherKey;
       App.settings.mistralKey = document.getElementById('input-mistral-key').value.trim() || App.settings.mistralKey;
+      App.settings.customUrl = document.getElementById('input-custom-url').value.trim();
+      App.settings.customKey = document.getElementById('input-custom-key').value.trim();
+      App.settings.customModel = document.getElementById('input-custom-model').value.trim() || App.settings.customModel;
       const ok = saveSettings();
       flashButton(saveKeysBtn, ok ? 'SAVED' : 'FAILED');
       updateModelIndicator();
@@ -220,6 +224,9 @@ function openSettingsPanel(panelId) {
     setVal('input-api-key', App.settings.apiKey);
     setVal('input-together-key', App.settings.togetherKey);
     setVal('input-mistral-key', App.settings.mistralKey);
+    setVal('input-custom-url', App.settings.customUrl);
+    setVal('input-custom-key', App.settings.customKey);
+    setVal('input-custom-model', App.settings.customModel);
   } else if (panelId === 'panel-models') {
     setVal('input-gemini-model', App.settings.geminiModel);
     setVal('input-groq-model', App.settings.groqModel);
@@ -462,7 +469,8 @@ function updateModelIndicator() {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
   const labels = {
     gemini: 'GEMINI', groq: 'GROQ', openrouter: 'OPENROUTER',
-    together: 'TOGETHER', mistral: 'MISTRAL', pollinations: 'FREE AI'
+    together: 'TOGETHER', mistral: 'MISTRAL', pollinations: 'FREE AI',
+    custom: 'CUSTOM API'
   };
   const firstConfigured = [...order, 'pollinations'].find(p => {
     if (p === 'gemini') return !!App.settings.geminiKey;
@@ -470,6 +478,7 @@ function updateModelIndicator() {
     if (p === 'openrouter') return !!App.settings.apiKey;
     if (p === 'together') return !!App.settings.togetherKey;
     if (p === 'mistral') return !!App.settings.mistralKey;
+    if (p === 'custom') return !!App.settings.customUrl;
     if (p === 'pollinations') return true;
     return false;
   });
@@ -544,7 +553,7 @@ async function sendMessage() {
   let reply = null;
   let lastError = null;
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const tryProviders = [...order, 'together', 'mistral', 'pollinations'];
+  const tryProviders = [...order, 'together', 'mistral', 'custom', 'pollinations'];
   const tried = new Set();
 
   for (const p of tryProviders) {
@@ -565,6 +574,9 @@ async function sendMessage() {
       } else if (p === 'mistral' && App.settings.mistralKey) {
         reply = await callOpenAICompat('https://api.mistral.ai/v1/chat/completions',
           App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages); break;
+      } else if (p === 'custom' && App.settings.customUrl) {
+        reply = await callOpenAICompat(App.settings.customUrl,
+          App.settings.customKey, App.settings.customModel || 'gpt-3.5-turbo', messages); break;
       } else if (p === 'pollinations') {
         reply = await callPollinations(messages); break;
       }
@@ -683,7 +695,11 @@ function renderProviderPicker() {
   const list = document.getElementById('provider-list');
   if (!list) return;
 
+  let customSub = 'Your ngrok / Colab endpoint';
+  try { if (App.settings.customUrl) customSub = new URL(App.settings.customUrl).hostname; } catch(e) {}
+
   const providers = [
+    { id: 'custom', name: 'Custom API', sub: customSub, configured: !!App.settings.customUrl, own: true },
     { id: 'gemini', name: 'Gemini', sub: 'Google AI - fast & capable', configured: !!App.settings.geminiKey },
     { id: 'groq', name: 'Groq', sub: 'Ultra-fast inference', configured: !!App.settings.groqKey },
     { id: 'openrouter', name: 'OpenRouter', sub: 'Multi-model gateway', configured: !!App.settings.apiKey },
@@ -703,8 +719,9 @@ function renderProviderPicker() {
       </div>
       <div class="provider-tags">
         ${p.free ? '<span class="provider-tag free-tag">FREE</span>' : ''}
+        ${p.own ? '<span class="provider-tag own-tag">YOUR MODEL</span>' : ''}
         ${p.id === active ? '<span class="provider-tag active-tag">ACTIVE</span>' : ''}
-        ${!p.configured && !p.free ? '<span class="provider-tag setup-tag">ADD KEY</span>' : ''}
+        ${!p.configured && !p.free ? '<span class="provider-tag setup-tag">SETUP</span>' : ''}
       </div>
     </div>
   `).join('');

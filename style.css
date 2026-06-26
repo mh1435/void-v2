@@ -607,6 +607,7 @@ body.reduced-motion *::after {
   padding: 2px 6px; border-radius: 5px;
 }
 .free-tag { background: rgba(0,204,85,0.18); color: #00cc55; }
+.own-tag { background: rgba(124,92,255,0.22); color: #a78bfa; }
 .active-tag { background: rgba(238,240,243,0.12); color: var(--accent); }
 .setup-tag { background: rgba(255,93,93,0.15); color: var(--danger); }
 
