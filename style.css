@@ -940,6 +940,29 @@ body.reduced-motion *::after {
 .memory-stat-value { font-family: var(--hub-mono); font-size: 12px; color: var(--text); max-width: 60%; text-align: right; word-break: break-all; }
 
 /* ===========================================================
+   STUDY LOCATION GRID (the picker screen)
+   =========================================================== */
+.study-grid-panel {
+  display: flex; flex-direction: column; height: calc(100% - 57px); overflow: hidden;
+}
+.study-loc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; padding: 0 12px 16px; overflow-y: auto; flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.study-loc-card { cursor: pointer; }
+/* Landscape ratio override for location cards */
+.study-loc-card .hub-card-media { padding-top: 62%; }
+/* Region label below card */
+.study-loc-card .hub-card-sub { color: rgba(255,255,255,0.45); }
+/* Placeholder while thumbnail loads */
+.study-card-placeholder {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 32px; background: #111418;
+}
+
+/* ===========================================================
    STUDY MODE OVERLAY
    =========================================================== */
 .study-overlay {

@@ -1059,24 +1059,70 @@ function setupGameHub() {
    STUDY MODE
    ============================================================ */
 
+/* ============================================================
+   STUDY MODE — 44 world locations + vibes
+   ============================================================ */
+
 const STUDY_LOCATIONS = [
-  { id: 'lofi',    name: 'LOFI CAFÉ',  flag: '🎵', videoId: 'jfKfPfyJRdk' },
-  { id: 'tokyo',   name: 'TOKYO',      flag: '🇯🇵', videoId: 'iYWIZeDdq5A' },
-  { id: 'paris',   name: 'PARIS',      flag: '🇫🇷', videoId: 'EkzQ6nEhG-E' },
-  { id: 'newyork', name: 'NEW YORK',   flag: '🇺🇸', videoId: 'n61ULEU7CO0' },
-  { id: 'london',  name: 'LONDON',     flag: '🇬🇧', videoId: 'bnkVkoHEWoQ' },
-  { id: 'seoul',   name: 'SEOUL',      flag: '🇰🇷', videoId: 'g7G0MRVbM6o' },
-  { id: 'dubai',   name: 'DUBAI',      flag: '🇦🇪', videoId: '6apS_4LFYAM' },
-  { id: 'bali',    name: 'BALI',       flag: '🇮🇩', videoId: 'PaSKoJvNEwY' },
-  { id: 'rome',    name: 'ROME',       flag: '🇮🇹', videoId: 'JMJ7GjAWvXE' },
-  { id: 'kyoto',   name: 'KYOTO',      flag: '🏯', videoId: '_Whyf8mMoSk' },
-  { id: 'nature',  name: 'NATURE',     flag: '🌿', videoId: 'eKFTSSKCzWA' },
-  { id: 'rain',    name: 'RAIN',       flag: '🌧️', videoId: 'yIQd2Ya0Ziw' },
+  // VIBES
+  { id:'lofi-cafe',     name:'LOFI CAFÉ',       region:'VIBES',      flag:'🎵', videoId:'jfKfPfyJRdk' },
+  { id:'rain',          name:'RAIN SOUNDS',      region:'VIBES',      flag:'🌧️', videoId:'yIQd2Ya0Ziw' },
+  { id:'ocean',         name:'OCEAN WAVES',      region:'VIBES',      flag:'🌊', videoId:'kpSEtzFd_J4' },
+  { id:'fireplace',     name:'FIREPLACE',        region:'VIBES',      flag:'🔥', videoId:'L_LUpnjgPso' },
+  { id:'forest',        name:'FOREST',           region:'VIBES',      flag:'🌿', videoId:'eKFTSSKCzWA' },
+  { id:'night-sky',     name:'NIGHT SKY',        region:'VIBES',      flag:'🌌', videoId:'f_lQQSfN35A' },
+  // JAPAN
+  { id:'tokyo',         name:'TOKYO',            region:'JAPAN',      flag:'🇯🇵', videoId:'iYWIZeDdq5A' },
+  { id:'kyoto',         name:'KYOTO',            region:'JAPAN',      flag:'🇯🇵', videoId:'_Whyf8mMoSk' },
+  { id:'osaka',         name:'OSAKA',            region:'JAPAN',      flag:'🇯🇵', videoId:'lCxaJTJkYkI' },
+  // KOREA & CHINA
+  { id:'seoul',         name:'SEOUL',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'g7G0MRVbM6o' },
+  { id:'busan',         name:'BUSAN',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'4wxGVidILnI' },
+  { id:'shanghai',      name:'SHANGHAI',         region:'EAST ASIA',  flag:'🇨🇳', videoId:'vxMYH3FpS9Q' },
+  { id:'hong-kong',     name:'HONG KONG',        region:'EAST ASIA',  flag:'🇭🇰', videoId:'xNxFmIzBjv0' },
+  // SOUTHEAST ASIA
+  { id:'bali',          name:'BALI',             region:'SE ASIA',    flag:'🇮🇩', videoId:'PaSKoJvNEwY' },
+  { id:'bangkok',       name:'BANGKOK',          region:'SE ASIA',    flag:'🇹🇭', videoId:'rHRK65m7d8Y' },
+  { id:'singapore',     name:'SINGAPORE',        region:'SE ASIA',    flag:'🇸🇬', videoId:'99SFP4JTVSY' },
+  { id:'hanoi',         name:'HANOI',            region:'SE ASIA',    flag:'🇻🇳', videoId:'EGbU6FUBhT4' },
+  // MIDDLE EAST & SOUTH ASIA
+  { id:'dubai',         name:'DUBAI',            region:'MIDDLE EAST',flag:'🇦🇪', videoId:'6apS_4LFYAM' },
+  { id:'istanbul',      name:'ISTANBUL',         region:'MIDDLE EAST',flag:'🇹🇷', videoId:'B3xGj-0VZFI' },
+  { id:'mumbai',        name:'MUMBAI',           region:'SOUTH ASIA', flag:'🇮🇳', videoId:'yMYIwKnRF7Q' },
+  // EUROPE — WEST
+  { id:'paris',         name:'PARIS',            region:'EUROPE',     flag:'🇫🇷', videoId:'EkzQ6nEhG-E' },
+  { id:'london',        name:'LONDON',           region:'EUROPE',     flag:'🇬🇧', videoId:'bnkVkoHEWoQ' },
+  { id:'rome',          name:'ROME',             region:'EUROPE',     flag:'🇮🇹', videoId:'JMJ7GjAWvXE' },
+  { id:'barcelona',     name:'BARCELONA',        region:'EUROPE',     flag:'🇪🇸', videoId:'fqJMKP3AGWQ' },
+  { id:'amsterdam',     name:'AMSTERDAM',        region:'EUROPE',     flag:'🇳🇱', videoId:'CZIXbPjbBFI' },
+  { id:'madrid',        name:'MADRID',           region:'EUROPE',     flag:'🇪🇸', videoId:'37Vd6BFHKBU' },
+  { id:'milan',         name:'MILAN',            region:'EUROPE',     flag:'🇮🇹', videoId:'PQ3X3FEMEFg' },
+  // EUROPE — NORTH/EAST
+  { id:'prague',        name:'PRAGUE',           region:'EUROPE',     flag:'🇨🇿', videoId:'InjwvdDijwE' },
+  { id:'vienna',        name:'VIENNA',           region:'EUROPE',     flag:'🇦🇹', videoId:'5VhHJMHPX6I' },
+  { id:'berlin',        name:'BERLIN',           region:'EUROPE',     flag:'🇩🇪', videoId:'nT4JFHWbHss' },
+  { id:'zurich',        name:'ZURICH',           region:'EUROPE',     flag:'🇨🇭', videoId:'fEu4EXSQ4EM' },
+  { id:'santorini',     name:'SANTORINI',        region:'EUROPE',     flag:'🇬🇷', videoId:'QIiCbzGjwJ8' },
+  { id:'lisbon',        name:'LISBON',           region:'EUROPE',     flag:'🇵🇹', videoId:'FpMzJY7WL7o' },
+  { id:'edinburgh',     name:'EDINBURGH',        region:'EUROPE',     flag:'🇬🇧', videoId:'sZ5XFnBPtI8' },
+  { id:'copenhagen',    name:'COPENHAGEN',       region:'EUROPE',     flag:'🇩🇰', videoId:'kEgouIO0FpA' },
+  // AMERICAS
+  { id:'new-york',      name:'NEW YORK',         region:'AMERICAS',   flag:'🇺🇸', videoId:'n61ULEU7CO0' },
+  { id:'los-angeles',   name:'LOS ANGELES',      region:'AMERICAS',   flag:'🇺🇸', videoId:'bkXSaS1cT5I' },
+  { id:'chicago',       name:'CHICAGO',          region:'AMERICAS',   flag:'🇺🇸', videoId:'KmMGS7FKOBM' },
+  { id:'miami',         name:'MIAMI',            region:'AMERICAS',   flag:'🇺🇸', videoId:'jJjSFCWZ8Y8' },
+  { id:'san-francisco', name:'SAN FRANCISCO',    region:'AMERICAS',   flag:'🇺🇸', videoId:'w2TbAXFCGxA' },
+  { id:'toronto',       name:'TORONTO',          region:'AMERICAS',   flag:'🇨🇦', videoId:'PO8PvKUmXes' },
+  { id:'rio',           name:'RIO DE JANEIRO',   region:'AMERICAS',   flag:'🇧🇷', videoId:'7VqsQ96uVTs' },
+  { id:'mexico-city',   name:'MEXICO CITY',      region:'AMERICAS',   flag:'🇲🇽', videoId:'IHlrRSz1kLU' },
+  // AFRICA & OCEANIA
+  { id:'cape-town',     name:'CAPE TOWN',        region:'AFRICA',     flag:'🇿🇦', videoId:'tQwEzrJXLls' },
+  { id:'marrakech',     name:'MARRAKECH',        region:'AFRICA',     flag:'🇲🇦', videoId:'eY6wEYsomj8' },
+  { id:'sydney',        name:'SYDNEY',           region:'OCEANIA',    flag:'🇦🇺', videoId:'Ey3Buk4NJrE' },
 ];
 
 const studyState = {
   active: false,
-  locId: 'lofi',
   clockInterval: null,
   chatHistory: [],
   wakeRec: null,
@@ -1085,45 +1131,71 @@ const studyState = {
 };
 
 function setupStudyMode() {
-  const backBtn = document.getElementById('study-back-btn');
-  if (backBtn) backBtn.addEventListener('click', closeStudyPanel);
+  // Grid back button
+  const gridBack = document.getElementById('study-grid-back-btn');
+  if (gridBack) gridBack.addEventListener('click', () => switchTab('tab-gamehub'));
 
-  const minBtn = document.getElementById('study-chat-min');
-  if (minBtn) minBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleStudyChat(); });
+  // Grid search
+  const searchInput = document.getElementById('study-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      renderStudyGrid(q
+        ? STUDY_LOCATIONS.filter(l => l.name.toLowerCase().includes(q) || l.region.toLowerCase().includes(q))
+        : STUDY_LOCATIONS
+      );
+    });
+  }
 
-  const head = document.getElementById('study-chat-head');
-  if (head) head.addEventListener('click', () => {
-    const chat = document.getElementById('study-chat');
-    if (chat && chat.classList.contains('minimized')) toggleStudyChat();
-  });
+  // Video overlay back button
+  const videoBack = document.getElementById('study-back-btn');
+  if (videoBack) videoBack.addEventListener('click', closeStudyVideo);
 
+  // Mini chat controls
+  const minBtn  = document.getElementById('study-chat-min');
+  const head    = document.getElementById('study-chat-head');
   const sendBtn = document.getElementById('study-send-btn');
   const input   = document.getElementById('study-input');
+  const micBtn  = document.getElementById('study-mic-btn');
+
+  if (minBtn)  minBtn.addEventListener('click',  (e) => { e.stopPropagation(); toggleStudyChat(); });
+  if (head)    head.addEventListener('click',    () => { const c = document.getElementById('study-chat'); if (c && c.classList.contains('minimized')) toggleStudyChat(); });
   if (sendBtn) sendBtn.addEventListener('click', sendStudyMessage);
   if (input)   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendStudyMessage(); });
-
-  const micBtn = document.getElementById('study-mic-btn');
-  if (micBtn) micBtn.addEventListener('click', triggerStudyMic);
+  if (micBtn)  micBtn.addEventListener('click',  triggerStudyMic);
 }
 
+/* openStudyPanel — called from STUDY pill, shows the location grid */
 function openStudyPanel() {
+  switchTab('tab-study-grid');
+  renderStudyGrid(STUDY_LOCATIONS);
+  const s = document.getElementById('study-search-input');
+  if (s) s.value = '';
+}
+
+/* openStudyVideo — called when a location card is clicked */
+function openStudyVideo(loc) {
   const overlay = document.getElementById('study-overlay');
   if (!overlay) return;
   overlay.style.display = 'block';
-  overlay.classList.add('active');
   studyState.active = true;
   studyState.chatHistory = [];
 
-  renderStudyLocations();
-  setStudyLocation(STUDY_LOCATIONS.find(l => l.id === studyState.locId) || STUDY_LOCATIONS[0]);
+  // Reset chat to welcome
+  const msgs = document.getElementById('study-msgs');
+  if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
+
+  // Set video
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1`;
+
   startStudyClock();
   startWakeWord();
 }
 
-function closeStudyPanel() {
+function closeStudyVideo() {
   const overlay = document.getElementById('study-overlay');
   if (!overlay) return;
-  overlay.classList.remove('active');
   overlay.style.display = 'none';
   studyState.active = false;
 
@@ -1134,86 +1206,77 @@ function closeStudyPanel() {
   if (iframe) iframe.src = '';
 }
 
-/* --- Locations --- */
-function renderStudyLocations() {
-  const container = document.getElementById('study-locs');
-  if (!container) return;
-  container.innerHTML = STUDY_LOCATIONS.map(loc => `
-    <button class="study-loc-btn${loc.id === studyState.locId ? ' active' : ''}" data-loc-id="${loc.id}">
-      <span class="study-loc-flag">${loc.flag}</span>
-      <span>${loc.name}</span>
-    </button>
-  `).join('');
-  container.querySelectorAll('.study-loc-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const loc = STUDY_LOCATIONS.find(l => l.id === btn.dataset.locId);
-      if (loc) setStudyLocation(loc);
-    });
-  });
-}
-
-function setStudyLocation(loc) {
-  studyState.locId = loc.id;
-  document.querySelectorAll('.study-loc-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.locId === loc.id);
-  });
-  const iframe = document.getElementById('study-iframe');
-  if (iframe) {
-    iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&enablejsapi=0`;
+/* renderStudyGrid — builds the location card grid */
+function renderStudyGrid(locs) {
+  const grid = document.getElementById('study-loc-grid');
+  if (!grid) return;
+  if (!locs.length) {
+    grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
+    return;
   }
+  grid.innerHTML = locs.map(loc => `
+    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
+      <div class="hub-card-media study-card-media">
+        <div class="study-card-placeholder">${loc.flag}</div>
+        <img class="hub-card-img" loading="lazy"
+          src="https://img.youtube.com/vi/${loc.videoId}/hqdefault.jpg"
+          onerror="this.style.display='none'"
+          alt="${loc.name}">
+        <div class="hub-card-overlay">
+          <div class="hub-card-title">${loc.name}</div>
+          <div class="hub-card-sub">${loc.region}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('.study-loc-card').forEach(card => {
+    const handler = () => {
+      const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
+      if (loc) openStudyVideo(loc);
+    };
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') handler(); });
+  });
 }
 
-/* --- Clock --- */
+/* Clock */
 function startStudyClock() {
   if (studyState.clockInterval) clearInterval(studyState.clockInterval);
   const DAYS   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
   const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-
   function tick() {
     const now = new Date();
-    const h = String(now.getHours()).padStart(2,'0');
-    const m = String(now.getMinutes()).padStart(2,'0');
-    const s = String(now.getSeconds()).padStart(2,'0');
     const clockEl = document.getElementById('study-clock');
     const dateEl  = document.getElementById('study-date');
-    if (clockEl) clockEl.textContent = `${h}:${m}:${s}`;
+    if (clockEl) clockEl.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
     if (dateEl)  dateEl.textContent  = `${DAYS[now.getDay()]} · ${MONTHS[now.getMonth()]} ${now.getDate()}`;
   }
   tick();
   studyState.clockInterval = setInterval(tick, 1000);
 }
 
-/* --- Wake Word --- */
+/* Wake Word */
 function startWakeWord() {
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRec) return;
   try {
     const rec = new SpeechRec();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-
+    rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
     rec.onresult = (e) => {
       const t = Array.from(e.results).map(r => r[0].transcript.toLowerCase()).join(' ');
-      if (t.includes('hey void') || t.includes('heyvoid') || t.includes('hey, void')) {
-        onWakeWordDetected();
-      }
+      if (t.includes('hey void') || t.includes('heyvoid') || t.includes('hey, void')) onWakeWordDetected();
     };
-
     rec.onend = () => { if (studyState.active) { try { rec.start(); } catch(_) {} } };
     rec.onerror = (e) => { if (e.error !== 'no-speech') updateWakePill(false); };
-
     rec.start();
-    studyState.wakeRec    = rec;
-    studyState.wakeActive = true;
-    updateWakePill(true);
+    studyState.wakeRec = rec; studyState.wakeActive = true; updateWakePill(true);
   } catch(_) {}
 }
 
 function stopWakeWord() {
   if (studyState.wakeRec) { try { studyState.wakeRec.stop(); } catch(_) {} studyState.wakeRec = null; }
-  studyState.wakeActive = false;
-  updateWakePill(false);
+  studyState.wakeActive = false; updateWakePill(false);
 }
 
 function updateWakePill(on) {
@@ -1229,7 +1292,7 @@ function onWakeWordDetected() {
   triggerStudyMic();
 }
 
-/* --- Chat toggle --- */
+/* Chat toggle */
 function toggleStudyChat() {
   const chat   = document.getElementById('study-chat');
   const minBtn = document.getElementById('study-chat-min');
@@ -1238,42 +1301,36 @@ function toggleStudyChat() {
   if (minBtn) minBtn.textContent = minimized ? '+' : '−';
 }
 
-/* --- Mic in study mode --- */
+/* Mic in study mode */
 function triggerStudyMic() {
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btn = document.getElementById('study-mic-btn');
   if (!SpeechRec) return;
-
   if (studyState.micRec) {
     try { studyState.micRec.stop(); } catch(_) {}
     studyState.micRec = null;
     if (btn) btn.classList.remove('active');
     return;
   }
-
   const rec = new SpeechRec();
-  rec.lang = getSTTLang();
-  rec.interimResults = false;
-
+  rec.lang = getSTTLang(); rec.interimResults = false;
   rec.onresult = (e) => {
     const transcript = e.results[0][0].transcript;
     const input = document.getElementById('study-input');
     if (input) { input.value = transcript; sendStudyMessage(); }
   };
-  rec.onend = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
-  rec.onerror = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
-
+  rec.onend  = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
+  rec.onerror= () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
   rec.start();
   studyState.micRec = rec;
   if (btn) btn.classList.add('active');
 }
 
-/* --- Send message in study chat --- */
+/* Study chat AI */
 async function sendStudyMessage() {
   const input = document.getElementById('study-input');
   const msgs  = document.getElementById('study-msgs');
   if (!input || !msgs) return;
-
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
@@ -1283,21 +1340,19 @@ async function sendStudyMessage() {
 
   const typingEl = document.createElement('div');
   typingEl.className = 'study-msg study-msg-ai';
-  typingEl.innerHTML = '<span style="opacity:0.5">…</span>';
+  typingEl.innerHTML = '<span style="opacity:0.45">…</span>';
   msgs.appendChild(typingEl);
   msgs.scrollTop = msgs.scrollHeight;
 
   const messages = [
-    { role: 'system', content: buildSystemPrompt() + '\n\nThe user is in Study Mode. Keep answers short, clear, and focused.' },
+    { role: 'system', content: buildSystemPrompt() + '\n\nThe user is studying. Keep responses brief and focused.' },
     ...studyState.chatHistory.slice(-10),
   ];
 
   let reply = null;
-  try {
-    if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
-  } catch(_) {}
+  try { if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch(_) {}
   if (!reply && App.settings.geminiKey) { try { reply = await callGemini(messages); } catch(_) {} }
-  if (!reply) reply = "Can't reach VOID right now. Check your connection.";
+  if (!reply) reply = "Can't reach VOID right now.";
 
   studyState.chatHistory.push({ role: 'assistant', content: reply });
   typingEl.remove();
@@ -1309,8 +1364,7 @@ function appendStudyMsg(role, text) {
   if (!msgs) return;
   const div = document.createElement('div');
   div.className = `study-msg study-msg-${role === 'user' ? 'user' : 'ai'}`;
-  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  div.innerHTML = `<span>${safe}</span>`;
+  div.innerHTML = `<span>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
