@@ -2,10 +2,5 @@ name = "void-proxy"
 main = "index.js"
 compatibility_date = "2025-01-01"
 
-# ── Secrets (Cloudflare Dashboard → Workers → void-proxy → Settings → Variables) ──
-#
-#  HF_SPACE_URL  →  https://YOUR_USERNAME-void-core.hf.space
-#                   (your Space URL, found on the HF Space page after deploying)
-#
-#  HF_TOKEN      →  get free token at huggingface.co/settings/tokens
-#                   (used as backup when Space is busy — same Phi-3-mini model)
+# Secret to set in Cloudflare Dashboard → Workers → void-proxy → Settings → Variables:
+#   HF_SPACE_URL  →  https://YOUR_USERNAME-void-core.hf.space

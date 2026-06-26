@@ -1,87 +1,61 @@
 """
-VOID Core — Hugging Face Space
-Runs microsoft/Phi-3-mini-4k-instruct with ZeroGPU (free A10G GPU).
-Exposes an OpenAI-compatible REST API at /v1/chat/completions.
+VOID Core — Hugging Face CPU Basic Space
+Runs Phi-3-mini-4k-instruct (Q4_K_M GGUF) via llama-cpp-python.
+Exposes OpenAI-compatible REST API at /v1/chat/completions.
+Always on, free, no GPU needed.
 """
 
 import gradio as gr
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from huggingface_hub import hf_hub_download
+from llama_cpp import Llama
 
-MODEL_ID = "microsoft/Phi-3-mini-4k-instruct"
-_pipe = None
-
-
-def get_pipe():
-    global _pipe
-    if _pipe is None:
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-        import torch
-        tok = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
-        mdl = AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            torch_dtype="auto",
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        _pipe = pipeline("text-generation", model=mdl, tokenizer=tok)
-    return _pipe
+print("Downloading Phi-3-mini GGUF model...")
+model_path = hf_hub_download(
+    repo_id="bartowski/Phi-3-mini-4k-instruct-GGUF",
+    filename="Phi-3-mini-4k-instruct-Q4_K_M.gguf",
+)
+print("Loading model...")
+llm = Llama(
+    model_path=model_path,
+    n_ctx=4096,
+    n_threads=2,
+    n_batch=512,
+    verbose=False,
+)
+print("VOID Core ready.")
 
 
-# ZeroGPU decorator — allocates a free A10G GPU for each request
-try:
-    import spaces
-
-    @spaces.GPU(duration=120)
-    def infer(messages, max_tokens):
-        out = get_pipe()(
-            messages,
-            max_new_tokens=max_tokens,
-            return_full_text=False,
-            do_sample=False,
-        )
-        return out[0]["generated_text"]
-
-except ImportError:
-    # Local dev / CPU fallback
-    def infer(messages, max_tokens):
-        out = get_pipe()(
-            messages,
-            max_new_tokens=max_tokens,
-            return_full_text=False,
-            do_sample=False,
-        )
-        return out[0]["generated_text"]
-
-
-# ── Gradio UI (required for ZeroGPU + gives the Space a web page) ──────────
+# Minimal Gradio UI (required for the Space to run)
 with gr.Blocks(title="VOID Core", theme=gr.themes.Monochrome()) as demo:
-    gr.Markdown("# VOID Core\n`microsoft/Phi-3-mini-4k-instruct` — REST API at `/v1/chat/completions`")
+    gr.Markdown("## VOID Core\n`Phi-3-mini-4k-instruct` — API at `/v1/chat/completions`")
 
 
-# ── REST API mounted on Gradio's internal FastAPI ───────────────────────────
 @demo.app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
     messages = body.get("messages", [])
-    max_tokens = min(int(body.get("max_tokens", 1024)), 2048)
+    max_tokens = min(int(body.get("max_tokens", 512)), 1024)
 
     if not messages:
-        return JSONResponse({"error": {"message": "No messages provided"}}, status_code=400)
+        return JSONResponse({"error": {"message": "No messages"}}, status_code=400)
 
     try:
-        content = infer(messages, max_tokens)
-        return JSONResponse({
-            "choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
-            "model": MODEL_ID,
-        })
+        result = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.7,
+            stop=["<|end|>", "<|user|>"],
+        )
+        return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": {"message": str(e)}}, status_code=500)
 
 
 @demo.app.get("/health")
 def health():
-    return {"status": "online", "model": MODEL_ID}
+    return {"status": "online", "model": "Phi-3-mini-4k-instruct-Q4_K_M"}
 
 
 if __name__ == "__main__":

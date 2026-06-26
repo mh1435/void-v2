@@ -12,6 +12,5 @@ license: mit
 
 # VOID Core
 
-Runs `microsoft/Phi-3-mini-4k-instruct` with ZeroGPU (free A10G).
-
-REST endpoint: `POST /v1/chat/completions` — OpenAI-compatible format.
+Runs `Phi-3-mini-4k-instruct` (Q4_K_M) via llama-cpp-python on CPU.  
+Always on. Free. REST API at `/v1/chat/completions`.
