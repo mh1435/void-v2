@@ -36,6 +36,17 @@ const LANG_NAMES = {
   fr:'French', de:'German', it:'Italian', nl:'Dutch',
 };
 
+const STT_LANG_MAP = {
+  en:'en-US', ar:'ar-SA', ms:'ms-MY', id:'id-ID', tl:'fil-PH',
+  th:'th-TH', vi:'vi-VN', zh:'zh-CN', ko:'ko-KR', ja:'ja-JP',
+  tr:'tr-TR', ru:'ru-RU', es:'es-ES', pt:'pt-BR', fr:'fr-FR',
+  de:'de-DE', it:'it-IT', nl:'nl-NL',
+};
+
+function getSTTLang() {
+  return STT_LANG_MAP[getActiveLang()] || 'en-US';
+}
+
 function getActiveLang() {
   const s = App.settings.lang || 'auto';
   if (s !== 'auto') return s;
@@ -116,6 +127,7 @@ function bootApp() {
   setupPreferencesPanel();
   setupProviderPicker();
   setupMemoryPanel();
+  setupStudyMode();
   loadTasks();
   loadCommands();
   loadChatHistory();
@@ -423,6 +435,7 @@ function setupChat() {
     recognizer = new SpeechRecognition();
     recognizer.continuous = false;
     recognizer.interimResults = false;
+    recognizer.lang = getSTTLang();
     recognizer.addEventListener('result', (e) => {
       const text = e.results[0][0].transcript;
       input.value = (input.value ? input.value + ' ' : '') + text;
@@ -1042,8 +1055,264 @@ function setupGameHub() {
   }
 }
 
+/* ============================================================
+   STUDY MODE
+   ============================================================ */
+
+const STUDY_LOCATIONS = [
+  { id: 'lofi',    name: 'LOFI CAFÉ',  flag: '🎵', videoId: 'jfKfPfyJRdk' },
+  { id: 'tokyo',   name: 'TOKYO',      flag: '🇯🇵', videoId: 'iYWIZeDdq5A' },
+  { id: 'paris',   name: 'PARIS',      flag: '🇫🇷', videoId: 'EkzQ6nEhG-E' },
+  { id: 'newyork', name: 'NEW YORK',   flag: '🇺🇸', videoId: 'n61ULEU7CO0' },
+  { id: 'london',  name: 'LONDON',     flag: '🇬🇧', videoId: 'bnkVkoHEWoQ' },
+  { id: 'seoul',   name: 'SEOUL',      flag: '🇰🇷', videoId: 'g7G0MRVbM6o' },
+  { id: 'dubai',   name: 'DUBAI',      flag: '🇦🇪', videoId: '6apS_4LFYAM' },
+  { id: 'bali',    name: 'BALI',       flag: '🇮🇩', videoId: 'PaSKoJvNEwY' },
+  { id: 'rome',    name: 'ROME',       flag: '🇮🇹', videoId: 'JMJ7GjAWvXE' },
+  { id: 'kyoto',   name: 'KYOTO',      flag: '🏯', videoId: '_Whyf8mMoSk' },
+  { id: 'nature',  name: 'NATURE',     flag: '🌿', videoId: 'eKFTSSKCzWA' },
+  { id: 'rain',    name: 'RAIN',       flag: '🌧️', videoId: 'yIQd2Ya0Ziw' },
+];
+
+const studyState = {
+  active: false,
+  locId: 'lofi',
+  clockInterval: null,
+  chatHistory: [],
+  wakeRec: null,
+  wakeActive: false,
+  micRec: null,
+};
+
+function setupStudyMode() {
+  const backBtn = document.getElementById('study-back-btn');
+  if (backBtn) backBtn.addEventListener('click', closeStudyPanel);
+
+  const minBtn = document.getElementById('study-chat-min');
+  if (minBtn) minBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleStudyChat(); });
+
+  const head = document.getElementById('study-chat-head');
+  if (head) head.addEventListener('click', () => {
+    const chat = document.getElementById('study-chat');
+    if (chat && chat.classList.contains('minimized')) toggleStudyChat();
+  });
+
+  const sendBtn = document.getElementById('study-send-btn');
+  const input   = document.getElementById('study-input');
+  if (sendBtn) sendBtn.addEventListener('click', sendStudyMessage);
+  if (input)   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendStudyMessage(); });
+
+  const micBtn = document.getElementById('study-mic-btn');
+  if (micBtn) micBtn.addEventListener('click', triggerStudyMic);
+}
+
 function openStudyPanel() {
-  // Study panel — to be designed
+  const overlay = document.getElementById('study-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'block';
+  overlay.classList.add('active');
+  studyState.active = true;
+  studyState.chatHistory = [];
+
+  renderStudyLocations();
+  setStudyLocation(STUDY_LOCATIONS.find(l => l.id === studyState.locId) || STUDY_LOCATIONS[0]);
+  startStudyClock();
+  startWakeWord();
+}
+
+function closeStudyPanel() {
+  const overlay = document.getElementById('study-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  overlay.style.display = 'none';
+  studyState.active = false;
+
+  if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
+  stopWakeWord();
+
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) iframe.src = '';
+}
+
+/* --- Locations --- */
+function renderStudyLocations() {
+  const container = document.getElementById('study-locs');
+  if (!container) return;
+  container.innerHTML = STUDY_LOCATIONS.map(loc => `
+    <button class="study-loc-btn${loc.id === studyState.locId ? ' active' : ''}" data-loc-id="${loc.id}">
+      <span class="study-loc-flag">${loc.flag}</span>
+      <span>${loc.name}</span>
+    </button>
+  `).join('');
+  container.querySelectorAll('.study-loc-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = STUDY_LOCATIONS.find(l => l.id === btn.dataset.locId);
+      if (loc) setStudyLocation(loc);
+    });
+  });
+}
+
+function setStudyLocation(loc) {
+  studyState.locId = loc.id;
+  document.querySelectorAll('.study-loc-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.locId === loc.id);
+  });
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) {
+    iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&enablejsapi=0`;
+  }
+}
+
+/* --- Clock --- */
+function startStudyClock() {
+  if (studyState.clockInterval) clearInterval(studyState.clockInterval);
+  const DAYS   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+  function tick() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    const clockEl = document.getElementById('study-clock');
+    const dateEl  = document.getElementById('study-date');
+    if (clockEl) clockEl.textContent = `${h}:${m}:${s}`;
+    if (dateEl)  dateEl.textContent  = `${DAYS[now.getDay()]} · ${MONTHS[now.getMonth()]} ${now.getDate()}`;
+  }
+  tick();
+  studyState.clockInterval = setInterval(tick, 1000);
+}
+
+/* --- Wake Word --- */
+function startWakeWord() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) return;
+  try {
+    const rec = new SpeechRec();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript.toLowerCase()).join(' ');
+      if (t.includes('hey void') || t.includes('heyvoid') || t.includes('hey, void')) {
+        onWakeWordDetected();
+      }
+    };
+
+    rec.onend = () => { if (studyState.active) { try { rec.start(); } catch(_) {} } };
+    rec.onerror = (e) => { if (e.error !== 'no-speech') updateWakePill(false); };
+
+    rec.start();
+    studyState.wakeRec    = rec;
+    studyState.wakeActive = true;
+    updateWakePill(true);
+  } catch(_) {}
+}
+
+function stopWakeWord() {
+  if (studyState.wakeRec) { try { studyState.wakeRec.stop(); } catch(_) {} studyState.wakeRec = null; }
+  studyState.wakeActive = false;
+  updateWakePill(false);
+}
+
+function updateWakePill(on) {
+  const pill = document.getElementById('study-wake-pill');
+  if (pill) pill.classList.toggle('listening', on);
+}
+
+function onWakeWordDetected() {
+  const chat = document.getElementById('study-chat');
+  if (chat) chat.classList.remove('minimized');
+  const minBtn = document.getElementById('study-chat-min');
+  if (minBtn) minBtn.textContent = '−';
+  triggerStudyMic();
+}
+
+/* --- Chat toggle --- */
+function toggleStudyChat() {
+  const chat   = document.getElementById('study-chat');
+  const minBtn = document.getElementById('study-chat-min');
+  if (!chat) return;
+  const minimized = chat.classList.toggle('minimized');
+  if (minBtn) minBtn.textContent = minimized ? '+' : '−';
+}
+
+/* --- Mic in study mode --- */
+function triggerStudyMic() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('study-mic-btn');
+  if (!SpeechRec) return;
+
+  if (studyState.micRec) {
+    try { studyState.micRec.stop(); } catch(_) {}
+    studyState.micRec = null;
+    if (btn) btn.classList.remove('active');
+    return;
+  }
+
+  const rec = new SpeechRec();
+  rec.lang = getSTTLang();
+  rec.interimResults = false;
+
+  rec.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    const input = document.getElementById('study-input');
+    if (input) { input.value = transcript; sendStudyMessage(); }
+  };
+  rec.onend = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
+  rec.onerror = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
+
+  rec.start();
+  studyState.micRec = rec;
+  if (btn) btn.classList.add('active');
+}
+
+/* --- Send message in study chat --- */
+async function sendStudyMessage() {
+  const input = document.getElementById('study-input');
+  const msgs  = document.getElementById('study-msgs');
+  if (!input || !msgs) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  appendStudyMsg('user', text);
+  studyState.chatHistory.push({ role: 'user', content: text });
+
+  const typingEl = document.createElement('div');
+  typingEl.className = 'study-msg study-msg-ai';
+  typingEl.innerHTML = '<span style="opacity:0.5">…</span>';
+  msgs.appendChild(typingEl);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() + '\n\nThe user is in Study Mode. Keep answers short, clear, and focused.' },
+    ...studyState.chatHistory.slice(-10),
+  ];
+
+  let reply = null;
+  try {
+    if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
+  } catch(_) {}
+  if (!reply && App.settings.geminiKey) { try { reply = await callGemini(messages); } catch(_) {} }
+  if (!reply) reply = "Can't reach VOID right now. Check your connection.";
+
+  studyState.chatHistory.push({ role: 'assistant', content: reply });
+  typingEl.remove();
+  appendStudyMsg('ai', reply);
+}
+
+function appendStudyMsg(role, text) {
+  const msgs = document.getElementById('study-msgs');
+  if (!msgs) return;
+  const div = document.createElement('div');
+  div.className = `study-msg study-msg-${role === 'user' ? 'user' : 'ai'}`;
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  div.innerHTML = `<span>${safe}</span>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 function renderHeroGrid(heroes) {

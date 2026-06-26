@@ -356,6 +356,65 @@ if ('serviceWorker' in navigator) {
   </main>
 </div>
 
+<!-- ===== STUDY MODE OVERLAY ===== -->
+<div id="study-overlay" class="study-overlay" aria-hidden="true">
+  <!-- Full-screen YouTube background -->
+  <iframe id="study-iframe" class="study-iframe"
+    allow="autoplay; encrypted-media; picture-in-picture"
+    allowfullscreen></iframe>
+
+  <!-- Gradient scrims for readability -->
+  <div class="study-scrim study-scrim-top"></div>
+  <div class="study-scrim study-scrim-bottom"></div>
+
+  <!-- Top bar: back · clock · wake pill -->
+  <div class="study-top-bar">
+    <button class="study-ui-btn" id="study-back-btn" aria-label="Exit study mode">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+
+    <div class="study-clock-block">
+      <div class="study-clock" id="study-clock">00:00:00</div>
+      <div class="study-date"  id="study-date"></div>
+    </div>
+
+    <div class="study-wake-pill" id="study-wake-pill">
+      <span class="study-wake-dot"></span>
+      <span>HEY VOID</span>
+    </div>
+  </div>
+
+  <!-- Bottom bar: location selector -->
+  <div class="study-bottom-bar">
+    <div class="study-locs" id="study-locs"></div>
+  </div>
+
+  <!-- VOID mini chat widget -->
+  <div class="study-chat" id="study-chat">
+    <div class="study-chat-head" id="study-chat-head">
+      <div class="study-chat-void-dot"></div>
+      <span class="study-chat-label">VOID</span>
+      <button class="study-chat-min-btn" id="study-chat-min" aria-label="Minimize">−</button>
+    </div>
+    <div class="study-chat-body" id="study-chat-body">
+      <div class="study-msgs" id="study-msgs">
+        <div class="study-msg study-msg-ai">
+          <span>Ready to help you study. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span>
+        </div>
+      </div>
+      <div class="study-input-row">
+        <input class="study-input" id="study-input" placeholder="Ask VOID..." autocomplete="off">
+        <button class="study-icon-btn" id="study-mic-btn" aria-label="Voice input">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button class="study-icon-btn study-send-btn" id="study-send-btn" aria-label="Send">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="view-wrapper" id="view-settings">
   <header class="hud-header">
     <div class="hud-left">
