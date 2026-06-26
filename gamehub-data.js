@@ -2,12 +2,147 @@
    VOID // GAMEHUB CONTENT DATABASE ENGINE (2026 MATRIX)
    ========================================================= */
 
+const HERO_CDN_IMGS = {
+  'saber': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_15e49c7cc5398ca2d903a485145c0702.jpg&output=jpg&w=400',
+  'karina': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_37b5cfef887a7afc63dfaf7b6dfd65c4.jpg&output=jpg&w=400',
+  'fanny': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_74fabc6c0d5db065fbb836b6879f36ca.jpg&output=jpg&w=400',
+  'hayabusa': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_82560b092a98bcb328def807a2a48cfe.jpg&output=jpg&w=400',
+  'natalia': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_79e90c124d786bbfdae31f3a28827e7d.jpg&output=jpg&w=400',
+  'lancelot': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_015bacc4e1111e5e2b4a33b5e58ff106.jpg&output=jpg&w=400',
+  'helcurt': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_7d54de9ffe40c05d51b4a27318ed5f6d.jpg&output=jpg&w=400',
+  'gusion': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Fa888de3fe448be8f29b50a62d0193aaf.jpg&output=jpg&w=400',
+  'selena': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_4ce7dbe0cbcbaf4c2fcc47bd96780b35.jpg&output=jpg&w=400',
+  'hanzo': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F4e77b4cc8c101bbd62f548ed10ea1ed4.jpg&output=jpg&w=400',
+  'ling': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_f76a7dfe805afa316e5ec44295b75772.jpg&output=jpg&w=400',
+  'benedetta': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_2153076135c5ea537f796c4352dd9800.jpg&output=jpg&w=400',
+  'aamon': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_26b1c0ec95ad9e98f81b07d6838a8652.jpg&output=jpg&w=400',
+  'joy': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_f647bf6dbb80b4b2b2310ab5af88773d.jpg&output=jpg&w=400',
+  'nolan': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_cae4b6dafe9d345f84eee1c983333c0c.jpg&output=jpg&w=400',
+  'sora': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Fd6348e65d8d0d4ca8b0738d691cef440.jpg&output=jpg&w=400',
+  'hirara': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Ff156378413102969d6682fe940755d70.jpg&output=jpg&w=400',
+  'balmond': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_8f49801963afcd9b7c6fe6f59153ccc0.jpg&output=jpg&w=400',
+  'chou': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_011409dfe1a2cf4cf5f879ea07fb3a8e.jpg&output=jpg&w=400',
+  'ruby': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_2cfc71331f6e2435394bfa44c322405c.jpg&output=jpg&w=400',
+  'lapu-lapu': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_d407ccb622db392981d2fceff06d757c.jpg&output=jpg&w=400',
+  'alucard': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_c9a8a8b1bb1fed4190f3168d44810ce3.jpg&output=jpg&w=400',
+  'bane': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_7060e1c063474bb8ff9472d61f7ce4c3.jpg&output=jpg&w=400',
+  'zilong': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_90df181873c42df22049aa056662a934.jpg&output=jpg&w=400',
+  'freya': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F71d910744206adec64f7c5e97b0698c7.jpg&output=jpg&w=400',
+  'sun': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5dd440a371270f458071305b9bf107b5.jpg&output=jpg&w=400',
+  'alpha': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_0fd2c33fbf0235703b1c936059cf1b8e.jpg&output=jpg&w=400',
+  'roger': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_ff92c4b5afb41060af1b951ba9f03edd.jpg&output=jpg&w=400',
+  'gatotkaca': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_a9a9551515638bb9b6128eef1ee916bd.jpg&output=jpg&w=400',
+  'jawhead': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_a48e93159c30c31e05dcd6cf7f53c07c.jpg&output=jpg&w=400',
+  'martis': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_01b9995a75249c3155ca96e4713139a9.jpg&output=jpg&w=400',
+  'aldous': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_e4f7847a1b687a2e4f414e531cd66b1b.jpg&output=jpg&w=400',
+  'leomord': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_77c6d6b5b84b658c8f25e6f371658cbd.jpg&output=jpg&w=400',
+  'thamuz': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F1699a938c6938947e534aa2874341d58.jpg&output=jpg&w=400',
+  'minsitthar': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5a18fa300eb0de4324601c116eab655c.jpg&output=jpg&w=400',
+  'badang': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_ce3e2759eb9ccd7a94ae3a2ee4e8b8e7.jpg&output=jpg&w=400',
+  'guinevere': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5acbfb73c47c25d4689f93c3c950fc8f.jpg&output=jpg&w=400',
+  'terizla': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_2352b6ef3a86441e2a3880fa436df1de.jpg&output=jpg&w=400',
+  'x-borg': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F52e2334206e3b30354b129f86ada1ef5.jpg&output=jpg&w=400',
+  'dyrroth': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F636054ad39847fcc242d0b03feadffac.jpg&output=jpg&w=400',
+  'silvanna': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_a9de8642b6e62f44652c519f153620d2.jpg&output=jpg&w=400',
+  'yu-zhong': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_97280cb443adc3bcb4ca9b36a0fada53.jpg&output=jpg&w=400',
+  'khaleed': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_155712d0d854711a12f2754865acc17b.jpg&output=jpg&w=400',
+  'paquito': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_ef4c59d1923663a6aaa77d1c0a7ff258.jpg&output=jpg&w=400',
+  'phoveus': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_b811616b91e45a75437a6d5b9f386bd3.jpg&output=jpg&w=400',
+  'yin': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5324c7bcbfd9932aca9b8d2e7b8e307a.jpg&output=jpg&w=400',
+  'julian': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5b493fa77cd6ea1a799577a69c86fbd2.jpg&output=jpg&w=400',
+  'fredrinn': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_bafe5308a1e6db91ba57e39c45874a92.jpg&output=jpg&w=400',
+  'cici': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_eb1705dc650b3980d57c638d02bfb470.jpg&output=jpg&w=400',
+  'arlott': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_d29e8f9f2d129f18a944da0a8e9044c2.jpg&output=jpg&w=400',
+  'aulus': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Fdf1df2053afbdda1167d647bbb8b3a81.jpg&output=jpg&w=400',
+  'masha': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_59893811b0123dc6babca117f5ead017.jpg&output=jpg&w=400',
+  'suyou': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F13912f0dbc96b6cf53a00e80ff731dab.jpg&output=jpg&w=400',
+  'lukas': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F95b6f94a0e37fd02e069223493540e75.jpg&output=jpg&w=400',
+  'kalea': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F6bde4242228d5ea98b700c9cfc1e837d.jpg&output=jpg&w=400',
+  'miya': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F6667b3e9109ca180e63c524471f29278.jpg&output=jpg&w=400',
+  'popol': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_555eb8df475f57d6f01a1f2a2675671c.jpg&output=jpg&w=400',
+  'bruno': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_03cd0ea0a0f0bd80ca4f7462174f80b1.jpg&output=jpg&w=400',
+  'clint': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_8136b5ece3387dfe347956f797a14a5d.jpg&output=jpg&w=400',
+  'layla': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_0db5131842bec1fdbdf5f8533ebada2c.jpg&output=jpg&w=400',
+  'moskov': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_843f1c2c3a1b2d4da2fc2ec73cf47cfa.jpg&output=jpg&w=400',
+  'karrie': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_bd34b1ec70de7a32b724dd606cb56331.jpg&output=jpg&w=400',
+  'iridhel': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_f999fb58616e2d87c29dcb92177990f5.jpg&output=jpg&w=400',
+  'hanabi': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F0208ca2382d8cfdcd277ef5d532316f7.jpg&output=jpg&w=400',
+  'claude': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_1edf19b0839ffd2bffb60b4ee4953239.jpg&output=jpg&w=400',
+  'kimmy': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Ff2851daf34080fb5406f8d602b9fa489.jpg&output=jpg&w=400',
+  'granger': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F5d272478f2f89dcae9e6896cb19743ac.jpg&output=jpg&w=400',
+  'wanwan': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F9b163e2146ae6b0e84941032c3f10a41.png&output=jpg&w=400',
+  'brody': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_9a3feb044b76ac87f886a0fdf4ef4f13.jpg&output=jpg&w=400',
+  'beatrix': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_2f25a8ef9bbb2d52eaaea8d6eee85d22.jpg&output=jpg&w=400',
+  'melissa': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5c2a434757066a779c8adec5af05a8d1.jpg&output=jpg&w=400',
+  'ixia': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_48896a3cf0ee41c3d54c2b651ed926ea.jpg&output=jpg&w=400',
+  'natan': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_bc73ea56e3e05b4f9ed8046b959e1290.jpg&output=jpg&w=400',
+  'lesley': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F1f0d645266d902f3f927ea7fc04c1bca.jpg&output=jpg&w=400',
+  'obsidia': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F1dca7f088da27d5a12faf83f7c1f8269.jpg&output=jpg&w=400',
+  'alice': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F66c9a33b830173a5fd93d9940429b491.jpg&output=jpg&w=400',
+  'eudora': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F8db55c33fd2a5c84822a2a6c51e1fb18.jpg&output=jpg&w=400',
+  'gord': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Ffe7d492d0a71f96da12ff710d41a76cb.jpg&output=jpg&w=400',
+  'kagura': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_64bda78279297278301e236555a15404.jpg&output=jpg&w=400',
+  'cyclops': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_b506976dcb608de1f369ab8f6b3cb055.jpg&output=jpg&w=400',
+  'aurora': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_58b97db6a5c286059057d42289612b16.jpg&output=jpg&w=400',
+  'vexana': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_f1a01e297d30d147c16342efc357275e.jpg&output=jpg&w=400',
+  'harley': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_7b867b2f05de71466a0e98ea6898eff2.jpg&output=jpg&w=400',
+  'odette': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_7448f16293a6be9311f82d581e78749a.jpg&output=jpg&w=400',
+  'zhask': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_6e99f11105dc89bff1932cd4b3809c12.jpg&output=jpg&w=400',
+  'pharsa': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_353d39f8ae9ea1454e34ad8546db8417.jpg&output=jpg&w=400',
+  'valir': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_7a285a7d75ceb5fecceec6b2608b232f.jpg&output=jpg&w=400',
+  'chang-e': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_bf3d5cdc1c0e33f5aab7732e153c7409.jpg&output=jpg&w=400',
+  'vale': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_25040275a37d04d6ed8930a64f9e20bd.jpg&output=jpg&w=400',
+  'lunox': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_8cd47d47126be5496fecb45304368069.jpg&output=jpg&w=400',
+  'harith': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_c1dcef05408b7c644298bab812517de3.jpg&output=jpg&w=400',
+  'kadita': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_3671cbec60a1b4f62971d37e7ecc0e89.jpg&output=jpg&w=400',
+  'esmeralda': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_980e6419f7763a9dd26818312d73cc6d.jpg&output=jpg&w=400',
+  'lylia': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_8d16667b16673a1919c513fa46bbf2d0.jpg&output=jpg&w=400',
+  'cecilision': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_71d6b7fc8cfe8fd9b0c20ad3be1af4e8.jpg&output=jpg&w=400',
+  'yve': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F0b6e910cb702dcbb68614c9bac4ba590.jpg&output=jpg&w=400',
+  'valentina': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_cdd151e2293c14b2abc3c1c8e57d4392.jpg&output=jpg&w=400',
+  'xavier': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_6ebaf2a24b6b6cf256c9bae408b0400e.jpg&output=jpg&w=400',
+  'novaria': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_b2599c8a6c681afdee9a06a92190a58d.jpg&output=jpg&w=400',
+  'zhuxin': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage_92%2F100_999ac33ac284f6dc38a5f5ae7a6921b8.jpg&output=jpg&w=400',
+  'luo-yi': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_52c14752b29b6f9039da26a50e860c5c.jpg&output=jpg&w=400',
+  'zetian': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Fb617a6b4d9e2c22a5bc24d886e453399.jpg&output=jpg&w=400',
+  'tigreal': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_ec2ad5967a2d8a0ac5e2cef2a1e24411.jpg&output=jpg&w=400',
+  'akai': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_2fab842e4c04d903b1b46c3c4a1d02ad.jpg&output=jpg&w=400',
+  'franco': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_ad018d324520174ab87b3a1098507fb6.jpg&output=jpg&w=400',
+  'minotaur': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_db4fda77f902f3dde09d247498da23cc.jpg&output=jpg&w=400',
+  'johnson': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_b40543fb2ad8f8ef198c66f0d9eadeef.jpg&output=jpg&w=400',
+  'hilda': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_35f2e88037398136c01b314deb573eb0.jpg&output=jpg&w=400',
+  'grock': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2Fc5df319054bcefec1d17c771b45b9e10.jpg&output=jpg&w=400',
+  'argus': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_802afa50ffd43d553c3b924d111249c1.jpg&output=jpg&w=400',
+  'hylos': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_bcc177e4f62634fca493732e4058c626.jpg&output=jpg&w=400',
+  'uranus': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_1e52a042e596bd333ccab46d00bb8c72.jpg&output=jpg&w=400',
+  'belerick': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_64900b3344e166f05645ac5759207897.jpg&output=jpg&w=400',
+  'khufra': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_3ffc413118c62fc17f599cb35172ba9c.jpg&output=jpg&w=400',
+  'baxia': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_478a4875002331e56e73835a2697ad5d.jpg&output=jpg&w=400',
+  'atlas': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_9a217534db9b67c6db2c45d57a0d640c.jpg&output=jpg&w=400',
+  'barats': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_1b9fec44c21db9ecba0229ac227c7d51.jpg&output=jpg&w=400',
+  'edith': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_0598a42d46dd271410f403b57eb02e2a.jpg&output=jpg&w=400',
+  'gloo': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F7257d4ee30eff4d5bc5726027eee5f96.jpg&output=jpg&w=400',
+  'angela': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_187b8452435b469e8867e8fb2d387a5b.jpg&output=jpg&w=400',
+  'nana': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_4258783f9b44a4ad1c67c0b8781051fa.jpg&output=jpg&w=400',
+  'rafaela': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_491618ae5cb3d561f5f02fbb3d82a83d.jpg&output=jpg&w=400',
+  'lolita': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_1bc4973e512cf4958fe639e12391666e.jpg&output=jpg&w=400',
+  'estes': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_137acad8cd747ef9d0dec755158aff18.jpg&output=jpg&w=400',
+  'diggie': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_91b0167c49a789de46de29c3714da515.jpg&output=jpg&w=400',
+  'carmilla': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_08d58580aaeaab354c2d267d8746c42d.jpg&output=jpg&w=400',
+  'mathilda': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_5d6eb0491da5709648beca54f906c0a3.jpg&output=jpg&w=400',
+  'floryn': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_854338f3ad90cb9e14aec15c8b8a08c7.jpg&output=jpg&w=400',
+  'faramis': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_a171d8e12dd5eda201750e794dd5e313.jpg&output=jpg&w=400',
+  'kaja': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_1a0b70adda2acee8c950dd0982b45e5c.jpg&output=jpg&w=400',
+  'chip': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_fb8b4e345db174545e967b7bcbd219f4.jpg&output=jpg&w=400',
+  'marcel': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fgms%2Fimage%2F3542718f699058d42801d88ec9b8fb8b.jpg&output=jpg&w=400',
+};
+
 const MLBB_HERO_DATA_RAW = [
   // --- ASSASSINS / JUNGLERS ---
   { 
     id: 'saber', 
     role: 'Assassin', 
-    rarity: 'B-TIER',
+    rarity: 'S-TIER (META)',
     counters: ['khufra', 'tigreal', 'athena_shield'],
     builds: {
       'One-Shot Burst': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'immortality'],
@@ -17,7 +152,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'karina', 
     role: 'Assassin', 
-    rarity: 'A-TIER',
+    rarity: 'D-TIER',
     counters: ['athena_shield', 'khufra', 'lolita'],
     builds: {
       'Full Magic Burst': ['genius_wand', 'lightning_truncheon', 'holy_crystal', 'divine_glaive', 'winter_crown', 'blood_wings'],
@@ -27,7 +162,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'fanny', 
     role: 'Assassin', 
-    rarity: 'S-TIER (META)',
+    rarity: 'D-TIER',
     counters: ['khufra', 'masha', 'chou', 'saber'],
     builds: {
       'S-Tier Hyper DMG': ['blade_of_the_heptaseas', 'hunter_strike', 'blade_of_despair', 'malefic_roar', 'rose_gold_meteor', 'immortality'],
@@ -37,7 +172,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'hayabusa', 
     role: 'Assassin', 
-    rarity: 'S-TIER (META)',
+    rarity: 'C-TIER',
     counters: ['khufra', 'saber', 'winter_crown'],
     builds: {
       'Hyper Carry Jungle': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'immortality'],
@@ -56,7 +191,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'lancelot', 
     role: 'Assassin', 
-    rarity: 'A-TIER',
+    rarity: 'D-TIER',
     counters: ['khufra', 'phoveus', 'masha'],
     builds: {
       'Full Physical DMG': ['hunter_strike', 'blade_of_the_heptaseas', 'blade_of_despair', 'endless_battle', 'malefic_roar', 'immortality'],
@@ -113,7 +248,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'chou', 
     role: 'Fighter', 
-    rarity: 'A-TIER',
+    rarity: 'D-TIER',
     counters: ['khufra', 'phoveus', 'diggie'],
     builds: {
       'One-Shot Damage': ['blade_of_the_heptaseas', 'hunter_strike', 'endless_battle', 'blade_of_despair', 'malefic_roar', 'immortality'],
@@ -123,7 +258,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'ruby', 
     role: 'Fighter', 
-    rarity: 'S-TIER (META)',
+    rarity: 'A-TIER',
     counters: ['baxia', 'valir', 'dominance_ice'],
     builds: {
       'EXP Spellvamp Offlane': ['war_axe', 'bloodlust_axe', 'dominance_ice', 'oracle', 'brute_force_breastplate', 'immortality'],
@@ -133,7 +268,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'lapu-lapu', 
     role: 'Fighter', 
-    rarity: 'A-TIER',
+    rarity: 'C-TIER',
     counters: ['baxia', 'valir', 'dominance_ice'],
     builds: {
       'Sustain Offlane DMG': ['bloodlust_axe', 'hunter_strike', 'war_axe', 'brute_force_breastplate', 'oracle', 'immortality'],
@@ -179,7 +314,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'miya', 
     role: 'Marksman', 
-    rarity: 'B-TIER',
+    rarity: 'A-TIER',
     counters: ['saber', 'blade_armor', 'wind_of_nature'],
     builds: {
       'Crit Attack Speed': ['windtalker', 'berserker_fury', 'haas_claws', 'corrosion_scythe', 'malefic_roar', 'wind_of_nature'],
@@ -189,7 +324,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'popol', 
     role: 'Marksman', 
-    rarity: 'A-TIER',
+    rarity: 'B-TIER',
     counters: ['saber', 'gusion', 'wind_of_nature'],
     builds: {
       'Gold Lane Tower Push': ['blade_of_the_heptaseas', 'hunter_strike', 'blade_of_despair', 'malefic_roar', 'endless_battle', 'wind_of_nature'],
@@ -257,7 +392,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'tigreal', 
     role: 'Tank', 
-    rarity: 'A-TIER',
+    rarity: 'D-TIER',
     counters: ['diggie', 'valir'],
     builds: {
       'Full Defense Roam': ['dominance_ice', 'athena_shield', 'antique_cuirass', 'radiant_armor', 'immortality', 'guardian_helmet']
@@ -284,7 +419,7 @@ const MLBB_HERO_DATA_RAW = [
   { 
     id: 'angela', 
     role: 'Support', 
-    rarity: 'S-TIER (META)',
+    rarity: 'B-TIER',
     counters: ['saber', 'natalia', 'gusion'],
     builds: {
       'Pocket Shield Heal': ['enchanted_talisman', 'glowing_wand', 'ice_queen_wand', 'oracle', 'athena_shield', 'immortality']
@@ -367,13 +502,18 @@ function resolveHeroFilename(id) {
   return id.charAt(0).toUpperCase() + id.slice(1) + '.png';
 }
 
+function resolveHeroImg(id) {
+  if (HERO_CDN_IMGS[id]) return HERO_CDN_IMGS[id];
+  return `images/heroes/${resolveHeroFilename(id)}`;
+}
+
 const GameHubData = {
   heroes: MLBB_HERO_DATA_RAW.map(h => ({
     id: h.id,
     name: buildHeroTitleString(h.id),
     role: h.role,
     rarity: h.rarity,
-    img: `images/heroes/${resolveHeroFilename(h.id)}`, 
+    img: resolveHeroImg(h.id), 
     counters: h.counters || [],
     builds: h.builds || {},
     desc: `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
