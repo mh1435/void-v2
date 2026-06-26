@@ -47,18 +47,6 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   z-index: 10;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: 
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-  background-size: 100% 4px, 6px 100%;
-  z-index: 99999;
-  pointer-events: none;
-  opacity: 0.4;
-}
 
 .glow-overlay {
   position: fixed;
@@ -446,6 +434,22 @@ body::before {
 .hub-card-sub {
   font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.hero-tier-badge {
+  position: absolute; top: 6px; right: 6px;
+  font-family: var(--hub-display); font-size: 10px; font-weight: 900; letter-spacing: 0.05em;
+  padding: 2px 6px; border-radius: 5px; line-height: 1.4;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.tier-S { background: #b8860b; color: #fff8e0; }
+.tier-A { background: #1a6e2e; color: #c8ffd0; }
+.tier-B { background: #1a3a7a; color: #c0d8ff; }
+.tier-C { background: #4a1a78; color: #e8c8ff; }
+.tier-D { background: #3a3a3a; color: #c0c0c0; }
+.hero-tier-detail {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px;
+}
+.hero-tier-detail .hero-tier-badge { position: static; font-size: 12px; padding: 3px 8px; }
+.hero-tier-wr { font-size: 11px; color: var(--muted); font-family: var(--hub-display); }
 
 .hub-detail-panel {
   display: flex; flex-direction: column; gap: 14px; padding-top: 6px;
@@ -498,16 +502,16 @@ body::before {
 /* ===========================================================
    THEME STYLE VARIATIONS
    =========================================================== */
-body[data-theme-variant="matrix"] {
+:root[data-theme="matrix"] {
   --bg: #030305; --card: #09100b; --border: rgba(0, 255, 102, 0.12); --text: #cbffd8; --muted: #528c64; --accent: #00ff66; --accent-text: #020603; --accent-soft: rgba(0, 255, 102, 0.12);
 }
-body[data-theme-variant="ember"] {
+:root[data-theme="ember"] {
   --bg: #0c0505; --card: #180d0d; --border: rgba(255, 69, 69, 0.14); --text: #ffd3d3; --muted: #965a5a; --accent: #ff4545; --accent-text: #0a0202; --accent-soft: rgba(255, 69, 69, 0.14);
 }
-body[data-theme-variant="nebula"] {
+:root[data-theme="nebula"] {
   --bg: #05020c; --card: #110920; --border: rgba(202, 92, 255, 0.15); --text: #f3e6ff; --muted: #8e73aa; --accent: #ca5cff; --accent-text: #070110; --accent-soft: rgba(202, 92, 255, 0.15);
 }
-body[data-theme-variant="amber"] {
+:root[data-theme="amber"] {
   --bg: #090602; --card: #161005; --border: rgba(255, 176, 0, 0.14); --text: #ffeecb; --muted: #967d4a; --accent: #ffb000; --accent-text: #050300; --accent-soft: rgba(255, 176, 0, 0.14);
 }
 

@@ -741,6 +741,7 @@ function renderHeroGrid(heroes) {
     <div class="hub-card" data-hero-id="${h.id}">
       <div class="hub-card-media">
         <img src="${h.img}" alt="${h.name}" class="hub-card-img" onerror="this.style.display='none';">
+        ${h.tier ? `<div class="hero-tier-badge tier-${h.tier}">${h.tier}</div>` : ''}
         <div class="hub-card-overlay">
           <div class="hub-card-title">${h.name}</div>
           <div class="hub-card-sub">${h.role}</div>
@@ -856,6 +857,11 @@ function openHeroDetail(id) {
       </div>
       <div class="hub-detail-title-area">
         <div class="hub-detail-main-title">${hero.name}</div>
+        ${hero.tier ? `
+          <div class="hero-tier-detail">
+            <span class="hero-tier-badge tier-${hero.tier}">${hero.tier}-TIER</span>
+            ${hero.wr ? `<span class="hero-tier-wr">${hero.wr}% WIN RATE</span>` : ''}
+          </div>` : ''}
       </div>
     </div>
 
