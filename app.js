@@ -396,6 +396,7 @@ function setupChat() {
       const text = e.results[0][0].transcript;
       input.value = (input.value ? input.value + ' ' : '') + text;
       input.dispatchEvent(new Event('input'));
+      App.voiceTriggered = true;
     });
     recognizer.addEventListener('end', () => {
       listening = false;
@@ -592,7 +593,7 @@ async function sendMessage() {
     App.chatHistory.push({ role: 'assistant', content: reply });
     saveChatHistory();
     appendMessage('system', reply);
-    speak(reply);
+    if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
   } else {
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
