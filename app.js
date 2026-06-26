@@ -870,10 +870,16 @@ function openHeroDetail(id) {
       <div class="hub-detail-text-body">${hero.role}</div>
     </div>
 
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">FILE LOG</div>
-      <div class="hub-detail-text-body monospace">${hero.desc}</div>
-    </div>
+    ${(hero.synergies || []).length ? `
+      <div class="hub-detail-desc-card">
+        <div class="hub-detail-section-name">BEST MATCHES</div>
+        <div class="hub-detail-stats-grid">
+          ${hero.synergies.map(sid => {
+            const s = findHero(sid);
+            return s ? statTileHTML('SYNERGY', s.name, s.img) : '';
+          }).join('')}
+        </div>
+      </div>` : ''}
 
     ${counterTiles ? `
       <div class="hub-detail-desc-card">
