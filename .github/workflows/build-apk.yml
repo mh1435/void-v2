@@ -3,13 +3,14 @@ name: Build & Release APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, claude/remove-hero-weapon-tiers-g1pqtm]
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
@@ -76,13 +77,6 @@ jobs:
             1. Download `MLBB-Hub.apk`
             2. On your phone: **Settings → Security → Install unknown apps** (enable for your browser or files app)
             3. Open the downloaded file → Install
-
-            ### What's inside
-            - All heroes with real images, tier badges (S/A/B/C/D + win rate), builds, best matches, combo videos
-            - Items — Physical / Magic / Defense / Movement tabs
-            - Maps — rotation guides for every role (Roamer, Jungler, Gold, Mid, Exp)
-            - References — 60+ MLBB terms (LBM, CC, Macro, Micro, GG/FF and more)
-            - Works fully **offline** after install
           files: MLBB-Hub.apk
           prerelease: false
         env:

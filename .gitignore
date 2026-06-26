@@ -1,13 +1,12 @@
-
-# Node
 node_modules/
-
-# Capacitor build cache
 www/
-
-# Android build outputs
-android/app/build/
-android/.gradle/
-android/build/
 *.apk
 *.aab
+output/
+.claude/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+.DS_Store
+Thumbs.db
