@@ -1,0 +1,71 @@
+name: Build & Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: Rename APK
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk MLBB-Hub.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MLBB-Hub-APK
+          path: MLBB-Hub.apk
+          retention-days: 90
+
+      - name: Delete previous latest release
+        run: |
+          gh release delete latest --yes 2>/dev/null || true
+          git push --delete origin latest 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "MLBB Hub — Latest Build"
+          body: |
+            ## MLBB Hub Android App
+
+            **Tap the APK link below to download and install.**
+
+            ### Install steps
+            1. Download `MLBB-Hub.apk`
+            2. On your phone: **Settings → Security → Install unknown apps** (enable for your browser/files app)
+            3. Open the downloaded file → Install
+
+            ### What's inside
+            - All heroes with real images, tier badges (S/A/B/C/D + win rate), builds, best matches, combo videos
+            - Items — Physical / Magic / Defense / Movement tabs
+            - Maps — rotation guides for every role
+            - References — 60+ MLBB terms (LBM, CC, Macro, Micro, GG/FF and more)
+            - Works fully **offline** after install
+          files: MLBB-Hub.apk
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
