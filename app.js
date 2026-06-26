@@ -1076,6 +1076,27 @@ function statTileHTML(label, name, img) {
   `;
 }
 
+function heroAttrStats(role) {
+  const map = {
+    'Assassin':  { durability: 28, offense: 92, control: 18, difficulty: 84 },
+    'Fighter':   { durability: 66, offense: 70, control: 40, difficulty: 50 },
+    'Mage':      { durability: 30, offense: 86, control: 66, difficulty: 60 },
+    'Marksman':  { durability: 24, offense: 84, control: 14, difficulty: 44 },
+    'Tank':      { durability: 90, offense: 36, control: 74, difficulty: 32 },
+    'Support':   { durability: 52, offense: 28, control: 64, difficulty: 38 },
+  };
+  return map[role] || { durability: 50, offense: 50, control: 50, difficulty: 50 };
+}
+
+function attrBarHTML(label, value, color) {
+  return `
+    <div class="hd-attr-row">
+      <span class="hd-attr-label">${label}</span>
+      <div class="hd-attr-bar"><div class="hd-attr-fill" style="width:${value}%;background:${color}"></div></div>
+      <span class="hd-attr-value" style="color:${color}">${value}</span>
+    </div>`;
+}
+
 function openHeroDetail(id) {
   const hero = findHero(id);
   if (!hero) return;
@@ -1083,88 +1104,97 @@ function openHeroDetail(id) {
 
   document.getElementById('hub-detail-header-title').textContent = hero.name.toUpperCase();
 
-  const counterTiles = (hero.counters || []).map(cId => {
-    const c = findHero(cId);
-    if (c) return statTileHTML('COUNTER', c.name, c.img);
-    const it = findItem(cId);
-    if (it) return statTileHTML('ITEM', it.name, it.img);
-    return statTileHTML('COUNTER', cId.replace(/_/g, ' ').toUpperCase(), '');
-  }).join('');
+  const stats = heroAttrStats(hero.role);
+  const tierTag = hero.tier ? `<span class="hd-tag tag-tier-${hero.tier.toLowerCase()}">${hero.tier === 'S' ? 'TIER S' : hero.tier + ' TIER'}</span>` : '';
+  const roleTag = `<span class="hd-tag tag-role">${hero.role.toUpperCase()}</span>`;
+  const laneTag = hero.lane ? `<span class="hd-tag tag-lane">${hero.lane.toUpperCase()}</span>` : '';
 
-  const buildBlocks = Object.entries(hero.builds || {}).map(([buildName, itemIds]) => `
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">${buildName.toUpperCase()}</div>
-      <div class="hub-detail-build-list">
-        ${itemIds.map((iid, idx) => {
+  const overviewPane = `
+    <div class="hd-section-card">
+      <div class="hd-section-label">ATTRIBUTES</div>
+      ${attrBarHTML('DURABILITY', stats.durability, '#4fc3f7')}
+      ${attrBarHTML('OFFENSE', stats.offense, '#ff6b35')}
+      ${attrBarHTML('CONTROL', stats.control, '#4caf50')}
+      ${attrBarHTML('DIFFICULTY', stats.difficulty, '#ab47bc')}
+    </div>`;
+
+  const buildEntries = Object.entries(hero.builds || {});
+  const buildsPane = buildEntries.map(([buildName, itemIds]) => `
+    <div class="hd-section-card">
+      <div class="hd-section-label">${buildName.toUpperCase()}</div>
+      <div class="hd-build-circles">
+        ${itemIds.map(iid => {
           const item = findItem(iid);
           return item ? `
-            <div class="build-step hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
-              <span class="build-step-num">${idx + 1}</span>
-              <img class="build-step-img" src="${item.img}" alt="" onerror="this.style.display='none'">
-              <div class="hub-detail-stat-tile-text">
-                <span class="hub-detail-stat-label">ITEM</span>
-                <span class="hub-detail-stat-value">${item.name}</span>
-              </div>
+            <div class="hd-build-item hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
+              <div class="hd-build-icon"><img src="${item.img}" alt="${item.name}" onerror="this.style.opacity='0'"></div>
+              <span class="hd-build-name">${item.name}</span>
             </div>` : '';
         }).join('')}
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
   const ytSearch = `https://www.youtube.com/results?search_query=mlbb+${encodeURIComponent(hero.name)}+combo+montage+player+2025`;
-  const comboSection = `
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">COMBOS</div>
-      ${comboVid ? `
-        <div class="combo-video-wrap">
-          <iframe src="https://www.youtube.com/embed/${comboVid}?rel=0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen loading="lazy"></iframe>
-        </div>` : ''}
+  const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
+  const comboCard = `
+    <div class="hd-section-card">
+      <div class="hd-section-label">COMBOS</div>
+      ${comboVid ? `<div class="combo-video-wrap"><iframe src="https://www.youtube.com/embed/${comboVid}?rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>` : ''}
       <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">▶ WATCH COMBO VIDEOS</a>
-    </div>
-  `;
+    </div>`;
+
+  const counterRows = (hero.counters || []).map(cId => {
+    const c = findHero(cId);
+    if (c) return `
+      <div class="hd-counter-row">
+        <img class="hd-counter-portrait" src="${c.img}" alt="${c.name}" onerror="this.style.opacity='0'">
+        <span class="hd-counter-name">${c.name}</span>
+        <span class="hd-counter-type">HERO</span>
+      </div>`;
+    const it = findItem(cId);
+    if (it) return `
+      <div class="hd-counter-row">
+        <img class="hd-counter-portrait" src="${it.img}" alt="${it.name}" style="border-radius:8px" onerror="this.style.opacity='0'">
+        <span class="hd-counter-name">${it.name}</span>
+        <span class="hd-counter-type">ITEM</span>
+      </div>`;
+    return `
+      <div class="hd-counter-row">
+        <div class="hd-counter-portrait" style="background:var(--card)"></div>
+        <span class="hd-counter-name">${cId.replace(/_/g,' ')}</span>
+        <span class="hd-counter-type">COUNTER</span>
+      </div>`;
+  }).join('');
+  const countersPane = `<div class="hd-section-card hd-counter-list">${counterRows || '<p class="muted small">No counter data.</p>'}</div>`;
 
   document.getElementById('hub-detail-content').innerHTML = `
-    <div class="hub-detail-header-card">
-      <div class="hub-detail-avatar-box">
-        <img src="${hero.img}" alt="${hero.name}" onerror="this.style.display='none';">
-      </div>
-      <div class="hub-detail-title-area">
-        <div class="hub-detail-main-title">${hero.name}</div>
-        ${hero.tier ? `
-          <div class="hero-tier-detail">
-            <span class="hero-tier-badge tier-${hero.tier}">${hero.tier}-TIER</span>
-            ${hero.wr ? `<span class="hero-tier-wr">${hero.wr}% WIN RATE</span>` : ''}
-          </div>` : ''}
+    <div class="hd-banner" style="background-image:url('${hero.img}')">
+      <div class="hd-banner-gradient"></div>
+      <div class="hd-banner-info">
+        <div class="hd-hero-name">${hero.name.toUpperCase()}</div>
+        <div class="hd-tags">${tierTag}${roleTag}${laneTag}</div>
       </div>
     </div>
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">ROLE</div>
-      <div class="hub-detail-text-body">${hero.role}</div>
+    <div class="hd-tabs">
+      <button class="hd-tab active" data-hdtab="overview">OVERVIEW</button>
+      <button class="hd-tab" data-hdtab="builds">BUILDS</button>
+      <button class="hd-tab" data-hdtab="counters">COUNTERS</button>
     </div>
-
-    ${(hero.synergies || []).length ? `
-      <div class="hub-detail-desc-card">
-        <div class="hub-detail-section-name">BEST MATCHES</div>
-        <div class="hub-detail-stats-grid">
-          ${hero.synergies.map(sid => {
-            const s = findHero(sid);
-            return s ? statTileHTML('SYNERGY', s.name, s.img) : '';
-          }).join('')}
-        </div>
-      </div>` : ''}
-
-    ${counterTiles ? `
-      <div class="hub-detail-desc-card">
-        <div class="hub-detail-section-name">COUNTERED BY</div>
-        <div class="hub-detail-stats-grid">${counterTiles}</div>
-      </div>` : ''}
-    ${buildBlocks}
-
-    ${comboSection}
+    <div class="hd-pane" id="hd-pane-overview">${overviewPane}</div>
+    <div class="hd-pane" id="hd-pane-builds" style="display:none">${buildsPane}${comboCard}</div>
+    <div class="hd-pane" id="hd-pane-counters" style="display:none">${countersPane}</div>
   `;
+
+  document.getElementById('hub-detail-content').querySelectorAll('.hd-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('hub-detail-content').querySelectorAll('.hd-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      ['overview','builds','counters'].forEach(p => {
+        const el = document.getElementById(`hd-pane-${p}`);
+        if (el) el.style.display = p === btn.dataset.hdtab ? '' : 'none';
+      });
+    });
+  });
 
   bindStatTileNav();
   switchTabRaw('tab-hub-detail');

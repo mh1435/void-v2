@@ -507,13 +507,31 @@ function resolveHeroImg(id) {
   return `images/heroes/${resolveHeroFilename(id)}`;
 }
 
+function rarityToTier(rarity) {
+  if (!rarity) return null;
+  const m = rarity.match(/^([A-Z](?:\+)?)-TIER/);
+  return m ? m[1] : null;
+}
+
+function roleToLane(role) {
+  if (role === 'Assassin') return 'Jungle';
+  if (role === 'Fighter') return 'Exp Lane';
+  if (role === 'Mage') return 'Mid Lane';
+  if (role === 'Marksman') return 'Gold Lane';
+  if (role === 'Tank') return 'Roam';
+  if (role === 'Support') return 'Roam';
+  return 'Flex';
+}
+
 const GameHubData = {
   heroes: MLBB_HERO_DATA_RAW.map(h => ({
     id: h.id,
     name: buildHeroTitleString(h.id),
     role: h.role,
     rarity: h.rarity,
-    img: resolveHeroImg(h.id), 
+    tier: rarityToTier(h.rarity),
+    lane: roleToLane(h.role),
+    img: resolveHeroImg(h.id),
     counters: h.counters || [],
     builds: h.builds || {},
     desc: `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
