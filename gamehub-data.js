@@ -2,7 +2,7 @@
    VOID // GAMEHUB CONTENT DATABASE ENGINE (2026 MATRIX)
    ========================================================= */
 
-const HERO_CDN_IMGS = {
+
   'saber': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_15e49c7cc5398ca2d903a485145c0702.jpg&output=jpg&w=400',
   'karina': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_37b5cfef887a7afc63dfaf7b6dfd65c4.jpg&output=jpg&w=400',
   'fanny': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_74fabc6c0d5db065fbb836b6879f36ca.jpg&output=jpg&w=400',
@@ -524,18 +524,31 @@ function roleToLane(role) {
 }
 
 const GameHubData = {
-  heroes: MLBB_HERO_DATA_RAW.map(h => ({
-    id: h.id,
-    name: buildHeroTitleString(h.id),
-    role: h.role,
-    rarity: h.rarity,
-    tier: rarityToTier(h.rarity),
-    lane: roleToLane(h.role),
-    img: resolveHeroImg(h.id),
-    counters: h.counters || [],
-    builds: h.builds || {},
-    desc: `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
-  })),
+  heroes: MLBB_HERO_DATA_RAW.map(h => {
+    const s = HERO_STATS[h.id] || {};
+    const tier = s.tier || rarityToTier(h.rarity);
+    return {
+      id: h.id,
+      name: h.name || buildHeroTitleString(h.id),
+      role: Array.isArray(h.role) ? h.role[0] : h.role,
+      rarity: tier ? `${tier}-TIER${tier === 'S' ? ' (META)' : ''}` : h.rarity,
+      tier,
+      lane: h.lane || roleToLane(Array.isArray(h.role) ? h.role[0] : h.role),
+      img: resolveHeroImg(h.id),
+      counters: h.counters || [],
+      builds: h.builds || {},
+      winRate: s.wr,
+      pickRate: s.pr,
+      banRate: s.br,
+      durability: s.dur,
+      offense: s.off,
+      control: s.ctrl,
+      difficulty: s.diff,
+      weakAgainst: s.weak || [],
+      strongAgainst: s.strong || [],
+      desc: h.desc || `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
+    };
+  }),
   items: MLBB_ITEM_DATA_RAW.map(i => ({
     id: i.id,
     name: i.name,

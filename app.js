@@ -1076,18 +1076,6 @@ function statTileHTML(label, name, img) {
   `;
 }
 
-function heroAttrStats(role) {
-  const map = {
-    'Assassin':  { durability: 28, offense: 92, control: 18, difficulty: 84 },
-    'Fighter':   { durability: 66, offense: 70, control: 40, difficulty: 50 },
-    'Mage':      { durability: 30, offense: 86, control: 66, difficulty: 60 },
-    'Marksman':  { durability: 24, offense: 84, control: 14, difficulty: 44 },
-    'Tank':      { durability: 90, offense: 36, control: 74, difficulty: 32 },
-    'Support':   { durability: 52, offense: 28, control: 64, difficulty: 38 },
-  };
-  return map[role] || { durability: 50, offense: 50, control: 50, difficulty: 50 };
-}
-
 function attrBarHTML(label, value, color) {
   return `
     <div class="hd-attr-row">
@@ -1104,18 +1092,47 @@ function openHeroDetail(id) {
 
   document.getElementById('hub-detail-header-title').textContent = hero.name.toUpperCase();
 
-  const stats = heroAttrStats(hero.role);
   const tierTag = hero.tier ? `<span class="hd-tag tag-tier-${hero.tier.toLowerCase()}">${hero.tier === 'S' ? 'TIER S' : hero.tier + ' TIER'}</span>` : '';
   const roleTag = `<span class="hd-tag tag-role">${hero.role.toUpperCase()}</span>`;
   const laneTag = hero.lane ? `<span class="hd-tag tag-lane">${hero.lane.toUpperCase()}</span>` : '';
 
+  const diffLabel = hero.difficulty >= 80 ? 'HARD' : hero.difficulty >= 50 ? 'MEDIUM' : 'EASY';
+  const diffClass = diffLabel === 'EASY' ? 'diff-easy' : diffLabel === 'HARD' ? 'diff-hard' : '';
+  const diffTag = hero.difficulty != null ? `<span class="hd-tag tag-diff ${diffClass}">${diffLabel}</span>` : '';
+
+  const atGlance = (hero.winRate != null) ? `
+    <div class="hd-section-card hd-glance-card">
+      <div class="hd-section-label">AT A GLANCE <span class="hd-live-dot"></span></div>
+      <div class="hd-glance-row">
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">WIN RATE</span>
+          <span class="hd-glance-value wr-color">${hero.winRate}%</span>
+        </div>
+        <div class="hd-glance-divider"></div>
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">PICK RATE</span>
+          <span class="hd-glance-value">${hero.pickRate}%</span>
+        </div>
+        <div class="hd-glance-divider"></div>
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">BAN RATE</span>
+          <span class="hd-glance-value br-color">${hero.banRate}%</span>
+        </div>
+      </div>
+    </div>` : '';
+
+  const dur = hero.durability ?? 50;
+  const off = hero.offense ?? 50;
+  const ctrl = hero.control ?? 50;
+  const diff = hero.difficulty ?? 50;
   const overviewPane = `
+    ${atGlance}
     <div class="hd-section-card">
       <div class="hd-section-label">ATTRIBUTES</div>
-      ${attrBarHTML('DURABILITY', stats.durability, '#4fc3f7')}
-      ${attrBarHTML('OFFENSE', stats.offense, '#ff6b35')}
-      ${attrBarHTML('CONTROL', stats.control, '#4caf50')}
-      ${attrBarHTML('DIFFICULTY', stats.difficulty, '#ab47bc')}
+      ${attrBarHTML('DURABILITY', dur, '#4fc3f7')}
+      ${attrBarHTML('OFFENSE', off, '#ff6b35')}
+      ${attrBarHTML('CONTROL', ctrl, '#4caf50')}
+      ${attrBarHTML('DIFFICULTY', diff, '#ab47bc')}
     </div>`;
 
   const buildEntries = Object.entries(hero.builds || {});
@@ -1143,36 +1160,52 @@ function openHeroDetail(id) {
       <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">▶ WATCH COMBO VIDEOS</a>
     </div>`;
 
-  const counterRows = (hero.counters || []).map(cId => {
-    const c = findHero(cId);
-    if (c) return `
-      <div class="hd-counter-row">
-        <img class="hd-counter-portrait" src="${c.img}" alt="${c.name}" onerror="this.style.opacity='0'">
-        <span class="hd-counter-name">${c.name}</span>
-        <span class="hd-counter-type">HERO</span>
-      </div>`;
-    const it = findItem(cId);
-    if (it) return `
-      <div class="hd-counter-row">
-        <img class="hd-counter-portrait" src="${it.img}" alt="${it.name}" style="border-radius:8px" onerror="this.style.opacity='0'">
-        <span class="hd-counter-name">${it.name}</span>
-        <span class="hd-counter-type">ITEM</span>
-      </div>`;
+  // Use scraped weakAgainst data preferably, fall back to counters array
+  const weakList = (hero.weakAgainst && hero.weakAgainst.length)
+    ? hero.weakAgainst
+    : (hero.counters || []).map(cId => {
+        const c = findHero(cId); const it = findItem(cId);
+        return c ? {slug: c.id, name: c.name, wr: null, img: c.img}
+             : it ? {slug: it.id, name: it.name, wr: null, img: it.img, isItem: true}
+             : {slug: cId, name: cId.replace(/_/g,' '), wr: null};
+      });
+
+  const counterRowHTML = (entry, type) => {
+    const heroMatch = findHero(entry.slug) || (entry.img ? null : null);
+    const img = entry.img || (heroMatch && heroMatch.img) || (findHero(entry.slug) ? findHero(entry.slug).img : null) || (findItem(entry.slug) ? findItem(entry.slug).img : null);
+    const targetHero = findHero(entry.slug);
+    const targetItem = findItem(entry.slug);
+    const imgSrc = targetHero ? targetHero.img : targetItem ? targetItem.img : '';
+    const isWeak = type === 'weak';
     return `
       <div class="hd-counter-row">
-        <div class="hd-counter-portrait" style="background:var(--card)"></div>
-        <span class="hd-counter-name">${cId.replace(/_/g,' ')}</span>
-        <span class="hd-counter-type">COUNTER</span>
+        <img class="hd-counter-portrait" src="${imgSrc}" alt="${entry.name}" onerror="this.style.opacity='0'">
+        <span class="hd-counter-name">${entry.name}</span>
+        ${entry.wr != null ? `<span class="hd-counter-wr ${isWeak ? 'wr-bad' : 'wr-good'}">${entry.wr}% WR</span>` : `<span class="hd-counter-type">${isWeak ? 'COUNTER' : 'WEAK TO'}</span>`}
       </div>`;
-  }).join('');
-  const countersPane = `<div class="hd-section-card hd-counter-list">${counterRows || '<p class="muted small">No counter data.</p>'}</div>`;
+  };
+
+  const weakRows = weakList.map(e => counterRowHTML(e, 'weak')).join('');
+  const strongList = hero.strongAgainst || [];
+  const strongRows = strongList.map(e => counterRowHTML(e, 'strong')).join('');
+
+  const countersPane = `
+    ${weakRows ? `<div class="hd-section-card hd-counter-list">
+      <div class="hd-section-label">WEAK AGAINST</div>
+      ${weakRows}
+    </div>` : ''}
+    ${strongRows ? `<div class="hd-section-card hd-counter-list">
+      <div class="hd-section-label">STRONG AGAINST</div>
+      ${strongRows}
+    </div>` : '<p class="muted small">No counter data available.</p>'}
+  `;
 
   document.getElementById('hub-detail-content').innerHTML = `
     <div class="hd-banner" style="background-image:url('${hero.img}')">
       <div class="hd-banner-gradient"></div>
       <div class="hd-banner-info">
         <div class="hd-hero-name">${hero.name.toUpperCase()}</div>
-        <div class="hd-tags">${tierTag}${roleTag}${laneTag}</div>
+        <div class="hd-tags">${tierTag}${roleTag}${laneTag}${diffTag}</div>
       </div>
     </div>
     <div class="hd-tabs">
