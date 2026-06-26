@@ -6,11 +6,17 @@ compatibility_date = "2025-01-01"
 # Workers → void-proxy → Settings → Variables → Add variable → select "Secret"
 #
 #   GROQ_KEY        free at  console.groq.com
+#   CEREBRAS_KEY    free at  cloud.cerebras.ai       (fastest: 1000+ tok/s)
 #   SAMBANOVA_KEY   free at  cloud.sambanova.ai
 #   DEEPSEEK_KEY    free at  platform.deepseek.com
 #   OPENROUTER_KEY  free at  openrouter.ai/keys
 #   TOGETHER_KEY    free at  api.together.ai
+#   FIREWORKS_KEY   free at  fireworks.ai
+#   NVIDIA_KEY      free at  build.nvidia.com
+#   HYPERBOLIC_KEY  free at  app.hyperbolic.xyz
+#   HF_TOKEN        free at  huggingface.co/settings/tokens
 #   MISTRAL_KEY     free at  console.mistral.ai
+#   COHERE_KEY      free at  dashboard.cohere.com
 #   GEMINI_KEY      free at  aistudio.google.com/apikey
 #
 # Add as many or as few as you have. The Worker skips any that aren't set.

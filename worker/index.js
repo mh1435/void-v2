@@ -10,11 +10,17 @@
  *   Workers → void-proxy → Settings → Variables → Add variable (Secret type)
  *
  *   GROQ_KEY        → console.groq.com
+ *   CEREBRAS_KEY    → cloud.cerebras.ai  (fastest: 1000+ tok/s)
  *   SAMBANOVA_KEY   → cloud.sambanova.ai
  *   DEEPSEEK_KEY    → platform.deepseek.com
  *   OPENROUTER_KEY  → openrouter.ai/keys
  *   TOGETHER_KEY    → api.together.ai
+ *   FIREWORKS_KEY   → fireworks.ai
+ *   NVIDIA_KEY      → build.nvidia.com
+ *   HYPERBOLIC_KEY  → app.hyperbolic.xyz
+ *   HF_TOKEN        → huggingface.co/settings/tokens
  *   MISTRAL_KEY     → console.mistral.ai
+ *   COHERE_KEY      → dashboard.cohere.com
  *   GEMINI_KEY      → aistudio.google.com/apikey
  */
 
@@ -24,6 +30,13 @@ const PROVIDERS = [
     url: 'https://api.groq.com/openai/v1/chat/completions',
     model: 'llama-3.3-70b-versatile',
     keyEnv: 'GROQ_KEY',
+  },
+  {
+    // Fastest provider — 1000+ tok/s on Llama 3.3 70B
+    id: 'cerebras',
+    url: 'https://api.cerebras.ai/v1/chat/completions',
+    model: 'llama-3.3-70b',
+    keyEnv: 'CEREBRAS_KEY',
   },
   {
     id: 'sambanova',
@@ -51,10 +64,40 @@ const PROVIDERS = [
     keyEnv: 'TOGETHER_KEY',
   },
   {
+    id: 'fireworks',
+    url: 'https://api.fireworks.ai/inference/v1/chat/completions',
+    model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+    keyEnv: 'FIREWORKS_KEY',
+  },
+  {
+    id: 'nvidia',
+    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+    model: 'meta/llama-3.3-70b-instruct',
+    keyEnv: 'NVIDIA_KEY',
+  },
+  {
+    id: 'hyperbolic',
+    url: 'https://api.hyperbolic.xyz/v1/chat/completions',
+    model: 'meta-llama/Llama-3.3-70B-Instruct',
+    keyEnv: 'HYPERBOLIC_KEY',
+  },
+  {
+    id: 'huggingface',
+    url: 'https://router.huggingface.co/hf-inference/v1/chat/completions',
+    model: 'meta-llama/Llama-3.3-70B-Instruct',
+    keyEnv: 'HF_TOKEN',
+  },
+  {
     id: 'mistral',
     url: 'https://api.mistral.ai/v1/chat/completions',
     model: 'mistral-small-latest',
     keyEnv: 'MISTRAL_KEY',
+  },
+  {
+    id: 'cohere',
+    url: 'https://api.cohere.com/compatibility/v1/chat/completions',
+    model: 'command-r-plus',
+    keyEnv: 'COHERE_KEY',
   },
   {
     id: 'gemini',
