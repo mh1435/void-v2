@@ -722,6 +722,37 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 :root[data-theme="amber"] {
   --bg: #090602; --card: #161005; --border: rgba(255, 176, 0, 0.14); --text: #ffeecb; --muted: #967d4a; --accent: #ffb000; --accent-text: #050300; --accent-soft: rgba(255, 176, 0, 0.14);
 }
+:root[data-theme="light"] {
+  --bg: #ededf2; --card: #ffffff; --card-soft: rgba(0,0,0,0.03);
+  --border: rgba(0,0,0,0.1); --text: #111116; --muted: #60606a;
+  --accent: #111116; --accent-text: #f5f5fa; --accent-soft: rgba(17,17,22,0.08);
+  --hub-violet: #5f3fe8; --hub-cyan: #0099bb; --hub-green: #009940;
+  --hub-amber: #b87800; --hub-red: #cc2222;
+  color-scheme: light;
+}
+:root[data-theme="light"] html,
+:root[data-theme="light"] body { background: var(--bg); color: var(--text); }
+:root[data-theme="light"] .nav-bar,
+:root[data-theme="light"] .settings-header,
+:root[data-theme="light"] .panel-header { background: #f5f5fa; border-color: var(--border); }
+:root[data-theme="light"] .tab-pill { color: var(--muted); }
+:root[data-theme="light"] .tab-pill.active { background: var(--text); color: var(--accent-text); }
+:root[data-theme="light"] .chat-input-bar { background: #f5f5fa; border-color: var(--border); }
+:root[data-theme="light"] .chat-input { background: #ffffff; color: var(--text); border-color: var(--border); }
+:root[data-theme="light"] .msg-ai .msg-bubble { background: #ffffff; border-color: var(--border); color: var(--text); }
+:root[data-theme="light"] .msg-user .msg-bubble { background: var(--text); color: var(--accent-text); }
+:root[data-theme="light"] .hub-card { background: #ffffff; border-color: var(--border); }
+:root[data-theme="light"] .hub-card-meta { background: #f5f5fa; }
+:root[data-theme="light"] .hd-section-card { background: #ffffff; border-color: var(--border); }
+:root[data-theme="light"] .hd-banner { background: #1a1a22; }
+:root[data-theme="light"] .select-input,
+:root[data-theme="light"] .settings-panel { background: #f5f5fa; color: var(--text); }
+:root[data-theme="light"] .settings-section-label { color: var(--muted); }
+:root[data-theme="light"] .setting-label { color: var(--text); }
+:root[data-theme="light"] .ghost-btn { color: var(--text); border-color: var(--border); }
+:root[data-theme="light"] .theme-swatch { background: #ededf2; border-color: var(--border); color: var(--text); }
+:root[data-theme="light"] .hd-attr-bar { background: rgba(0,0,0,0.08); }
+:root[data-theme="light"] .hd-glance-row { background: rgba(0,0,0,0.03); border-color: var(--border); }
 
 /* --- Dynamic Name Grid Panels --- */
 .name-tile {

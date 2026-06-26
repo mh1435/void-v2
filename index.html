@@ -475,7 +475,9 @@ if ('serviceWorker' in navigator) {
     <div class="panel-content">
       <div class="settings-section-label">VISUAL SPECTRUM THEME</div>
       <div class="theme-select-grid">
-        <button class="theme-swatch" data-theme="frost"><span class="swatch-color" style="background:#0b0c10;border-color:#eef0f3;"></span><span class="swatch-name">Frost</span></button>
+        <button class="theme-swatch" data-theme="auto"><span class="swatch-color" style="background:linear-gradient(135deg,#0b0c10 50%,#ededf2 50%);border-color:#888;"></span><span class="swatch-name">Auto System</span></button>
+        <button class="theme-swatch" data-theme="frost"><span class="swatch-color" style="background:#0b0c10;border-color:#eef0f3;"></span><span class="swatch-name">Frost Dark</span></button>
+        <button class="theme-swatch" data-theme="light"><span class="swatch-color" style="background:#ededf2;border-color:#111116;"></span><span class="swatch-name">Light</span></button>
         <button class="theme-swatch" data-theme="matrix"><span class="swatch-color" style="background:#020202;border-color:#00ff66;"></span><span class="swatch-name">Matrix</span></button>
         <button class="theme-swatch" data-theme="ember"><span class="swatch-color" style="background:#0d0707;border-color:#ff4545;"></span><span class="swatch-name">Ember</span></button>
         <button class="theme-swatch" data-theme="nebula"><span class="swatch-color" style="background:#05020a;border-color:#ca5cff;"></span><span class="swatch-name">Nebula</span></button>
@@ -500,10 +502,23 @@ if ('serviceWorker' in navigator) {
       <div class="setting-row stacked">
         <div class="setting-label"><span>Core Translation Language</span></div>
         <select class="select-input" id="select-lang">
-          <option value="auto">Automated Detection</option>
-          <option value="en">English (US/UK)</option>
-          <option value="ms">Bahasa Melayu</option>
-          <option value="zh">Mandarin Hanzi</option>
+          <option value="auto">Auto (System Language)</option>
+          <option value="en">English</option>
+          <option value="ar">Arabic — العربية</option>
+          <option value="ms">Malay — Bahasa Melayu</option>
+          <option value="id">Indonesian — Bahasa Indonesia</option>
+          <option value="tl">Filipino — Tagalog</option>
+          <option value="th">Thai — ภาษาไทย</option>
+          <option value="vi">Vietnamese — Tiếng Việt</option>
+          <option value="zh">Chinese — 中文</option>
+          <option value="ko">Korean — 한국어</option>
+          <option value="ja">Japanese — 日本語</option>
+          <option value="tr">Turkish — Türkçe</option>
+          <option value="ru">Russian — Русский</option>
+          <option value="es">Spanish — Español</option>
+          <option value="pt">Portuguese — Português</option>
+          <option value="fr">French — Français</option>
+          <option value="de">German — Deutsch</option>
         </select>
       </div>
       

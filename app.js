@@ -29,6 +29,28 @@ const App = {
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
 
+const LANG_NAMES = {
+  en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
+  th:'Thai', vi:'Vietnamese', zh:'Chinese', ko:'Korean', ja:'Japanese',
+  tr:'Turkish', ru:'Russian', es:'Spanish', pt:'Portuguese',
+  fr:'French', de:'German', it:'Italian', nl:'Dutch',
+};
+
+function getActiveLang() {
+  const s = App.settings.lang || 'auto';
+  if (s !== 'auto') return s;
+  return (navigator.language || 'en').split('-')[0].toLowerCase();
+}
+
+function buildSystemPrompt() {
+  const lang = getActiveLang();
+  const name = LANG_NAMES[lang] || 'English';
+  const inject = lang !== 'en'
+    ? `\n\nIMPORTANT: The user's system language is ${name}. Always respond in ${name} unless the user writes in a different language.`
+    : '';
+  return VOID_SYSTEM + inject;
+}
+
 // After deploying worker/index.js, paste your Worker URL here.
 // The Worker handles all provider routing — model field is ignored server-side.
 const VOID_CORE_API = { url: 'https://void-proxy.mohamadhacothman1.workers.dev', key: '', model: '' };
@@ -80,6 +102,9 @@ function setupLogin() {
 function bootApp() {
   loadSettings();
   applyTheme(App.settings.theme);
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (App.settings.theme === 'auto') applyTheme('auto');
+  });
   setupNav();
   setupSettingsPanels();
   setupThemePicker();
@@ -119,9 +144,15 @@ function saveSettings() {
 
 /* ============ Theme ============ */
 
+function resolveThemeForSystem(name) {
+  if (name !== 'auto') return name;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'frost';
+}
+
 function applyTheme(name) {
   App.settings.theme = name;
-  document.documentElement.setAttribute('data-theme', name === 'frost' ? '' : name);
+  const resolved = resolveThemeForSystem(name);
+  document.documentElement.setAttribute('data-theme', resolved === 'frost' ? '' : resolved);
   document.querySelectorAll('.theme-swatch').forEach(d => {
     d.classList.toggle('active', d.dataset.theme === name);
   });
@@ -545,7 +576,7 @@ async function sendMessage() {
   updateSendMicBtn();
 
   const typingId = appendTyping();
-  const messages = [{ role: 'system', content: VOID_SYSTEM }, ...App.chatHistory.slice(-20)];
+  const messages = [{ role: 'system', content: buildSystemPrompt() }, ...App.chatHistory.slice(-20)];
 
   let reply = null;
   let lastError = null;
