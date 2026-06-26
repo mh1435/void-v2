@@ -2,7 +2,7 @@
    VOID // GAMEHUB CONTENT DATABASE ENGINE (2026 MATRIX)
    ========================================================= */
 
-
+const HERO_CDN_IMGS = {
   'saber': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_15e49c7cc5398ca2d903a485145c0702.jpg&output=jpg&w=400',
   'karina': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_37b5cfef887a7afc63dfaf7b6dfd65c4.jpg&output=jpg&w=400',
   'fanny': 'https://wsrv.nl/?url=https%3A%2F%2Fakmweb.youngjoygame.com%2Fweb%2Fsvnres%2Ffile%2Fmlbb%2Fhomepage%2F100_74fabc6c0d5db065fbb836b6879f36ca.jpg&output=jpg&w=400',
