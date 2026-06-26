@@ -698,6 +698,23 @@ function renderProviderPicker() {
   const list = document.getElementById('provider-list');
   if (!list) return;
 
+  if (VOID_CORE_API.url) {
+    list.innerHTML = `
+      <div class="void-core-status">
+        <div class="void-core-status-row">
+          <span class="void-core-dot"></span>
+          <div class="void-core-info">
+            <span class="void-core-name">VOID CORE</span>
+            <span class="void-core-sub">13 AI providers — fully automatic</span>
+          </div>
+          <span class="provider-tag active-tag">ACTIVE</span>
+        </div>
+        <p class="void-core-note">VOID CORE automatically routes to the fastest available AI. No setup needed.</p>
+      </div>
+    `;
+    return;
+  }
+
   const providers = [
     { id: 'gemini', name: 'Gemini', sub: 'Google AI - fast & capable', configured: !!App.settings.geminiKey },
     { id: 'groq', name: 'Groq', sub: 'Ultra-fast inference', configured: !!App.settings.groqKey },
