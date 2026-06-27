@@ -1177,14 +1177,27 @@ body.reduced-motion *::after {
 .study-grid-panel {
   display: flex; flex-direction: column; height: calc(100% - 57px); overflow: hidden;
 }
-/* Same column layout as the heroes menu (.hub-grid) — the study cards reuse
-   the .hub-card markup, so this is just the scrollable container around them. */
+/* The study cards reuse the heroes .hub-card markup. This is the scrollable
+   container; the rules below FORCE each card into a perfect square (virtual-
+   vacation style) and make the place image fill it — high specificity + the
+   !important flags override any stale cached rule. */
 .study-loc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px; padding: 12px 12px 90px; overflow-y: auto; flex: 1;
   align-content: start;
   -webkit-overflow-scrolling: touch;
+}
+.study-loc-grid .hub-card { width: 100%; align-self: start; }
+.study-loc-grid .hub-card-media {
+  position: relative; width: 100%; height: auto;
+  padding-top: 100% !important;   /* perfect square */
+  overflow: hidden;
+}
+.study-loc-grid .hub-card-img {
+  position: absolute !important; inset: 0 !important;
+  width: 100% !important; height: 100% !important;
+  object-fit: cover !important; object-position: center !important;
 }
 
 /* ===========================================================
