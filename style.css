@@ -1170,23 +1170,25 @@ body.reduced-motion *::after {
   gap: 8px; padding: 8px 12px 80px; overflow-y: auto; flex: 1;
   -webkit-overflow-scrolling: touch;
 }
-.study-loc-btn {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.11);
-  color: #fff; text-align: left; cursor: pointer; width: 100%;
-  min-height: 58px; box-sizing: border-box;
-  transition: background 0.15s, transform 0.12s;
+.study-loc-card {
+  aspect-ratio: 1; border-radius: 14px; overflow: hidden;
+  background-size: cover; background-position: center;
+  background-color: #111; position: relative; cursor: pointer;
+  transition: transform 0.12s, opacity 0.12s;
 }
-.study-loc-btn:active { background: rgba(255,255,255,0.14); transform: scale(0.96); }
-.study-btn-flag { font-size: 26px; flex-shrink: 0; line-height: 1; }
-.study-btn-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
-.study-btn-name {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
+.study-loc-card:active { transform: scale(0.95); opacity: 0.85; }
+.study-card-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 8px 10px; box-sizing: border-box;
 }
-.study-btn-region { font-size: 9px; color: rgba(255,255,255,0.38); letter-spacing: 0.1em; }
+.study-card-flag { font-size: 18px; line-height: 1; margin-bottom: 2px; }
+.study-card-name {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.study-card-region { font-size: 8px; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; margin-top: 1px; }
 
 /* ===========================================================
    STUDY MODE OVERLAY
@@ -1201,7 +1203,7 @@ body.reduced-motion *::after {
 .study-iframe {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  border: none;
+  border: none; z-index: 0;
 }
 
 /* Gradient scrims — always dark regardless of app theme */
