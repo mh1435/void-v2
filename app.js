@@ -321,6 +321,9 @@ function setupNav() {
     switchTab(App.hubDetailReturnTab);
     if (App.hubDetailReturnTab === 'tab-gamehub') openMLBBContent();
   });
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
 }
 
 function switchTab(targetId) {
@@ -775,14 +778,15 @@ function appendMessage(role, text) {
   updateWelcomeStatsLine();
 
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  const bubbleClass = role === 'user' ? 'user' : 'assistant';
-  const label = role === 'user' ? 'USER::NODE' : 'VOID::CORE';
+  const isUser = role === 'user';
+  const bubbleClass = isUser ? 'user' : 'assistant';
+  const label = isUser ? 'YOU' : 'VOID';
 
   const el = document.createElement('div');
   el.className = `chat-bubble ${bubbleClass}`;
   el.innerHTML = `
     <div class="bubble-meta">${label} // ${time}</div>
-    <div class="bubble-body">${escapeHTML(text)}</div>
+    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${escapeHTML(text)}</div>
   `;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -978,11 +982,30 @@ function getUserProfile() {
 }
 
 function updateUserDisplay() {
-  const statusEl = document.getElementById('hud-status');
-  if (!statusEl || !App.currentUser) return;
+  if (!App.currentUser) return;
   const profile = getUserProfile();
   const displayName = profile?.name || App.currentUser.split('@')[0];
-  statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const statusEl = document.getElementById('hud-status');
+  if (statusEl) statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
+
+  const avatarInitialEl = document.getElementById('avatar-initial');
+  if (avatarInitialEl) avatarInitialEl.textContent = initial;
+
+  const settingsAvatarEl = document.getElementById('settings-avatar');
+  if (settingsAvatarEl) settingsAvatarEl.textContent = initial;
+
+  const settingsNameEl = document.getElementById('settings-name');
+  if (settingsNameEl) settingsNameEl.textContent = displayName;
+
+  const settingsEmailEl = document.getElementById('settings-email');
+  if (settingsEmailEl) settingsEmailEl.textContent = App.currentUser;
+}
+
+function logoutUser() {
+  localStorage.removeItem('void_current_user');
+  location.reload();
 }
 
 /* ============ Commands panel ============ */
@@ -1161,6 +1184,11 @@ function setupGameHub() {
   const studyBtn = document.getElementById('btn-open-study');
   if (studyBtn) {
     studyBtn.addEventListener('click', () => openStudyPanel());
+  }
+
+  const studyBtnGlobal = document.getElementById('btn-open-study-global');
+  if (studyBtnGlobal) {
+    studyBtnGlobal.addEventListener('click', () => openStudyPanel());
   }
 
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
