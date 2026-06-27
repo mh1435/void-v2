@@ -1008,9 +1008,6 @@ function updateUserDisplay() {
   const displayName = profile?.name || App.currentUser.split('@')[0];
   const initial = displayName.charAt(0).toUpperCase();
 
-  const statusEl = document.getElementById('hud-status');
-  if (statusEl) statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
-
   const avatarInitialEl = document.getElementById('avatar-initial');
   if (avatarInitialEl) avatarInitialEl.textContent = initial;
 
