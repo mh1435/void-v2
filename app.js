@@ -1614,7 +1614,7 @@ function renderTypeGrid(gridId, items) {
   grid.innerHTML = items.map(i => `
     <div class="hub-card" data-item-id="${i.id}">
       <div class="hub-card-media" data-item-type="${i.type}">
-        <img src="${i.img}" alt="${i.name}" class="hub-card-img"
+        <img src="${i.img}" alt="${i.name}" class="hub-card-img" referrerpolicy="no-referrer"
           onerror="this.onerror=null;this.style.display='none';this.parentElement.classList.add('item-img-fallback')" loading="lazy">
         <div class="hub-card-overlay">
           <div class="hub-card-title">${i.name}</div>
@@ -1666,6 +1666,10 @@ function openHeroDetail(id) {
 
   document.getElementById('hub-detail-header-title').textContent = hero.name.toUpperCase();
 
+  const heroIndex = GameHubData.heroes.findIndex(h => h.id === id) + 1;
+  const fileId = `HF-${String(heroIndex).padStart(3, '0')}`;
+  const subtitle = hero.subtitle || '';
+
   const tierTag = hero.tier ? `<span class="hd-tag tag-tier-${hero.tier.toLowerCase()}">${hero.tier === 'S' ? 'TIER S' : hero.tier + ' TIER'}</span>` : '';
   const roleTag = `<span class="hd-tag tag-role">${hero.role.toUpperCase()}</span>`;
   const laneTag = hero.lane ? `<span class="hd-tag tag-lane">${hero.lane.toUpperCase()}</span>` : '';
@@ -1700,6 +1704,7 @@ function openHeroDetail(id) {
   const ctrl = hero.control ?? 50;
   const diff = hero.difficulty ?? 50;
   const overviewPane = `
+    ${hero.desc ? `<div class="hd-section-card"><p class="hd-desc-para">${hero.desc}</p></div>` : ''}
     ${atGlance}
     <div class="hd-section-card">
       <div class="hd-section-label">ATTRIBUTES</div>
@@ -1718,7 +1723,7 @@ function openHeroDetail(id) {
           const item = findItem(iid);
           return item ? `
             <div class="hd-build-item hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
-              <div class="hd-build-icon"><img src="${item.img}" alt="${item.name}" onerror="this.style.opacity='0'"></div>
+              <div class="hd-build-icon"><img src="${item.img}" alt="${item.name}" referrerpolicy="no-referrer" onerror="this.style.opacity='0'"></div>
               <span class="hd-build-name">${item.name}</span>
             </div>` : '';
         }).join('')}
@@ -1745,15 +1750,13 @@ function openHeroDetail(id) {
       });
 
   const counterRowHTML = (entry, type) => {
-    const heroMatch = findHero(entry.slug) || (entry.img ? null : null);
-    const img = entry.img || (heroMatch && heroMatch.img) || (findHero(entry.slug) ? findHero(entry.slug).img : null) || (findItem(entry.slug) ? findItem(entry.slug).img : null);
     const targetHero = findHero(entry.slug);
     const targetItem = findItem(entry.slug);
-    const imgSrc = targetHero ? targetHero.img : targetItem ? targetItem.img : '';
+    const imgSrc = entry.img || (targetHero ? targetHero.img : targetItem ? targetItem.img : '');
     const isWeak = type === 'weak';
     return `
       <div class="hd-counter-row">
-        <img class="hd-counter-portrait" src="${imgSrc}" alt="${entry.name}" onerror="this.style.opacity='0'">
+        <img class="hd-counter-portrait" src="${imgSrc}" alt="${entry.name}" referrerpolicy="no-referrer" onerror="this.style.opacity='0'">
         <span class="hd-counter-name">${entry.name}</span>
         ${entry.wr != null ? `<span class="hd-counter-wr ${isWeak ? 'wr-bad' : 'wr-good'}">${entry.wr}% WR</span>` : `<span class="hd-counter-type">${isWeak ? 'COUNTER' : 'WEAK TO'}</span>`}
       </div>`;
@@ -1775,17 +1778,35 @@ function openHeroDetail(id) {
   `;
 
   document.getElementById('hub-detail-content').innerHTML = `
+    <div class="hd-file-header">
+      <span class="hd-file-id">HERO FILE · ${fileId}</span>
+      <span class="hd-file-updated">UPDATED · JAN 15, 2026</span>
+    </div>
     <div class="hd-banner" style="background-image:url('${hero.img}')">
       <div class="hd-banner-gradient"></div>
-      <div class="hd-banner-info">
-        <div class="hd-hero-name">${hero.name.toUpperCase()}</div>
+    </div>
+    <div class="hd-identity-row">
+      <img class="hd-portrait" src="${hero.img}" alt="${hero.name}" referrerpolicy="no-referrer" onerror="this.style.display='none'">
+      <div class="hd-identity-text">
+        <div class="hd-codename-label">CODENAME</div>
+        <div class="hd-identity-name">${hero.name.toUpperCase()}</div>
+        ${subtitle ? `<div class="hd-identity-subtitle">${subtitle}</div>` : ''}
         <div class="hd-tags">${tierTag}${roleTag}${laneTag}${diffTag}</div>
       </div>
     </div>
     <div class="hd-tabs">
-      <button class="hd-tab active" data-hdtab="overview">OVERVIEW</button>
-      <button class="hd-tab" data-hdtab="builds">BUILDS</button>
-      <button class="hd-tab" data-hdtab="counters">COUNTERS</button>
+      <button class="hd-tab active" data-hdtab="overview">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        OVERVIEW
+      </button>
+      <button class="hd-tab" data-hdtab="builds">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        BUILDS
+      </button>
+      <button class="hd-tab" data-hdtab="counters">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+        COUNTERS
+      </button>
     </div>
     <div class="hd-pane" id="hd-pane-overview">${overviewPane}</div>
     <div class="hd-pane" id="hd-pane-builds" style="display:none">${buildsPane}${comboCard}</div>

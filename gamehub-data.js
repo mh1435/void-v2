@@ -546,8 +546,7 @@ const ITEM_WIKI_OVERRIDES = {
 function resolveItemImg(id) {
   const wiki = ITEM_WIKI_OVERRIDES[id]
     || id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
-  const fandomSrc = `https://mobile-legends.fandom.com/wiki/Special:FilePath/${wiki}.png`;
-  return `https://wsrv.nl/?url=${encodeURIComponent(fandomSrc)}&output=png&w=256`;
+  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${wiki}.png`;
 }
 
 function buildHeroTitleString(id) {
@@ -729,6 +728,159 @@ function roleToLane(role) {
   return 'Flex';
 }
 
+const HERO_SUBTITLES = {
+  saber:       'Lone Ranger',
+  karina:      'Shadow Blade',
+  fanny:       'Blade Dancer',
+  hayabusa:    'Shadow of Obscurity',
+  natalia:     'The Bright Claw',
+  lancelot:    'Joker',
+  helcurt:     'Shadowbane',
+  gusion:      'Holy Blade',
+  selena:      'Elven Spy',
+  hanzo:       'Scarlet Demon',
+  ling:        'Sword Master',
+  benedetta:   'Fallen Night',
+  aamon:       'Spirit of Vengeance',
+  joy:         'Rhythm Master',
+  nolan:       'Cosmic Wayfinder',
+  sora:        'Wandering Swordsman',
+  hirara:      'Phantom Wind',
+  balmond:     'Bloody Beast',
+  chou:        'The King of Fighting',
+  ruby:        'The Little Red Hood',
+  'lapu-lapu': 'Chieftain of Lapu-Lapu',
+  alucard:     'Demon Hunter',
+  bane:        'Scourge of the Sea',
+  zilong:      'Son of the Dragon',
+  freya:       'Sky Warden',
+  sun:         'Monkey King',
+  alpha:       'Mechanical Paladin',
+  roger:       'Raging Hunter',
+  gatotkaca:   'Astral Warrior',
+  jawhead:     'Nuclear Spider',
+  martis:      'The Ashura King',
+  aldous:      'Soul Contractor',
+  leomord:     'The Wrath Knight',
+  thamuz:      'Lord Lava',
+  minsitthar:  'King of Kings',
+  badang:      'Badang',
+  guinevere:   'Magic Assassin',
+  terizla:     'Executioner',
+  'x-borg':    'Fire Trooper',
+  dyrroth:     'Prince of the Abyss',
+  silvanna:    'Imperial Knightess',
+  'yu-zhong':  'Black Dragon',
+  khaleed:     'Desert Scimitar',
+  paquito:     'The Heavenly Fist',
+  phoveus:     'Abysmal Lord',
+  yin:         'Young Warrior',
+  julian:      'The Eternal Ruler',
+  fredrinn:    'Juggernaut',
+  cici:        'Circus Acrobat',
+  arlott:      'Wrath of Exile',
+  aulus:       'Rampant Hammer',
+  masha:       'Wild Vigor',
+  suyou:       'Wanderer',
+  lukas:       'The Invincible Shield',
+  kalea:       'Tribal Guardian',
+  miya:        'Moonlit Archer',
+  popol:       'Wolf Boy',
+  bruno:       'The Protector',
+  clint:       'West Justice',
+  layla:       'Malefic Gunner',
+  moskov:      'Spear of Quiescence',
+  karrie:      'Phantom of the Night',
+  iridhel:     'Lightness Burst',
+  hanabi:      'Scarlet Flower',
+  claude:      'Weird Inventor',
+  kimmy:       'Rapid Fire',
+  granger:     'Death Chanter',
+  wanwan:      'Agile Tiger',
+  brody:       'Lone Star',
+  beatrix:     'Specialist in Training',
+  melissa:     'Humble Yourself',
+  ixia:        'Living Weapon',
+  natan:       'Space And Time',
+  lesley:      'Master Sniper',
+  obsidia:     'Void Matriarch',
+  alice:       'Queen of the Apocalypse',
+  eudora:      'Lady Thorn',
+  gord:        'Magus Apex',
+  kagura:      'Onmyoji Master',
+  cyclops:     'Planetary Overlord',
+  aurora:      'Queen of the North',
+  vexana:      'The Undead Queen',
+  harley:      'Magic Prodigy',
+  odette:      'Swan Princess',
+  zhask:       'Cosmic Devourer',
+  pharsa:      'Wings of the Storm',
+  valir:       'Ashes Blazing',
+  'chang-e':   'Lady of the Moon',
+  vale:        'Wind Caster',
+  lunox:       'Chaos Moondust',
+  harith:      'The Sun Child',
+  kadita:      'Ocean Goddess',
+  esmeralda:   'Astrologer',
+  lylia:       'Magic Rebel',
+  cecilision:  'Lord of the Apocalypse',
+  yve:         'Astral Interface',
+  valentina:   'Copycat',
+  xavier:      'Reckoning',
+  novaria:     'The Astral Wanderer',
+  zhuxin:      'Light of the Void',
+  'luo-yi':    'Yin-Yang Gatherer',
+  zetian:      'Empress of Eternity',
+  tigreal:     'Warrior of Dawn',
+  akai:        'Panda Warrior',
+  franco:      'Iron Hook',
+  minotaur:    'Minoan Fury',
+  johnson:     'Steel Sweetheart',
+  hilda:       'Power of Megalith',
+  grock:       'Warden of the West',
+  argus:       'The Fallen Angel',
+  hylos:       'The Legend of the Starlight',
+  uranus:      'Aeonian Inspiration',
+  belerick:    'Flower of Life',
+  khufra:      'Desert Tyrant',
+  baxia:       'The Ancient Lurker',
+  atlas:       'Ocean Gladiator',
+  barats:      'Big Baby',
+  edith:       'Primal Darkness',
+  gloo:        'Sticky Sweet Nightmare',
+  angela:      'Love Architect',
+  nana:        'The Molina Wizard',
+  rafaela:     'Wings of Holiness',
+  lolita:      'Noumenon Guardian',
+  estes:       'Moon Elf King',
+  diggie:      'Time Keeper',
+  carmilla:    'Queen of the Night',
+  mathilda:    'The Revered Guide',
+  floryn:      'The Budding Hope',
+  faramis:     'Shadow Bringer',
+  kaja:        'Thunder of Vengeance',
+  chip:        'Portal Specialist',
+  marcel:      'Tactical Captain',
+};
+
+function generateHeroDesc(id, tier, s) {
+  const sub = HERO_SUBTITLES[id] || id;
+  const dur = s.dur || 50; const off = s.off || 50; const ctrl = s.ctrl || 50; const diff = s.diff || 50;
+  const tierMap = { S: 'meta-dominant', A: 'high-tier', B: 'reliable', C: 'situational', D: 'niche' };
+  const tLabel = tierMap[tier] || 'competitive';
+  if (dur >= 80) {
+    return `${sub} is a ${tLabel} frontline asset built for sustained engagement. Exceptional durability and disruption output make this unit the cornerstone of any structured team push — soaking damage, chaining crowd control, and creating windows for allies to collapse on priority targets.`;
+  } else if (off >= 85 && diff >= 80) {
+    return `${sub} is a ${tLabel} high-ceiling carry with explosive execution potential. Mechanical precision is required to unlock the burst sequences this unit is known for. In skilled hands, a single rotation can delete priority targets before the enemy team can react.`;
+  } else if (ctrl >= 72) {
+    return `${sub} is a ${tLabel} crowd control specialist. The toolset revolves around locking down key enemy units and enabling allied damage dealers to execute freely. Most effective inside coordinated comps where follow-up on setups is guaranteed.`;
+  } else if (off >= 80) {
+    return `${sub} is a ${tLabel} damage-focused unit with a clear power curve. Consistent output, straightforward item paths, and reliable win conditions make this hero a solid choice for climbing — effective at all stages of the game when played to its tempo.`;
+  } else {
+    return `${sub} is a ${tLabel} utility asset with flexible deployment options. Adapts across multiple game states and responds well to diverse item builds. Teams that use this unit's tools effectively will find it consistently impactful in skirmishes and late-game teamfights alike.`;
+  }
+}
+
 const GameHubData = {
   heroes: MLBB_HERO_DATA_RAW.map(h => {
     const s = HERO_STATS[h.id] || {};
@@ -750,9 +902,10 @@ const GameHubData = {
       offense: s.off,
       control: s.ctrl,
       difficulty: s.diff,
+      subtitle: HERO_SUBTITLES[h.id] || '',
       weakAgainst: s.weak || [],
       strongAgainst: s.strong || [],
-      desc: h.desc || `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
+      desc: h.desc || generateHeroDesc(h.id, tier || 'B', s)
     };
   }),
   items: MLBB_ITEM_DATA_RAW.map(i => ({
