@@ -1462,19 +1462,22 @@ function renderStudyGrid(locs) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
     return;
   }
-  grid.innerHTML = locs.map(loc => {
-    const grad = REGION_GRADIENTS[loc.region] || '#111';
-    return `<div class="study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="background:${grad}">
-      <img class="study-card-img" src="${studyPosterURL(loc)}" alt="${loc.name}" loading="lazy" decoding="async">
-      <div class="study-card-overlay">
-        <span class="study-card-flag">${loc.flag}</span>
-        <span class="study-card-name">${loc.name}</span>
-        <span class="study-card-region">${loc.region}</span>
+  // Uses the exact same .hub-card markup as the heroes menu so the cards
+  // render as identical separate boxes (height comes from .hub-card-media's
+  // padding-top, which is bulletproof across browsers — no aspect-ratio).
+  grid.innerHTML = locs.map(loc => `
+    <div class="hub-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
+      <div class="hub-card-media">
+        <img src="${studyPosterURL(loc)}" alt="${loc.name}" class="hub-card-img" loading="lazy" onerror="this.style.display='none';">
+        <div class="hub-card-overlay">
+          <div class="hub-card-title">${loc.flag} ${loc.name}</div>
+          <div class="hub-card-sub">${loc.region}</div>
+        </div>
       </div>
-    </div>`;
-  }).join('');
+    </div>
+  `).join('');
 
-  grid.querySelectorAll('.study-loc-card').forEach(card => {
+  grid.querySelectorAll('.hub-card').forEach(card => {
     const handler = () => {
       const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);
