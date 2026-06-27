@@ -1267,63 +1267,48 @@ function setupGameHub() {
    STUDY MODE — 44 world locations + vibes
    ============================================================ */
 
+// Each location uses real, moving stock footage hosted on the Pexels global
+// CDN (works everywhere — not geo-blocked like YouTube). `pexels` is the video
+// id, `file` is the exact mp4 filename suffix. Poster + video URLs are built
+// from these in studyPosterURL() / studyVideoURL() below.
 const STUDY_LOCATIONS = [
-  // VIBES
-  { id:'lofi-cafe',     name:'LOFI CAFÉ',       region:'VIBES',      flag:'🎵', videoId:'jfKfPfyJRdk' },
-  { id:'rain',          name:'RAIN SOUNDS',      region:'VIBES',      flag:'🌧️', videoId:'yIQd2Ya0Ziw' },
-  { id:'ocean',         name:'OCEAN WAVES',      region:'VIBES',      flag:'🌊', videoId:'kpSEtzFd_J4' },
-  { id:'fireplace',     name:'FIREPLACE',        region:'VIBES',      flag:'🔥', videoId:'L_LUpnjgPso' },
-  { id:'forest',        name:'FOREST',           region:'VIBES',      flag:'🌿', videoId:'eKFTSSKCzWA' },
-  { id:'night-sky',     name:'NIGHT SKY',        region:'VIBES',      flag:'🌌', videoId:'f_lQQSfN35A' },
-  // JAPAN
-  { id:'tokyo',         name:'TOKYO',            region:'JAPAN',      flag:'🇯🇵', videoId:'iYWIZeDdq5A' },
-  { id:'kyoto',         name:'KYOTO',            region:'JAPAN',      flag:'🇯🇵', videoId:'_Whyf8mMoSk' },
-  { id:'osaka',         name:'OSAKA',            region:'JAPAN',      flag:'🇯🇵', videoId:'lCxaJTJkYkI' },
-  // KOREA & CHINA
-  { id:'seoul',         name:'SEOUL',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'g7G0MRVbM6o' },
-  { id:'busan',         name:'BUSAN',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'4wxGVidILnI' },
-  { id:'shanghai',      name:'SHANGHAI',         region:'EAST ASIA',  flag:'🇨🇳', videoId:'vxMYH3FpS9Q' },
-  { id:'hong-kong',     name:'HONG KONG',        region:'EAST ASIA',  flag:'🇭🇰', videoId:'xNxFmIzBjv0' },
-  // SOUTHEAST ASIA
-  { id:'bali',          name:'BALI',             region:'SE ASIA',    flag:'🇮🇩', videoId:'PaSKoJvNEwY' },
-  { id:'bangkok',       name:'BANGKOK',          region:'SE ASIA',    flag:'🇹🇭', videoId:'rHRK65m7d8Y' },
-  { id:'singapore',     name:'SINGAPORE',        region:'SE ASIA',    flag:'🇸🇬', videoId:'99SFP4JTVSY' },
-  { id:'hanoi',         name:'HANOI',            region:'SE ASIA',    flag:'🇻🇳', videoId:'EGbU6FUBhT4' },
-  // MIDDLE EAST & SOUTH ASIA
-  { id:'dubai',         name:'DUBAI',            region:'MIDDLE EAST',flag:'🇦🇪', videoId:'6apS_4LFYAM' },
-  { id:'istanbul',      name:'ISTANBUL',         region:'MIDDLE EAST',flag:'🇹🇷', videoId:'B3xGj-0VZFI' },
-  { id:'mumbai',        name:'MUMBAI',           region:'SOUTH ASIA', flag:'🇮🇳', videoId:'yMYIwKnRF7Q' },
-  // EUROPE — WEST
-  { id:'paris',         name:'PARIS',            region:'EUROPE',     flag:'🇫🇷', videoId:'EkzQ6nEhG-E' },
-  { id:'london',        name:'LONDON',           region:'EUROPE',     flag:'🇬🇧', videoId:'bnkVkoHEWoQ' },
-  { id:'rome',          name:'ROME',             region:'EUROPE',     flag:'🇮🇹', videoId:'JMJ7GjAWvXE' },
-  { id:'barcelona',     name:'BARCELONA',        region:'EUROPE',     flag:'🇪🇸', videoId:'fqJMKP3AGWQ' },
-  { id:'amsterdam',     name:'AMSTERDAM',        region:'EUROPE',     flag:'🇳🇱', videoId:'CZIXbPjbBFI' },
-  { id:'madrid',        name:'MADRID',           region:'EUROPE',     flag:'🇪🇸', videoId:'37Vd6BFHKBU' },
-  { id:'milan',         name:'MILAN',            region:'EUROPE',     flag:'🇮🇹', videoId:'PQ3X3FEMEFg' },
-  // EUROPE — NORTH/EAST
-  { id:'prague',        name:'PRAGUE',           region:'EUROPE',     flag:'🇨🇿', videoId:'InjwvdDijwE' },
-  { id:'vienna',        name:'VIENNA',           region:'EUROPE',     flag:'🇦🇹', videoId:'5VhHJMHPX6I' },
-  { id:'berlin',        name:'BERLIN',           region:'EUROPE',     flag:'🇩🇪', videoId:'nT4JFHWbHss' },
-  { id:'zurich',        name:'ZURICH',           region:'EUROPE',     flag:'🇨🇭', videoId:'fEu4EXSQ4EM' },
-  { id:'santorini',     name:'SANTORINI',        region:'EUROPE',     flag:'🇬🇷', videoId:'QIiCbzGjwJ8' },
-  { id:'lisbon',        name:'LISBON',           region:'EUROPE',     flag:'🇵🇹', videoId:'FpMzJY7WL7o' },
-  { id:'edinburgh',     name:'EDINBURGH',        region:'EUROPE',     flag:'🇬🇧', videoId:'sZ5XFnBPtI8' },
-  { id:'copenhagen',    name:'COPENHAGEN',       region:'EUROPE',     flag:'🇩🇰', videoId:'kEgouIO0FpA' },
-  // AMERICAS
-  { id:'new-york',      name:'NEW YORK',         region:'AMERICAS',   flag:'🇺🇸', videoId:'n61ULEU7CO0' },
-  { id:'los-angeles',   name:'LOS ANGELES',      region:'AMERICAS',   flag:'🇺🇸', videoId:'bkXSaS1cT5I' },
-  { id:'chicago',       name:'CHICAGO',          region:'AMERICAS',   flag:'🇺🇸', videoId:'KmMGS7FKOBM' },
-  { id:'miami',         name:'MIAMI',            region:'AMERICAS',   flag:'🇺🇸', videoId:'jJjSFCWZ8Y8' },
-  { id:'san-francisco', name:'SAN FRANCISCO',    region:'AMERICAS',   flag:'🇺🇸', videoId:'w2TbAXFCGxA' },
-  { id:'toronto',       name:'TORONTO',          region:'AMERICAS',   flag:'🇨🇦', videoId:'PO8PvKUmXes' },
-  { id:'rio',           name:'RIO DE JANEIRO',   region:'AMERICAS',   flag:'🇧🇷', videoId:'7VqsQ96uVTs' },
-  { id:'mexico-city',   name:'MEXICO CITY',      region:'AMERICAS',   flag:'🇲🇽', videoId:'IHlrRSz1kLU' },
-  // AFRICA & OCEANIA
-  { id:'cape-town',     name:'CAPE TOWN',        region:'AFRICA',     flag:'🇿🇦', videoId:'tQwEzrJXLls' },
-  { id:'marrakech',     name:'MARRAKECH',        region:'AFRICA',     flag:'🇲🇦', videoId:'eY6wEYsomj8' },
-  { id:'sydney',        name:'SYDNEY',           region:'OCEANIA',    flag:'🇦🇺', videoId:'Ey3Buk4NJrE' },
+  // ---- PLACES ON EARTH ----
+  { id:'london',        name:'LONDON',          region:'EUROPE',     flag:'🇬🇧', pexels:'1721294', file:'hd_1920_1080_25fps' },
+  { id:'covent-garden', name:'COVENT GARDEN',   region:'EUROPE',     flag:'🇬🇧', pexels:'1721303', file:'hd_1920_1080_25fps' },
+  { id:'italy',         name:'ITALY',           region:'EUROPE',     flag:'🇮🇹', pexels:'855565',  file:'hd_1920_1080_24fps' },
+  { id:'old-town',      name:'OLD TOWN',        region:'EUROPE',     flag:'🏛️', pexels:'855564',  file:'hd_1920_1080_24fps' },
+  { id:'the-alps',      name:'THE ALPS',        region:'EUROPE',     flag:'🏔️', pexels:'3214448', file:'hd_1920_1080_25fps' },
+  { id:'downtown',      name:'DOWNTOWN',        region:'AMERICAS',   flag:'🏙️', pexels:'3121459', file:'uhd_2560_1440_24fps' },
+  { id:'cappadocia',    name:'CAPPADOCIA',      region:'MIDDLE EAST',flag:'🎈', pexels:'3015510', file:'hd_1920_1080_24fps' },
+  { id:'sahara',        name:'SAHARA',          region:'AFRICA',     flag:'🐪', pexels:'3015532', file:'hd_1920_1080_24fps' },
+  { id:'desert-drive',  name:'DESERT DRIVE',    region:'AFRICA',     flag:'🏜️', pexels:'2099568', file:'hd_1920_1080_30fps' },
+  { id:'bali',          name:'BALI',            region:'SE ASIA',    flag:'🏝️', pexels:'2169880', file:'uhd_2560_1440_30fps' },
+  { id:'tropical',      name:'TROPICAL',        region:'SE ASIA',    flag:'🌴', pexels:'2169879', file:'uhd_2560_1440_30fps' },
+  // ---- VIBES (ambient real-world scenes) ----
+  { id:'forest',        name:'FOREST',          region:'VIBES',      flag:'🌲', pexels:'1448735', file:'hd_1366_720_24fps' },
+  { id:'forest-stream', name:'FOREST STREAM',   region:'VIBES',      flag:'🏞️', pexels:'2330708', file:'uhd_2560_1440_24fps' },
+  { id:'autumn-road',   name:'AUTUMN ROAD',     region:'VIBES',      flag:'🍂', pexels:'1580455', file:'hd_1920_1080_30fps' },
+  { id:'rain',          name:'RAIN',            region:'VIBES',      flag:'🌧️', pexels:'2491284', file:'hd_1366_720_24fps' },
+  { id:'country-road',  name:'COUNTRY ROAD',    region:'VIBES',      flag:'🛣️', pexels:'2519660', file:'uhd_2560_1440_24fps' },
+  { id:'golden-hour',   name:'GOLDEN HOUR',     region:'VIBES',      flag:'🌅', pexels:'856973',  file:'hd_1920_1080_25fps' },
+  { id:'ocean-waves',   name:'OCEAN WAVES',     region:'VIBES',      flag:'🌊', pexels:'3571264', file:'uhd_2560_1440_30fps' },
+  { id:'rocky-coast',   name:'ROCKY COAST',     region:'VIBES',      flag:'🪨', pexels:'1409899', file:'hd_1920_1080_25fps' },
+  { id:'sunset-sea',    name:'SUNSET SEA',      region:'VIBES',      flag:'🌇', pexels:'2257012', file:'uhd_2560_1440_24fps' },
+  { id:'sunset-coast',  name:'SUNSET COAST',    region:'VIBES',      flag:'🌅', pexels:'1093662', file:'hd_1920_1080_30fps' },
+  { id:'open-sea',      name:'OPEN SEA',        region:'VIBES',      flag:'⛵', pexels:'2257010', file:'uhd_2560_1440_24fps' },
+  { id:'the-harbor',    name:'THE HARBOR',      region:'VIBES',      flag:'⚓', pexels:'2942803', file:'uhd_2560_1440_24fps' },
+  { id:'open-sky',      name:'OPEN SKY',        region:'VIBES',      flag:'☁️', pexels:'3635378', file:'hd_1920_1080_30fps' },
+  { id:'starry-night',  name:'STARRY NIGHT',    region:'VIBES',      flag:'🌌', pexels:'857195',  file:'hd_1280_720_25fps' },
+  { id:'earth',         name:'EARTH AT NIGHT',  region:'VIBES',      flag:'🌍', pexels:'1851190', file:'hd_1920_1080_25fps' },
 ];
+
+/* Build Pexels poster / video URLs (global CDN, no geo-block) */
+function studyPosterURL(loc) {
+  return `https://images.pexels.com/videos/${loc.pexels}/free-video-${loc.pexels}.jpg?auto=compress&cs=tinysrgb&w=700`;
+}
+function studyVideoURL(loc) {
+  return `https://videos.pexels.com/video-files/${loc.pexels}/${loc.pexels}-${loc.file}.mp4`;
+}
 
 const studyState = {
   active: false,
@@ -1390,16 +1375,18 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Show real thumbnail instantly — YouTube image CDN works globally even when videos are geo-blocked
+  // Real, moving footage via Pexels (global CDN, plays everywhere). The poster
+  // shows instantly while the mp4 buffers, then the video loops silently.
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
-  if (loc.videoId) {
-    overlay.style.backgroundImage = `url('https://img.youtube.com/vi/${loc.videoId}/maxresdefault.jpg'), ${grad}`;
-    overlay.style.backgroundSize = 'cover, cover';
-    overlay.style.backgroundPosition = 'center, center';
-  } else {
-    overlay.style.background = grad;
+  overlay.style.background = grad;
+  const video = document.getElementById('study-video');
+  if (video) {
+    video.poster = studyPosterURL(loc);
+    video.src = studyVideoURL(loc);
+    video.load();
+    const p = video.play();
+    if (p && p.catch) p.catch(() => {}); // ignore autoplay rejection
   }
-
 
   startStudyClock();
   startWakeWord();
@@ -1414,9 +1401,9 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  overlay.style.backgroundImage = '';
-  overlay.style.backgroundSize = '';
-  overlay.style.backgroundPosition = '';
+  const video = document.getElementById('study-video');
+  if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
+  overlay.style.background = '';
 
   switchTab('tab-study-grid');
 }
@@ -1443,9 +1430,9 @@ function renderStudyGrid(locs) {
     return;
   }
   grid.innerHTML = locs.map(loc => {
-    const thumb = loc.videoId ? `https://img.youtube.com/vi/${loc.videoId}/hqdefault.jpg` : '';
-    const bg = thumb ? `background-image:url('${thumb}')` : `background:${REGION_GRADIENTS[loc.region] || '#111'}`;
-    return `<div class="study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="${bg}">
+    const grad = REGION_GRADIENTS[loc.region] || '#111';
+    return `<div class="study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="background:${grad}">
+      <img class="study-card-img" src="${studyPosterURL(loc)}" alt="${loc.name}" loading="lazy" decoding="async">
       <div class="study-card-overlay">
         <span class="study-card-flag">${loc.flag}</span>
         <span class="study-card-name">${loc.name}</span>
