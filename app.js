@@ -1377,61 +1377,6 @@ function openStudyPanel() {
   if (s) s.value = '';
 }
 
-/* ── Study mode canvas — smooth drifting ambient glow orbs (no dots) ── */
-let _sRAF = null;
-
-const _ORB_COLS = {
-  'VIBES':       [[120,60,220],[180,80,255],[80,30,160]],
-  'JAPAN':       [[200,60,100],[255,130,160],[150,30,80]],
-  'EAST ASIA':   [[30,80,200],[60,130,255],[20,50,160]],
-  'SE ASIA':     [[30,150,80],[60,200,110],[20,120,50]],
-  'MIDDLE EAST': [[200,120,0],[255,175,30],[160,80,0]],
-  'SOUTH ASIA':  [[200,90,0],[255,145,20],[160,60,0]],
-  'EUROPE':      [[20,50,160],[40,90,220],[15,35,130]],
-  'AMERICAS':    [[20,20,160],[40,40,220],[15,15,130]],
-  'AFRICA':      [[160,60,0],[220,100,20],[120,40,0]],
-  'OCEANIA':     [[0,120,160],[0,180,220],[0,90,140]],
-};
-
-function startStudyCanvas(loc) {
-  stopStudyCanvas();
-  const cv = document.getElementById('study-canvas');
-  if (!cv) return;
-  cv.width = innerWidth; cv.height = innerHeight;
-  const ctx = cv.getContext('2d');
-  const W = cv.width, H = cv.height;
-  const cols = _ORB_COLS[loc.region] || [[80,80,200],[120,120,255],[60,60,160]];
-  const R = Math.min(W, H) * 0.7;
-
-  const orbs = [
-    { x: W*0.22, y: H*0.38, vx: 0.20, vy: 0.12, col: cols[0] },
-    { x: W*0.78, y: H*0.62, vx:-0.15, vy:-0.18, col: cols[1] },
-    { x: W*0.52, y: H*0.18, vx: 0.10, vy: 0.22, col: cols[2] },
-  ];
-
-  function frame() {
-    _sRAF = requestAnimationFrame(frame);
-    ctx.clearRect(0, 0, W, H);
-    for (const o of orbs) {
-      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, R);
-      g.addColorStop(0,   `rgba(${o.col[0]},${o.col[1]},${o.col[2]},0.25)`);
-      g.addColorStop(0.4, `rgba(${o.col[0]},${o.col[1]},${o.col[2]},0.10)`);
-      g.addColorStop(1,   `rgba(${o.col[0]},${o.col[1]},${o.col[2]},0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(o.x, o.y, R, 0, Math.PI*2); ctx.fill();
-      o.x += o.vx; o.y += o.vy;
-      if (o.x < -R*0.4 || o.x > W+R*0.4) o.vx *= -1;
-      if (o.y < -R*0.4 || o.y > H+R*0.4) o.vy *= -1;
-    }
-  }
-  frame();
-}
-
-function stopStudyCanvas() {
-  if (_sRAF) { cancelAnimationFrame(_sRAF); _sRAF = null; }
-  const cv = document.getElementById('study-canvas');
-  if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
-}
 
 /* openStudyVideo — called when a location card is clicked */
 function openStudyVideo(loc) {
@@ -1449,8 +1394,11 @@ function openStudyVideo(loc) {
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
   overlay.style.background = grad;
 
-  // Start canvas ambient animation
-  startStudyCanvas(loc);
+  // Load video via Invidious (YouTube proxy — bypasses geo-blocks, works in Middle East)
+  const iframe = document.getElementById('study-iframe');
+  if (iframe && loc.videoId) {
+    iframe.src = `https://yewtu.be/embed/${loc.videoId}?autoplay=1&muted=1&loop=1`;
+  }
 
   startStudyClock();
   startWakeWord();
@@ -1465,7 +1413,8 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  stopStudyCanvas();
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) iframe.src = '';
 
   switchTab('tab-study-grid');
 }
@@ -1491,27 +1440,20 @@ function renderStudyGrid(locs) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
     return;
   }
-  grid.innerHTML = locs.map(loc => {
-    const bg = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
-    return `
-    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
-      <div class="hub-card-media study-card-media" style="background:${bg}">
-        <div class="study-card-placeholder">${loc.flag}</div>
-        <div class="hub-card-overlay">
-          <div class="hub-card-title">${loc.name}</div>
-          <div class="hub-card-sub">${loc.region}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  grid.innerHTML = locs.map(loc => `
+    <button class="study-loc-btn" data-loc-id="${loc.id}" aria-label="${loc.name}">
+      <span class="study-btn-flag">${loc.flag}</span>
+      <span class="study-btn-info">
+        <span class="study-btn-name">${loc.name}</span>
+        <span class="study-btn-region">${loc.region}</span>
+      </span>
+    </button>`).join('');
 
-  grid.querySelectorAll('.study-loc-card').forEach(card => {
-    const handler = () => {
-      const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
+  grid.querySelectorAll('.study-loc-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = STUDY_LOCATIONS.find(l => l.id === btn.dataset.locId);
       if (loc) openStudyVideo(loc);
-    };
-    card.addEventListener('click', handler);
-    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') handler(); });
+    });
   });
 }
 

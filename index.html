@@ -479,8 +479,8 @@ if ('serviceWorker' in navigator) {
 
 <!-- ===== STUDY MODE OVERLAY ===== -->
 <div id="study-overlay" class="study-overlay" aria-hidden="true">
-  <!-- Full-screen ambient canvas background -->
-  <canvas id="study-canvas" class="study-canvas"></canvas>
+  <!-- Full-screen video via Invidious (YouTube proxy, bypasses geo-blocks) -->
+  <iframe id="study-iframe" class="study-iframe" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
 
   <!-- Gradient scrims for readability -->
   <div class="study-scrim study-scrim-top"></div>

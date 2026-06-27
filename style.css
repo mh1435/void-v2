@@ -1166,23 +1166,27 @@ body.reduced-motion *::after {
 }
 .study-loc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px; padding: 0 12px 16px; overflow-y: auto; flex: 1;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px; padding: 8px 12px 80px; overflow-y: auto; flex: 1;
   -webkit-overflow-scrolling: touch;
 }
-.study-loc-card { cursor: pointer; }
-/* Use aspect-ratio (reliable) instead of padding-top hack for landscape study cards */
-.study-loc-card .hub-card-media {
-  padding-top: 0;
-  aspect-ratio: 16 / 10;
-  height: auto;
+.study-loc-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.11);
+  color: #fff; text-align: left; cursor: pointer; width: 100%;
+  min-height: 58px; box-sizing: border-box;
+  transition: background 0.15s, transform 0.12s;
 }
-.study-loc-card .hub-card-sub { color: rgba(255,255,255,0.45); }
-.study-card-placeholder {
-  position: absolute; inset: 0; display: flex; align-items: center;
-  justify-content: center; font-size: 48px;
-  opacity: 0.75;
+.study-loc-btn:active { background: rgba(255,255,255,0.14); transform: scale(0.96); }
+.study-btn-flag { font-size: 26px; flex-shrink: 0; line-height: 1; }
+.study-btn-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
+.study-btn-name {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
 }
+.study-btn-region { font-size: 9px; color: rgba(255,255,255,0.38); letter-spacing: 0.1em; }
 
 /* ===========================================================
    STUDY MODE OVERLAY
@@ -1194,10 +1198,10 @@ body.reduced-motion *::after {
 }
 .study-overlay.active { display: block; }
 
-.study-canvas {
+.study-iframe {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  pointer-events: none;
+  border: none;
 }
 
 /* Gradient scrims — always dark regardless of app theme */
