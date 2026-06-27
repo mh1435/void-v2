@@ -12,7 +12,7 @@ const App = {
     mistralKey: '', mistralModel: 'mistral-large-latest',
     providerOrder: ['gemini', 'groq', 'openrouter'],
     mapProvider: 'google',
-    lang: 'auto',
+    lang: 'en',
     responseMode: 'standard',
     reducedMotion: false,
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
@@ -48,9 +48,9 @@ function getSTTLang() {
 }
 
 function getActiveLang() {
-  const s = App.settings.lang || 'auto';
-  if (s !== 'auto') return s;
-  return (navigator.language || 'en').split('-')[0].toLowerCase();
+  const s = App.settings.lang;
+  if (!s || s === 'auto') return 'en';
+  return s;
 }
 
 function buildSystemPrompt() {
@@ -1400,11 +1400,6 @@ function openStudyVideo(loc) {
     overlay.style.background = grad;
   }
 
-  // Also load actual video via Invidious on top (plays when it loads, thumbnail always shows underneath)
-  const iframe = document.getElementById('study-iframe');
-  if (iframe && loc.videoId) {
-    iframe.src = `https://yewtu.be/embed/${loc.videoId}?autoplay=1&muted=1&loop=1`;
-  }
 
   startStudyClock();
   startWakeWord();
@@ -1419,8 +1414,6 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  const iframe = document.getElementById('study-iframe');
-  if (iframe) iframe.src = '';
   overlay.style.backgroundImage = '';
   overlay.style.backgroundSize = '';
   overlay.style.backgroundPosition = '';
