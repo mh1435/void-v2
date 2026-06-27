@@ -39,11 +39,11 @@ if ('serviceWorker' in navigator) {
     <div class="hud-center">
       <div class="tab-pill-box">
         <button class="tab-pill active" data-target="tab-chat">INTELLIGENCE</button>
-        <button class="tab-pill" data-target="tab-gamehub">WORKSPACE</button>
+        <button class="tab-pill" data-target="tab-gamehub">GAMES</button>
       </div>
     </div>
     <div class="hud-right">
-      <button class="avatar-btn" id="open-settings-btn" aria-label="Profile & Settings">
+      <button class="avatar-btn" id="open-settings-btn" aria-label="Settings">
         <span class="avatar-initial" id="avatar-initial">V</span>
       </button>
     </div>
@@ -92,26 +92,6 @@ if ('serviceWorker' in navigator) {
 
     <div class="view-tab" id="tab-gamehub">
       <div class="gamehub-container">
-<<<<<<< Updated upstream
-        <div class="gamehub-tabs">
-=======
-
-        <!-- GAMING / STUDY sub-nav -->
-        <div class="games-subnav">
-          <button class="games-subnav-btn active" id="games-nav-gaming">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="6" width="20" height="12" rx="2"/>
-              <path d="M12 12h0M8 12h0M16 12h0M12 8v8"/>
-            </svg>
-            GAMING
-          </button>
-          <button class="games-subnav-btn" id="games-nav-study">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-            STUDY
-          </button>
-        </div>
 
         <!-- GAMES PICKER (default view) -->
         <div class="games-picker-view" id="games-picker-view">
@@ -200,9 +180,10 @@ if ('serviceWorker' in navigator) {
           </div>
 
           <div class="gamehub-tabs">
->>>>>>> Stashed changes
           <button class="gamehub-tab-btn active" data-hub-tab="heroes">HERO FILES</button>
           <button class="gamehub-tab-btn" data-hub-tab="items">ITEM CORES</button>
+          <button class="gamehub-tab-btn" data-hub-tab="maps">MAPS</button>
+          <button class="gamehub-tab-btn" data-hub-tab="refs">REFERENCES</button>
         </div>
 
         <div class="gamehub-content-view active" id="gamehub-view-heroes">
@@ -216,10 +197,213 @@ if ('serviceWorker' in navigator) {
           <div class="gamehub-search-box">
             <input type="text" class="text-input" id="item-search-input" placeholder="Search item cores...">
           </div>
-          <div class="hub-grid" id="item-grid"></div>
+          <div class="item-type-tabs">
+            <button class="item-type-btn active" data-itype="Physical">PHYSICAL</button>
+            <button class="item-type-btn" data-itype="Magic">MAGIC</button>
+            <button class="item-type-btn" data-itype="Defense">DEFENSE</button>
+            <button class="item-type-btn" data-itype="Movement">MOVEMENT</button>
+          </div>
+          <div class="hub-grid item-type-grid active" id="item-grid-physical"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-magic"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-defense"></div>
+          <div class="hub-grid item-type-grid" id="item-grid-movement"></div>
         </div>
-      </div>
-    </div>
+
+        <div class="gamehub-content-view" id="gamehub-view-maps">
+          <div class="maps-scroll">
+
+            <div class="map-role-card">
+              <div class="map-role-header roamer-color">⚔ ROAMER ROUTES</div>
+              <div class="map-route-block">
+                <div class="map-route-title">Standard Route</div>
+                <div class="map-route-step"><span class="step-num">1</span>Help gold laner at bottom — trade or secure a kill level 1–2</div>
+                <div class="map-route-step"><span class="step-num">2</span>Move to river → assist jungler clearing turtle camp</div>
+                <div class="map-route-step"><span class="step-num">3</span>Rotate mid — control LBM / RBM bushes for vision</div>
+                <div class="map-route-step"><span class="step-num">4</span>Return bottom if enemy dives, or push top if exp needs help</div>
+              </div>
+              <div class="map-route-block warning-block">
+                <div class="map-route-title">🔴 Gold Lane Is Weak</div>
+                <div class="map-route-step"><span class="step-num">→</span>Stay bottom longer — 2v2 the enemy or zone them out</div>
+                <div class="map-route-step"><span class="step-num">→</span>Help gold farm safely under tower with roamer pressure</div>
+                <div class="map-route-step"><span class="step-num">→</span>Counter-gank when enemy roamer visits bottom</div>
+                <div class="map-route-step"><span class="step-num">→</span>Avoid forcing 2v1 if you're losing the trade</div>
+              </div>
+              <div class="map-route-block warning-block">
+                <div class="map-route-title">🔴 Mid Lane Is Weak</div>
+                <div class="map-route-step"><span class="step-num">→</span>Frequent mid rotations through river — set up kills</div>
+                <div class="map-route-step"><span class="step-num">→</span>Secure blue buff for your mage when possible</div>
+                <div class="map-route-step"><span class="step-num">→</span>Camp LBM or RBM to deny enemy jungler's mid ganks</div>
+                <div class="map-route-step"><span class="step-num">→</span>Zone out enemy mid from turtle vision</div>
+              </div>
+              <div class="map-route-block warning-block">
+                <div class="map-route-title">🔴 Exp Lane Is Weak</div>
+                <div class="map-route-step"><span class="step-num">→</span>Visit top lane at level 2–3 before they get dived</div>
+                <div class="map-route-step"><span class="step-num">→</span>After turtle, immediately rotate top to even the pressure</div>
+                <div class="map-route-step"><span class="step-num">→</span>Deep ward enemy top jungle to track their jungler</div>
+              </div>
+            </div>
+
+            <div class="map-role-card">
+              <div class="map-role-header jungler-color">🌀 JUNGLER ROUTES</div>
+              <div class="map-route-block">
+                <div class="map-route-title">Standard Clear</div>
+                <div class="map-route-step"><span class="step-num">1</span>Start at buff camp closest to your gold lane for roamer leash</div>
+                <div class="map-route-step"><span class="step-num">2</span>Clear second buff camp, then small camps in your jungle</div>
+                <div class="map-route-step"><span class="step-num">3</span>Look for gank opportunity mid or bottom after clear</div>
+                <div class="map-route-step"><span class="step-num">4</span>Contest or secure turtle with full team at 3–4 min</div>
+              </div>
+              <div class="map-route-block">
+                <div class="map-route-title">Aggressive Invade</div>
+                <div class="map-route-step"><span class="step-num">1</span>Level 1 invade enemy buff with roamer — steal or force enemy to waste time</div>
+                <div class="map-route-step"><span class="step-num">2</span>Counter-jungle enemy small camps for gold advantage</div>
+                <div class="map-route-step"><span class="step-num">3</span>Use gold lead to snowball early ganks</div>
+              </div>
+              <div class="map-route-block warning-block">
+                <div class="map-route-title">🔴 Gold Lane Is Weak</div>
+                <div class="map-route-step"><span class="step-num">→</span>After first clear, immediately gank bottom to relieve pressure</div>
+                <div class="map-route-step"><span class="step-num">→</span>Focus on helping carry snowball rather than counter-jungling</div>
+                <div class="map-route-step"><span class="step-num">→</span>Secure turtle with gold laner to restore their economy</div>
+              </div>
+              <div class="map-route-block warning-block">
+                <div class="map-route-title">🔴 Mid Lane Is Weak</div>
+                <div class="map-route-step"><span class="step-num">→</span>Prioritize mid ganks — easy kills with mid CC setup</div>
+                <div class="map-route-step"><span class="step-num">→</span>Secure blue buff and leave it for your mage</div>
+                <div class="map-route-step"><span class="step-num">→</span>Don't let enemy sneak turtle from mid river</div>
+              </div>
+            </div>
+
+            <div class="map-role-card">
+              <div class="map-role-header gold-color">🏹 GOLD LANE TIPS</div>
+              <div class="map-route-block">
+                <div class="map-route-step"><span class="step-num">1</span>Trade aggressively level 1 with roamer — hit level 2 first</div>
+                <div class="map-route-step"><span class="step-num">2</span>Last-hit minions under tower safely when getting dived</div>
+                <div class="map-route-step"><span class="step-num">3</span>Recall when enemy jungler shows on mini-map bottom</div>
+                <div class="map-route-step"><span class="step-num">4</span>Rotate for turtle with full skills ready — your damage matters</div>
+                <div class="map-route-step"><span class="step-num">5</span>Split push side lane when team holds a fight elsewhere</div>
+              </div>
+            </div>
+
+            <div class="map-role-card">
+              <div class="map-role-header mid-color">✨ MID LANE TIPS</div>
+              <div class="map-route-block">
+                <div class="map-route-step"><span class="step-num">1</span>Fast wave clear → immediately rotate to turtle</div>
+                <div class="map-route-step"><span class="step-num">2</span>Control LBM (Left Bush Mid) and RBM for vision advantage</div>
+                <div class="map-route-step"><span class="step-num">3</span>First to arrive at turtle = biggest influence on early game</div>
+                <div class="map-route-step"><span class="step-num">4</span>Track enemy jungler position from mini-map — call it out</div>
+                <div class="map-route-step"><span class="step-num">5</span>After turtle, push mid tower before rotating elsewhere</div>
+              </div>
+            </div>
+
+            <div class="map-role-card">
+              <div class="map-role-header exp-color">🛡 EXP LANE TIPS</div>
+              <div class="map-route-block">
+                <div class="map-route-step"><span class="step-num">1</span>Win the 1v1 or play safe under tower — don't feed</div>
+                <div class="map-route-step"><span class="step-num">2</span>Never let opponent hit level 4 before you — deny their skill advantage</div>
+                <div class="map-route-step"><span class="step-num">3</span>Rotate when opponent recalls — push wave into tower first</div>
+                <div class="map-route-step"><span class="step-num">4</span>Join teamfight as frontline or secondary carry</div>
+                <div class="map-route-step"><span class="step-num">5</span>After lord spawns, teleport/rotate to teamfights — don't solo top</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="gamehub-content-view" id="gamehub-view-refs">
+          <div class="refs-scroll">
+
+            <div class="refs-category">
+              <div class="refs-category-header">📍 MAP CALLOUTS</div>
+              <div class="ref-item"><span class="ref-term">LBM</span><span class="ref-def">Left Bush Mid — bush on the left side of mid lane, used for ambushes and vision control</span></div>
+              <div class="ref-item"><span class="ref-term">RBM</span><span class="ref-def">Right Bush Mid — same as LBM but right side. Always check before walking mid</span></div>
+              <div class="ref-item"><span class="ref-term">Turtle</span><span class="ref-def">First major river objective. Spawns at ~1:30. Grants gold + exp bonus to team</span></div>
+              <div class="ref-item"><span class="ref-term">Lord</span><span class="ref-def">Late-game objective that pushes a lane with minions. Spawns at 10:00+</span></div>
+              <div class="ref-item"><span class="ref-term">Blue Buff</span><span class="ref-def">Jungle camp near mid — reduces mana cost and cooldowns. Priority for mage/jungler</span></div>
+              <div class="ref-item"><span class="ref-term">Red Buff</span><span class="ref-def">Jungle camp near gold lane — adds slow to basic attacks. Good for junglers/fighters</span></div>
+              <div class="ref-item"><span class="ref-term">River</span><span class="ref-def">Central water area connecting top/mid/bottom. Key rotation path for roamers</span></div>
+              <div class="ref-item"><span class="ref-term">High Ground</span><span class="ref-def">Elevated areas near base giving vision advantage. Defend here in late game</span></div>
+            </div>
+
+            <div class="refs-category">
+              <div class="refs-category-header">🧠 MACRO &amp; MICRO</div>
+              <div class="ref-item"><span class="ref-term">Macro</span><span class="ref-def">Big-picture strategy: objective control, rotation timing, wave management, knowing when to fight</span></div>
+              <div class="ref-item"><span class="ref-term">Micro</span><span class="ref-def">Individual mechanics: hitting skill shots, combos, kiting, positioning in fights</span></div>
+              <div class="ref-item"><span class="ref-term">Rotation</span><span class="ref-def">Moving from your lane to another to help teammates or contest objectives</span></div>
+              <div class="ref-item"><span class="ref-term">Vision</span><span class="ref-def">Map awareness — knowing where enemies are. Lack of vision = don't overextend</span></div>
+              <div class="ref-item"><span class="ref-term">Wave Clear</span><span class="ref-def">Killing minions quickly to free yourself to rotate</span></div>
+              <div class="ref-item"><span class="ref-term">Snowball</span><span class="ref-def">Using an early lead to grow your advantage — kills → items → more kills</span></div>
+              <div class="ref-item"><span class="ref-term">Backdoor</span><span class="ref-def">Sneaking to push towers while enemies are distracted elsewhere</span></div>
+              <div class="ref-item"><span class="ref-term">Split Push</span><span class="ref-def">One hero pushes a side lane alone while team fights or defends</span></div>
+              <div class="ref-item"><span class="ref-term">Poke</span><span class="ref-def">Dealing safe ranged damage to weaken enemies before committing to a fight</span></div>
+              <div class="ref-item"><span class="ref-term">Dive</span><span class="ref-def">Attacking enemies who are hiding under their own tower — risky, high reward</span></div>
+              <div class="ref-item"><span class="ref-term">Zone</span><span class="ref-def">Controlling an area so enemies can't enter or farm</span></div>
+              <div class="ref-item"><span class="ref-term">Stack</span><span class="ref-def">Building up passive charges (e.g. Aldous stacks, Lesley stacks) by farming</span></div>
+            </div>
+
+            <div class="refs-category">
+              <div class="refs-category-header">⚡ COMBAT TERMS</div>
+              <div class="ref-item"><span class="ref-term">CC</span><span class="ref-def">Crowd Control — any skill that limits enemy movement or actions</span></div>
+              <div class="ref-item"><span class="ref-term">Hard CC</span><span class="ref-def">Strong CC: stun, suppress, knock-up, knock-back. Stops the enemy completely</span></div>
+              <div class="ref-item"><span class="ref-term">Soft CC</span><span class="ref-def">Weaker CC: slow, root (can't move but can use skills)</span></div>
+              <div class="ref-item"><span class="ref-term">Suppress</span><span class="ref-def">Strongest CC — enemy can't move, use skills, or blink. Kaja and Franco ult</span></div>
+              <div class="ref-item"><span class="ref-term">Burst</span><span class="ref-def">Dealing huge damage in a very short window — assassin playstyle</span></div>
+              <div class="ref-item"><span class="ref-term">Sustain</span><span class="ref-def">Healing or staying alive over a long fight — fighters, some mages</span></div>
+              <div class="ref-item"><span class="ref-term">Peel</span><span class="ref-def">Protecting your carry from enemy assassins — body-blocking, CCing divers</span></div>
+              <div class="ref-item"><span class="ref-term">Kite</span><span class="ref-def">Attacking while moving away — keeps you safe while dealing damage</span></div>
+              <div class="ref-item"><span class="ref-term">AOE</span><span class="ref-def">Area of Effect — skill that hits multiple enemies in a radius</span></div>
+              <div class="ref-item"><span class="ref-term">Outplay</span><span class="ref-def">Using mechanics or positioning to beat an enemy who should have won</span></div>
+              <div class="ref-item"><span class="ref-term">Reset</span><span class="ref-def">Skill cooldown refreshes after a kill — lets you chain more kills (Karina, Saber)</span></div>
+            </div>
+
+            <div class="refs-category">
+              <div class="refs-category-header">🎭 ROLES &amp; POSITIONS</div>
+              <div class="ref-item"><span class="ref-term">Gold</span><span class="ref-def">Gold laner — Marksman in bottom lane. Priority: farm → late-game DPS carry</span></div>
+              <div class="ref-item"><span class="ref-term">EXP</span><span class="ref-def">Exp laner — Fighter/tank in top lane. Priority: win 1v1, be frontline in teamfights</span></div>
+              <div class="ref-item"><span class="ref-term">Mid</span><span class="ref-def">Mid laner — Mage in center lane. Priority: wave clear, rotation, burst damage</span></div>
+              <div class="ref-item"><span class="ref-term">Jungle / JGL</span><span class="ref-def">Jungler — Farms jungle camps, ganks lanes, controls objectives. Uses Retribution spell</span></div>
+              <div class="ref-item"><span class="ref-term">Roam</span><span class="ref-def">Roamer — Support/tank who roams to assist all lanes. Uses Encourage/Dire Hit/Conceal</span></div>
+              <div class="ref-item"><span class="ref-term">Hyper Carry</span><span class="ref-def">Jungler who farms heavily to become very powerful late game (Yi Sun-shin, Claude, etc.)</span></div>
+              <div class="ref-item"><span class="ref-term">Core</span><span class="ref-def">Main carry of the team — usually the jungler. Needs most farm and kills</span></div>
+              <div class="ref-item"><span class="ref-term">Offlaner</span><span class="ref-def">Exp laner who can handle pressure alone — Fighters like Chou, Paquito, Badang</span></div>
+              <div class="ref-item"><span class="ref-term">Frontline</span><span class="ref-def">Tanks/fighters who absorb damage at the front of team fights</span></div>
+              <div class="ref-item"><span class="ref-term">Backline</span><span class="ref-def">Squishies (mage/marksman) who deal damage from a safe distance behind tanks</span></div>
+            </div>
+
+            <div class="refs-category">
+              <div class="refs-category-header">💬 ABBREVIATIONS</div>
+              <div class="ref-item"><span class="ref-term">GG</span><span class="ref-def">Good Game — said at the end of a match</span></div>
+              <div class="ref-item"><span class="ref-term">FF</span><span class="ref-def">Forfeit / Surrender — voting to end the game early</span></div>
+              <div class="ref-item"><span class="ref-term">AFK</span><span class="ref-def">Away From Keyboard — player is inactive, not moving or participating</span></div>
+              <div class="ref-item"><span class="ref-term">MM</span><span class="ref-def">Marksman — ranged physical carry hero type</span></div>
+              <div class="ref-item"><span class="ref-term">KDA</span><span class="ref-def">Kills / Deaths / Assists — measure of performance</span></div>
+              <div class="ref-item"><span class="ref-term">R / Ult</span><span class="ref-def">Ultimate skill — your most powerful ability, use wisely</span></div>
+              <div class="ref-item"><span class="ref-term">B / Recall</span><span class="ref-def">Return to base to heal and buy items</span></div>
+              <div class="ref-item"><span class="ref-term">SS / MIA</span><span class="ref-def">Enemy missing — warn teammates an enemy has left their lane</span></div>
+              <div class="ref-item"><span class="ref-term">Feed</span><span class="ref-def">Dying repeatedly to the same enemy, giving them kills and gold</span></div>
+              <div class="ref-item"><span class="ref-term">Farm</span><span class="ref-def">Killing minions and jungle camps to earn gold</span></div>
+              <div class="ref-item"><span class="ref-term">Push</span><span class="ref-def">Moving forward to destroy enemy towers</span></div>
+              <div class="ref-item"><span class="ref-term">Leash</span><span class="ref-def">Helping your jungler damage their first buff camp so they clear it faster</span></div>
+              <div class="ref-item"><span class="ref-term">Ward</span><span class="ref-def">Observer placed in a bush to grant vision. Diggie passive, some items grant wards</span></div>
+              <div class="ref-item"><span class="ref-term">Gank</span><span class="ref-def">Surprise attack on a lane with extra numbers to secure a kill</span></div>
+              <div class="ref-item"><span class="ref-term">Invade</span><span class="ref-def">Going into enemy jungle to steal their camps or their buff</span></div>
+            </div>
+
+            <div class="refs-category">
+              <div class="refs-category-header">🔧 HERO MECHANICS</div>
+              <div class="ref-item"><span class="ref-term">Fanny Cables</span><span class="ref-def">Fanny's wire shots. L-hook = cable left-right, 3-cable = three consecutive hits for max speed</span></div>
+              <div class="ref-item"><span class="ref-term">Ling WS</span><span class="ref-def">Ling wall-sticking — staying on a wall after jumping to recharge his Finch Poise energy</span></div>
+              <div class="ref-item"><span class="ref-term">Chou Combo</span><span class="ref-def">Chou's kick chain: skill 2 → skill 1 → skill 2 → ult. The kick sends enemies flying</span></div>
+              <div class="ref-item"><span class="ref-term">Gusion Combo</span><span class="ref-def">Dagger throw → teleport → burst with fast button presses. Practice in training mode</span></div>
+              <div class="ref-item"><span class="ref-term">Atlas Combo</span><span class="ref-def">Use Frigid Breath (skill 2) to freeze → ult pulls all CCed enemies to center</span></div>
+              <div class="ref-item"><span class="ref-term">Angela Attach</span><span class="ref-def">Angela's ult enters a teammate's body — communicate with your carry before attaching</span></div>
+              <div class="ref-item"><span class="ref-term">Johnson Crash</span><span class="ref-def">Transform into car → carry a teammate → crash into enemy group. Call your passenger first</span></div>
+            </div>
+
+          </div>
+        </div>
+
+        </div><!-- /mlbb-content-view -->
+      </div><!-- /gamehub-container -->
+    </div><!-- /tab-gamehub -->
 
     <div class="view-tab" id="tab-hub-detail">
       <div class="hud-header" style="border-bottom: 1px solid var(--border);">
@@ -236,75 +420,144 @@ if ('serviceWorker' in navigator) {
       </div>
     </div>
 
+    <!-- Study location grid (opened from STUDY pill) -->
+    <div class="view-tab" id="tab-study-grid">
+      <div class="hud-header" style="border-bottom:1px solid var(--border);">
+        <div class="hud-left">
+          <button class="icon-btn back-btn" id="study-grid-back-btn" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+        </div>
+        <div class="hud-center"><span class="system-title">STUDY MODE</span></div>
+        <div class="hud-right"></div>
+      </div>
+      <div class="study-grid-panel">
+        <div class="gamehub-search-box">
+          <input type="text" class="text-input" id="study-search-input" placeholder="Search locations or vibes...">
+        </div>
+        <div class="study-loc-grid" id="study-loc-grid"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
+<!-- ===== STUDY MODE OVERLAY ===== -->
+<div id="study-overlay" class="study-overlay" aria-hidden="true">
+  <!-- Full-screen YouTube background -->
+  <iframe id="study-iframe" class="study-iframe"
+    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+    allowfullscreen referrerpolicy="no-referrer"></iframe>
+
+  <!-- Gradient scrims for readability -->
+  <div class="study-scrim study-scrim-top"></div>
+  <div class="study-scrim study-scrim-bottom"></div>
+
+  <!-- Top bar: back · clock · wake pill -->
+  <div class="study-top-bar">
+    <button class="study-ui-btn" id="study-back-btn" aria-label="Exit study mode">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+
+    <div class="study-clock-block">
+      <div class="study-clock" id="study-clock">00:00:00</div>
+      <div class="study-date"  id="study-date"></div>
+    </div>
+
+    <div class="study-wake-pill" id="study-wake-pill">
+      <span class="study-wake-dot"></span>
+      <span>HEY VOID</span>
+    </div>
+  </div>
+
+  <!-- Bottom bar: location selector -->
+  <div class="study-bottom-bar">
+    <div class="study-locs" id="study-locs"></div>
+  </div>
+
+  <!-- VOID mini chat widget -->
+  <div class="study-chat" id="study-chat">
+    <div class="study-chat-head" id="study-chat-head">
+      <div class="study-chat-void-dot"></div>
+      <span class="study-chat-label">VOID</span>
+      <button class="study-chat-min-btn" id="study-chat-min" aria-label="Minimize">−</button>
+    </div>
+    <div class="study-chat-body" id="study-chat-body">
+      <div class="study-msgs" id="study-msgs">
+        <div class="study-msg study-msg-ai">
+          <span>Ready to help you study. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span>
+        </div>
+      </div>
+      <div class="study-input-row">
+        <input class="study-input" id="study-input" placeholder="Ask VOID..." autocomplete="off">
+        <button class="study-icon-btn" id="study-mic-btn" aria-label="Voice input">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button class="study-icon-btn study-send-btn" id="study-send-btn" aria-label="Send">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="view-wrapper" id="view-settings">
-
-  <main class="settings-layout profile-drawer-layout">
-
-    <!-- Profile card at top -->
-    <div class="profile-drawer-card">
-      <button class="profile-drawer-close" id="close-settings-btn" aria-label="Close">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      <div class="profile-drawer-avatar" id="settings-avatar">V</div>
-      <div class="profile-drawer-name" id="settings-profile-name">VOID USER</div>
-      <div class="profile-drawer-email" id="settings-profile-email"></div>
-    </div>
-
-    <!-- Settings list -->
-    <div class="profile-drawer-list">
-      <div class="drawer-section-label">ACCOUNT</div>
-      <div class="drawer-item" data-open-panel="panel-memory">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-        <div class="drawer-item-text"><span>Memory</span><span class="drawer-item-sub">Chat history &amp; context</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-
-      <div class="drawer-section-label">INTERFACE</div>
-      <div class="drawer-item" data-open-panel="panel-preferences">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
-        <div class="drawer-item-text"><span>Appearance</span><span class="drawer-item-sub">Theme, language, display</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="drawer-item" data-open-panel="panel-voice">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        <div class="drawer-item-text"><span>Voice &amp; Audio</span><span class="drawer-item-sub">Speech and synthesis settings</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="drawer-item" data-open-panel="panel-floating">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-        <div class="drawer-item-text"><span>Floating Anchor</span><span class="drawer-item-sub">Screen assistant button</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-
-      <div class="drawer-section-label">TOOLS</div>
-      <div class="drawer-item" data-open-panel="panel-commands">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        <div class="drawer-item-text"><span>Shortcuts &amp; Prompts</span><span class="drawer-item-sub">Custom macro commands</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="drawer-item" data-open-panel="panel-tasks">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        <div class="drawer-item-text"><span>Task Manager</span><span class="drawer-item-sub">To-do and task tracking</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="drawer-item" data-open-panel="panel-about">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <div class="drawer-item-text"><span>About VOID</span><span class="drawer-item-sub">Version and build info</span></div>
-        <svg class="drawer-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-    </div>
-
-    <!-- Logout at bottom -->
-    <div class="profile-drawer-footer">
-      <button class="logout-btn" id="logout-btn">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        LOG OUT
+  <header class="hud-header">
+    <div class="hud-left">
+      <button class="icon-btn" id="close-settings-btn" aria-label="Exit Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
       </button>
     </div>
+    <div class="hud-center">
+      <span class="system-title">SETTINGS</span>
+    </div>
+    <div class="hud-right"></div>
+  </header>
 
+  <main class="settings-layout">
+    <div class="settings-grid">
+
+      <!-- Profile card -->
+      <div class="profile-drawer-card settings-card">
+        <div class="profile-drawer-avatar" id="settings-avatar">V</div>
+        <div class="profile-drawer-info">
+          <div class="profile-drawer-name" id="settings-name">USER</div>
+          <div class="profile-drawer-email" id="settings-email"></div>
+        </div>
+      </div>
+
+      <div class="settings-card tile-menu">
+        <div class="menu-item" data-open-panel="panel-memory">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg></div>
+          <div class="menu-label"><span>Memory</span><span class="sub">View and manage AI chat history</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-preferences">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path></svg></div>
+          <div class="menu-label"><span>Appearance</span><span class="sub">Interface themes and display</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-voice">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></div>
+          <div class="menu-label"><span>Voice</span><span class="sub">Configure speech and voice</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-commands">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg></div>
+          <div class="menu-label"><span>Shortcuts</span><span class="sub">Custom commands and prompts</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-tasks">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></div>
+          <div class="menu-label"><span>Tasks</span><span class="sub">To-do and task scheduling</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-about">
+          <div class="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+          <div class="menu-label"><span>About</span><span class="sub">VOID version info</span></div>
+        </div>
+      </div>
+
+      <button class="logout-btn" id="logout-btn">SIGN OUT</button>
+    </div>
   </main>
 
   <div class="settings-panel" id="panel-keys">
@@ -389,7 +642,9 @@ if ('serviceWorker' in navigator) {
     <div class="panel-content">
       <div class="settings-section-label">VISUAL SPECTRUM THEME</div>
       <div class="theme-select-grid">
-        <button class="theme-swatch" data-theme="frost"><span class="swatch-color" style="background:#0b0c10;border-color:#eef0f3;"></span><span class="swatch-name">Frost</span></button>
+        <button class="theme-swatch" data-theme="auto"><span class="swatch-color" style="background:linear-gradient(135deg,#0b0c10 50%,#ededf2 50%);border-color:#888;"></span><span class="swatch-name">Auto System</span></button>
+        <button class="theme-swatch" data-theme="frost"><span class="swatch-color" style="background:#0b0c10;border-color:#eef0f3;"></span><span class="swatch-name">Frost Dark</span></button>
+        <button class="theme-swatch" data-theme="light"><span class="swatch-color" style="background:#ededf2;border-color:#111116;"></span><span class="swatch-name">Light</span></button>
         <button class="theme-swatch" data-theme="matrix"><span class="swatch-color" style="background:#020202;border-color:#00ff66;"></span><span class="swatch-name">Matrix</span></button>
         <button class="theme-swatch" data-theme="ember"><span class="swatch-color" style="background:#0d0707;border-color:#ff4545;"></span><span class="swatch-name">Ember</span></button>
         <button class="theme-swatch" data-theme="nebula"><span class="swatch-color" style="background:#05020a;border-color:#ca5cff;"></span><span class="swatch-name">Nebula</span></button>
@@ -414,10 +669,23 @@ if ('serviceWorker' in navigator) {
       <div class="setting-row stacked">
         <div class="setting-label"><span>Core Translation Language</span></div>
         <select class="select-input" id="select-lang">
-          <option value="auto">Automated Detection</option>
-          <option value="en">English (US/UK)</option>
-          <option value="ms">Bahasa Melayu</option>
-          <option value="zh">Mandarin Hanzi</option>
+          <option value="auto">Auto (System Language)</option>
+          <option value="en">English</option>
+          <option value="ar">Arabic — العربية</option>
+          <option value="ms">Malay — Bahasa Melayu</option>
+          <option value="id">Indonesian — Bahasa Indonesia</option>
+          <option value="tl">Filipino — Tagalog</option>
+          <option value="th">Thai — ภาษาไทย</option>
+          <option value="vi">Vietnamese — Tiếng Việt</option>
+          <option value="zh">Chinese — 中文</option>
+          <option value="ko">Korean — 한국어</option>
+          <option value="ja">Japanese — 日本語</option>
+          <option value="tr">Turkish — Türkçe</option>
+          <option value="ru">Russian — Русский</option>
+          <option value="es">Spanish — Español</option>
+          <option value="pt">Portuguese — Português</option>
+          <option value="fr">French — Français</option>
+          <option value="de">German — Deutsch</option>
         </select>
       </div>
       
@@ -564,11 +832,98 @@ if ('serviceWorker' in navigator) {
 </div>
 
 <div class="login-modal" id="login-modal" style="display:none">
-  <div class="login-card">
+
+  <!-- Step 1: Email input -->
+  <div class="login-card" id="login-step-1">
     <div class="login-logo">VOID</div>
     <p class="login-sub">Enter your email to access your personal AI session</p>
     <input type="email" class="text-input" id="login-email-input" placeholder="your@email.com" autocomplete="email">
-    <button class="primary-btn full" id="login-submit-btn">ENTER VOID</button>
+    <button class="primary-btn full" id="login-send-code-btn">SEND CODE</button>
+    <p class="login-error" id="login-error-1"></p>
+  </div>
+
+  <!-- Step 2: Code verification -->
+  <div class="login-card" id="login-step-2" style="display:none">
+    <div class="login-logo">VOID</div>
+    <p class="login-sub">Enter the 6-digit code</p>
+    <p class="login-email-show" id="login-to-label"></p>
+    <div class="login-code-row" id="login-code-row">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="login-code-digit" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <p class="login-demo-hint" id="login-demo-hint"></p>
+    <button class="primary-btn full" id="login-verify-btn">VERIFY →</button>
+    <button class="login-link-btn" id="login-back-btn">← Change email</button>
+    <p class="login-error" id="login-error-2"></p>
+  </div>
+
+</div>
+
+<!-- Onboarding modal — shown once after first login -->
+<div class="onboard-modal" id="onboard-modal" style="display:none">
+  <div class="onboard-card">
+
+    <!-- Step 1: Name -->
+    <div class="onboard-step" id="onboard-step-1">
+      <div class="onboard-progress">
+        <div class="onboard-dot active"></div>
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot"></div>
+      </div>
+      <div class="onboard-emoji">👋</div>
+      <h2 class="onboard-title">Welcome to VOID</h2>
+      <p class="onboard-sub">What's your name?</p>
+      <input class="text-input" id="onboard-name-input" placeholder="Your full name" autocomplete="name">
+      <button class="primary-btn full" id="onboard-name-next">NEXT →</button>
+    </div>
+
+    <!-- Step 2: Callsign -->
+    <div class="onboard-step" id="onboard-step-2" style="display:none">
+      <div class="onboard-progress">
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot active"></div>
+        <div class="onboard-dot"></div>
+      </div>
+      <div class="onboard-emoji">🎮</div>
+      <h2 class="onboard-title">Your Callsign</h2>
+      <p class="onboard-sub">What should VOID call you? (nickname or gamer tag)</p>
+      <input class="text-input" id="onboard-callsign-input" placeholder="Leave blank to use your name">
+      <button class="primary-btn full" id="onboard-callsign-next">NEXT →</button>
+      <button class="login-link-btn" id="onboard-callsign-back">← Back</button>
+    </div>
+
+    <!-- Step 3: Theme -->
+    <div class="onboard-step" id="onboard-step-3" style="display:none">
+      <div class="onboard-progress">
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot"></div>
+        <div class="onboard-dot active"></div>
+      </div>
+      <div class="onboard-emoji">🎨</div>
+      <h2 class="onboard-title">Choose Your Style</h2>
+      <p class="onboard-sub">Pick an interface theme</p>
+      <div class="onboard-themes">
+        <div class="onboard-theme-opt active" data-theme="frost">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#0a0a0c,#1a1a22)"></div>
+          <div class="onboard-theme-label">FROST</div>
+        </div>
+        <div class="onboard-theme-opt" data-theme="light">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#ededf2,#ffffff)"></div>
+          <div class="onboard-theme-label">LIGHT</div>
+        </div>
+        <div class="onboard-theme-opt" data-theme="auto">
+          <div class="onboard-theme-swatch" style="background:linear-gradient(135deg,#0a0a0c 50%,#ededf2 50%)"></div>
+          <div class="onboard-theme-label">AUTO</div>
+        </div>
+      </div>
+      <button class="primary-btn full" id="onboard-finish-btn">LAUNCH VOID →</button>
+      <button class="login-link-btn" id="onboard-theme-back">← Back</button>
+    </div>
+
   </div>
 </div>
 

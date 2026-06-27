@@ -29,6 +29,39 @@ const App = {
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
 
+const LANG_NAMES = {
+  en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
+  th:'Thai', vi:'Vietnamese', zh:'Chinese', ko:'Korean', ja:'Japanese',
+  tr:'Turkish', ru:'Russian', es:'Spanish', pt:'Portuguese',
+  fr:'French', de:'German', it:'Italian', nl:'Dutch',
+};
+
+const STT_LANG_MAP = {
+  en:'en-US', ar:'ar-SA', ms:'ms-MY', id:'id-ID', tl:'fil-PH',
+  th:'th-TH', vi:'vi-VN', zh:'zh-CN', ko:'ko-KR', ja:'ja-JP',
+  tr:'tr-TR', ru:'ru-RU', es:'es-ES', pt:'pt-BR', fr:'fr-FR',
+  de:'de-DE', it:'it-IT', nl:'nl-NL',
+};
+
+function getSTTLang() {
+  return STT_LANG_MAP[getActiveLang()] || 'en-US';
+}
+
+function getActiveLang() {
+  const s = App.settings.lang || 'auto';
+  if (s !== 'auto') return s;
+  return (navigator.language || 'en').split('-')[0].toLowerCase();
+}
+
+function buildSystemPrompt() {
+  const lang = getActiveLang();
+  const name = LANG_NAMES[lang] || 'English';
+  const inject = lang !== 'en'
+    ? `\n\nIMPORTANT: The user's system language is ${name}. Always respond in ${name} unless the user writes in a different language.`
+    : '';
+  return VOID_SYSTEM + inject;
+}
+
 // After deploying worker/index.js, paste your Worker URL here.
 // The Worker handles all provider routing — model field is ignored server-side.
 const VOID_CORE_API = { url: 'https://void-proxy.mohamadhacothman1.workers.dev', key: '', model: '' };
@@ -39,12 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLogin();
 });
 
-/* ============ Login System ============ */
+/* ============ Login System (multi-step) ============ */
 
 function setupLogin() {
   const modal = document.getElementById('login-modal');
-  const emailInput = document.getElementById('login-email-input');
-  const submitBtn = document.getElementById('login-submit-btn');
 
   const saved = localStorage.getItem('void_current_user');
   if (saved) {
@@ -56,30 +87,157 @@ function setupLogin() {
 
   if (modal) modal.style.display = 'flex';
 
-  function doLogin() {
-    const email = emailInput.value.trim();
+  let pendingCode = '';
+  let pendingEmail = '';
+
+  const emailInput  = document.getElementById('login-email-input');
+  const sendBtn     = document.getElementById('login-send-code-btn');
+  const step1       = document.getElementById('login-step-1');
+  const step2       = document.getElementById('login-step-2');
+  const toLabel     = document.getElementById('login-to-label');
+  const demoHint    = document.getElementById('login-demo-hint');
+  const verifyBtn   = document.getElementById('login-verify-btn');
+  const backBtn     = document.getElementById('login-back-btn');
+  const error1      = document.getElementById('login-error-1');
+  const error2      = document.getElementById('login-error-2');
+  const codeDigits  = document.querySelectorAll('.login-code-digit');
+
+  function sendCode() {
+    const email = (emailInput?.value || '').trim();
     if (!email || !email.includes('@')) {
-      emailInput.style.borderColor = 'var(--danger)';
+      if (error1) error1.textContent = 'Please enter a valid email address.';
       return;
     }
-    App.currentUser = email;
-    localStorage.setItem('void_current_user', email);
-    if (modal) modal.style.display = 'none';
-    bootApp();
+    if (error1) error1.textContent = '';
+    pendingEmail = email;
+    pendingCode  = String(Math.floor(100000 + Math.random() * 900000));
+
+    if (toLabel) toLabel.textContent = email;
+    if (demoHint) demoHint.textContent = `Demo: your code is ${pendingCode}`;
+
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'flex';
+    codeDigits.forEach(d => { d.value = ''; });
+    if (codeDigits[0]) codeDigits[0].focus();
   }
 
-  if (submitBtn) submitBtn.addEventListener('click', doLogin);
-  if (emailInput) {
-    emailInput.addEventListener('keydown', (e) => {
-      emailInput.style.borderColor = '';
-      if (e.key === 'Enter') doLogin();
-    });
+  function verify() {
+    const entered = Array.from(codeDigits).map(d => d.value).join('');
+    if (entered !== pendingCode) {
+      if (error2) error2.textContent = 'Incorrect code — try again.';
+      return;
+    }
+    if (error2) error2.textContent = '';
+    App.currentUser = pendingEmail;
+    localStorage.setItem('void_current_user', pendingEmail);
+    if (modal) modal.style.display = 'none';
+
+    const profileKey = `void_profile_${pendingEmail}`;
+    if (!localStorage.getItem(profileKey)) {
+      showOnboarding();
+    } else {
+      bootApp();
+    }
   }
+
+  if (sendBtn) sendBtn.addEventListener('click', sendCode);
+  if (emailInput) emailInput.addEventListener('keydown', e => {
+    if (error1) error1.textContent = '';
+    if (e.key === 'Enter') sendCode();
+  });
+  if (verifyBtn) verifyBtn.addEventListener('click', verify);
+  if (backBtn) backBtn.addEventListener('click', () => {
+    if (step2) step2.style.display = 'none';
+    if (step1) step1.style.display = 'flex';
+    if (error2) error2.textContent = '';
+  });
+
+  codeDigits.forEach((input, i, all) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(-1);
+      if (input.value && i < all.length - 1) all[i + 1].focus();
+      if (Array.from(all).every(d => d.value.length === 1)) verify();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !input.value && i > 0) all[i - 1].focus();
+    });
+    input.addEventListener('paste', e => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+      all.forEach((d, j) => { d.value = text[j] || ''; });
+      const next = all[Math.min(text.length, 5)];
+      if (next) next.focus();
+      if (text.length === 6) verify();
+    });
+  });
+}
+
+/* ============ Onboarding (first-time user) ============ */
+
+function showOnboarding() {
+  const modal = document.getElementById('onboard-modal');
+  if (modal) modal.style.display = 'flex';
+
+  const steps = [
+    document.getElementById('onboard-step-1'),
+    document.getElementById('onboard-step-2'),
+    document.getElementById('onboard-step-3'),
+  ];
+
+  const nameInput     = document.getElementById('onboard-name-input');
+  const callsignInput = document.getElementById('onboard-callsign-input');
+  const nameNext      = document.getElementById('onboard-name-next');
+  const callsignNext  = document.getElementById('onboard-callsign-next');
+  const callsignBack  = document.getElementById('onboard-callsign-back');
+  const themeBack     = document.getElementById('onboard-theme-back');
+  const finishBtn     = document.getElementById('onboard-finish-btn');
+
+  let profile = { name: '', callsign: '', theme: 'frost' };
+
+  function goStep(n) {
+    steps.forEach((s, i) => { if (s) s.style.display = i === n ? 'flex' : 'none'; });
+  }
+
+  if (nameNext) nameNext.addEventListener('click', () => {
+    const name = nameInput?.value.trim();
+    if (!name) { nameInput?.focus(); return; }
+    profile.name = name;
+    if (callsignInput) callsignInput.placeholder = name;
+    goStep(1);
+    callsignInput?.focus();
+  });
+  if (nameInput) nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameNext?.click(); });
+
+  if (callsignNext) callsignNext.addEventListener('click', () => {
+    profile.callsign = callsignInput?.value.trim() || profile.name;
+    goStep(2);
+  });
+  if (callsignBack) callsignBack.addEventListener('click', () => goStep(0));
+  if (themeBack) themeBack.addEventListener('click', () => goStep(1));
+
+  document.querySelectorAll('.onboard-theme-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.onboard-theme-opt').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      profile.theme = opt.dataset.theme;
+    });
+  });
+
+  if (finishBtn) finishBtn.addEventListener('click', () => {
+    const profileKey = `void_profile_${App.currentUser}`;
+    localStorage.setItem(profileKey, JSON.stringify(profile));
+    App.settings.theme = profile.theme;
+    if (modal) modal.style.display = 'none';
+    bootApp();
+  });
 }
 
 function bootApp() {
   loadSettings();
   applyTheme(App.settings.theme);
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (App.settings.theme === 'auto') applyTheme('auto');
+  });
   setupNav();
   setupSettingsPanels();
   setupThemePicker();
@@ -91,6 +249,7 @@ function bootApp() {
   setupPreferencesPanel();
   setupProviderPicker();
   setupMemoryPanel();
+  setupStudyMode();
   loadTasks();
   loadCommands();
   loadChatHistory();
@@ -119,9 +278,15 @@ function saveSettings() {
 
 /* ============ Theme ============ */
 
+function resolveThemeForSystem(name) {
+  if (name !== 'auto') return name;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'frost';
+}
+
 function applyTheme(name) {
   App.settings.theme = name;
-  document.documentElement.setAttribute('data-theme', name === 'frost' ? '' : name);
+  const resolved = resolveThemeForSystem(name);
+  document.documentElement.setAttribute('data-theme', resolved === 'frost' ? '' : resolved);
   document.querySelectorAll('.theme-swatch').forEach(d => {
     d.classList.toggle('active', d.dataset.theme === name);
   });
@@ -143,49 +308,22 @@ function setupNav() {
     pill.addEventListener('click', () => switchTab(pill.dataset.target));
   });
 
-  document.getElementById('open-settings-btn').addEventListener('click', openSettingsDrawer);
-  document.getElementById('close-settings-btn').addEventListener('click', closeSettingsDrawer);
-
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
+  document.getElementById('open-settings-btn').addEventListener('click', () => {
+    document.getElementById('view-main').classList.remove('active');
+    document.getElementById('view-settings').classList.add('active');
+  });
+  document.getElementById('close-settings-btn').addEventListener('click', () => {
+    document.getElementById('view-settings').classList.remove('active');
+    document.getElementById('view-main').classList.add('active');
+  });
 
   document.getElementById('hub-detail-back-btn').addEventListener('click', () => {
     switchTab(App.hubDetailReturnTab);
+    if (App.hubDetailReturnTab === 'tab-gamehub') openMLBBContent();
   });
-}
 
-function openSettingsDrawer() {
-  document.getElementById('view-main').classList.remove('active');
-  document.getElementById('view-settings').classList.add('active');
-  populateProfileDrawer();
-}
-
-function closeSettingsDrawer() {
-  document.getElementById('view-settings').classList.remove('active');
-  document.getElementById('view-main').classList.add('active');
-}
-
-function logoutUser() {
-  if (!confirm('Log out of VOID?')) return;
-  localStorage.removeItem('void_current_user');
-  location.reload();
-}
-
-function populateProfileDrawer() {
-  const profile = getUserProfile();
-  const name     = profile?.name    || (App.currentUser ? App.currentUser.split('@')[0] : 'VOID USER');
-  const email    = App.currentUser  || '';
-  const initial  = name.charAt(0).toUpperCase();
-
-  const avatarEl  = document.getElementById('settings-avatar');
-  const nameEl    = document.getElementById('settings-profile-name');
-  const emailEl   = document.getElementById('settings-profile-email');
-  const hdrAvatar = document.getElementById('avatar-initial');
-
-  if (avatarEl)  avatarEl.textContent  = initial;
-  if (nameEl)    nameEl.textContent    = name.toUpperCase();
-  if (emailEl)   emailEl.textContent   = email;
-  if (hdrAvatar) hdrAvatar.textContent = initial;
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
 }
 
 function switchTab(targetId) {
@@ -207,7 +345,7 @@ function switchTabRaw(targetId) {
 /* ============ Settings panel navigation ============ */
 
 function setupSettingsPanels() {
-  document.querySelectorAll('.menu-item, .drawer-item').forEach(item => {
+  document.querySelectorAll('.menu-item').forEach(item => {
     item.addEventListener('click', () => openSettingsPanel(item.dataset.openPanel));
   });
 
@@ -423,10 +561,12 @@ function setupChat() {
     recognizer = new SpeechRecognition();
     recognizer.continuous = false;
     recognizer.interimResults = false;
+    recognizer.lang = getSTTLang();
     recognizer.addEventListener('result', (e) => {
       const text = e.results[0][0].transcript;
       input.value = (input.value ? input.value + ' ' : '') + text;
       input.dispatchEvent(new Event('input'));
+      App.voiceTriggered = true;
     });
     recognizer.addEventListener('end', () => {
       listening = false;
@@ -575,7 +715,7 @@ async function sendMessage() {
   updateSendMicBtn();
 
   const typingId = appendTyping();
-  const messages = [{ role: 'system', content: VOID_SYSTEM }, ...App.chatHistory.slice(-20)];
+  const messages = [{ role: 'system', content: buildSystemPrompt() }, ...App.chatHistory.slice(-20)];
 
   let reply = null;
   let lastError = null;
@@ -623,7 +763,7 @@ async function sendMessage() {
     App.chatHistory.push({ role: 'assistant', content: reply });
     saveChatHistory();
     appendMessage('system', reply);
-    speak(reply);
+    if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
   } else {
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
@@ -637,15 +777,16 @@ function appendMessage(role, text) {
   App.msgCount++;
   updateWelcomeStatsLine();
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-  const bubbleClass = role === 'user' ? 'user' : 'assistant';
-  const label = role === 'user' ? `YOU  ${time}` : 'VOID';
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const isUser = role === 'user';
+  const bubbleClass = isUser ? 'user' : 'assistant';
+  const label = isUser ? 'YOU' : 'VOID';
 
   const el = document.createElement('div');
   el.className = `chat-bubble ${bubbleClass}`;
   el.innerHTML = `
-    <div class="bubble-meta">${label}</div>
-    <div class="bubble-body">${escapeHTML(text)}</div>
+    <div class="bubble-meta">${label} // ${time}</div>
+    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${escapeHTML(text)}</div>
   `;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -662,7 +803,7 @@ function appendTyping() {
   const el = document.createElement('div');
   el.className = 'chat-bubble assistant';
   el.id = id;
-  el.innerHTML = `<div class="bubble-meta">VOID</div><div class="bubble-body void-typing">···</div>`;
+  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body">...</div>`;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return id;
@@ -835,19 +976,36 @@ function renderMemoryInfo() {
   `;
 }
 
+function getUserProfile() {
+  if (!App.currentUser) return null;
+  try { return JSON.parse(localStorage.getItem(`void_profile_${App.currentUser}`)); } catch(e) { return null; }
+}
+
 function updateUserDisplay() {
-  const statusEl = document.getElementById('hud-status');
-<<<<<<< Updated upstream
-  if (statusEl && App.currentUser) {
-    statusEl.textContent = App.currentUser.split('@')[0].toUpperCase() + '::ONLINE';
-  }
-=======
-  if (!statusEl || !App.currentUser) return;
+  if (!App.currentUser) return;
   const profile = getUserProfile();
   const displayName = profile?.name || App.currentUser.split('@')[0];
-  statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
-  populateProfileDrawer();
->>>>>>> Stashed changes
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const statusEl = document.getElementById('hud-status');
+  if (statusEl) statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
+
+  const avatarInitialEl = document.getElementById('avatar-initial');
+  if (avatarInitialEl) avatarInitialEl.textContent = initial;
+
+  const settingsAvatarEl = document.getElementById('settings-avatar');
+  if (settingsAvatarEl) settingsAvatarEl.textContent = initial;
+
+  const settingsNameEl = document.getElementById('settings-name');
+  if (settingsNameEl) settingsNameEl.textContent = displayName;
+
+  const settingsEmailEl = document.getElementById('settings-email');
+  if (settingsEmailEl) settingsEmailEl.textContent = App.currentUser;
+}
+
+function logoutUser() {
+  localStorage.removeItem('void_current_user');
+  location.reload();
 }
 
 /* ============ Commands panel ============ */
@@ -999,45 +1157,35 @@ function renderTasks() {
 
 /* ============ GameHub ============ */
 
-function setupGameHub() {
-<<<<<<< Updated upstream
-=======
-  // Sub-nav: GAMING ↔ STUDY
-  const navGaming = document.getElementById('games-nav-gaming');
-  const navStudy  = document.getElementById('games-nav-study');
-  if (navGaming) navGaming.addEventListener('click', () => {
-    navGaming.classList.add('active');
-    navStudy?.classList.remove('active');
-    closeMLBBContent();
-  });
-  if (navStudy) navStudy.addEventListener('click', () => {
-    navStudy.classList.add('active');
-    navGaming?.classList.remove('active');
-    openStudyPanel();
-  });
+function openMLBBContent() {
+  const picker  = document.getElementById('games-picker-view');
+  const content = document.getElementById('mlbb-content-view');
+  if (picker)  picker.style.display = 'none';
+  if (content) content.classList.add('active');
+}
 
-  // MLBB tile → enter MLBB content
+function closeMLBBContent() {
+  const picker  = document.getElementById('games-picker-view');
+  const content = document.getElementById('mlbb-content-view');
+  if (content) content.classList.remove('active');
+  if (picker)  picker.style.display = '';
+}
+
+function setupGameHub() {
   const mlbbTile = document.getElementById('mlbb-tile');
   if (mlbbTile) {
     mlbbTile.addEventListener('click', openMLBBContent);
     mlbbTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openMLBBContent(); });
   }
 
-  // Back to games (from MLBB content header)
   const backToGames = document.getElementById('mlbb-back-to-games');
-  if (backToGames) backToGames.addEventListener('click', () => {
-    closeMLBBContent();
-    // Reset sub-nav to GAMING
-    navGaming?.classList.add('active');
-    navStudy?.classList.remove('active');
-  });
+  if (backToGames) backToGames.addEventListener('click', closeMLBBContent);
 
   const studyBtn = document.getElementById('btn-open-study');
   if (studyBtn) {
     studyBtn.addEventListener('click', () => openStudyPanel());
   }
 
->>>>>>> Stashed changes
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.gamehub-tab-btn').forEach(b => b.classList.remove('active'));
@@ -1047,6 +1195,7 @@ function setupGameHub() {
     });
   });
 
+  // item type sub-tabs
   document.querySelectorAll('.item-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.item-type-btn').forEach(b => b.classList.remove('active'));
@@ -1079,6 +1228,326 @@ function setupGameHub() {
       );
     });
   }
+}
+
+/* ============================================================
+   STUDY MODE
+   ============================================================ */
+
+/* ============================================================
+   STUDY MODE — 44 world locations + vibes
+   ============================================================ */
+
+const STUDY_LOCATIONS = [
+  // VIBES
+  { id:'lofi-cafe',     name:'LOFI CAFÉ',       region:'VIBES',      flag:'🎵', videoId:'jfKfPfyJRdk' },
+  { id:'rain',          name:'RAIN SOUNDS',      region:'VIBES',      flag:'🌧️', videoId:'yIQd2Ya0Ziw' },
+  { id:'ocean',         name:'OCEAN WAVES',      region:'VIBES',      flag:'🌊', videoId:'kpSEtzFd_J4' },
+  { id:'fireplace',     name:'FIREPLACE',        region:'VIBES',      flag:'🔥', videoId:'L_LUpnjgPso' },
+  { id:'forest',        name:'FOREST',           region:'VIBES',      flag:'🌿', videoId:'eKFTSSKCzWA' },
+  { id:'night-sky',     name:'NIGHT SKY',        region:'VIBES',      flag:'🌌', videoId:'f_lQQSfN35A' },
+  // JAPAN
+  { id:'tokyo',         name:'TOKYO',            region:'JAPAN',      flag:'🇯🇵', videoId:'iYWIZeDdq5A' },
+  { id:'kyoto',         name:'KYOTO',            region:'JAPAN',      flag:'🇯🇵', videoId:'_Whyf8mMoSk' },
+  { id:'osaka',         name:'OSAKA',            region:'JAPAN',      flag:'🇯🇵', videoId:'lCxaJTJkYkI' },
+  // KOREA & CHINA
+  { id:'seoul',         name:'SEOUL',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'g7G0MRVbM6o' },
+  { id:'busan',         name:'BUSAN',            region:'EAST ASIA',  flag:'🇰🇷', videoId:'4wxGVidILnI' },
+  { id:'shanghai',      name:'SHANGHAI',         region:'EAST ASIA',  flag:'🇨🇳', videoId:'vxMYH3FpS9Q' },
+  { id:'hong-kong',     name:'HONG KONG',        region:'EAST ASIA',  flag:'🇭🇰', videoId:'xNxFmIzBjv0' },
+  // SOUTHEAST ASIA
+  { id:'bali',          name:'BALI',             region:'SE ASIA',    flag:'🇮🇩', videoId:'PaSKoJvNEwY' },
+  { id:'bangkok',       name:'BANGKOK',          region:'SE ASIA',    flag:'🇹🇭', videoId:'rHRK65m7d8Y' },
+  { id:'singapore',     name:'SINGAPORE',        region:'SE ASIA',    flag:'🇸🇬', videoId:'99SFP4JTVSY' },
+  { id:'hanoi',         name:'HANOI',            region:'SE ASIA',    flag:'🇻🇳', videoId:'EGbU6FUBhT4' },
+  // MIDDLE EAST & SOUTH ASIA
+  { id:'dubai',         name:'DUBAI',            region:'MIDDLE EAST',flag:'🇦🇪', videoId:'6apS_4LFYAM' },
+  { id:'istanbul',      name:'ISTANBUL',         region:'MIDDLE EAST',flag:'🇹🇷', videoId:'B3xGj-0VZFI' },
+  { id:'mumbai',        name:'MUMBAI',           region:'SOUTH ASIA', flag:'🇮🇳', videoId:'yMYIwKnRF7Q' },
+  // EUROPE — WEST
+  { id:'paris',         name:'PARIS',            region:'EUROPE',     flag:'🇫🇷', videoId:'EkzQ6nEhG-E' },
+  { id:'london',        name:'LONDON',           region:'EUROPE',     flag:'🇬🇧', videoId:'bnkVkoHEWoQ' },
+  { id:'rome',          name:'ROME',             region:'EUROPE',     flag:'🇮🇹', videoId:'JMJ7GjAWvXE' },
+  { id:'barcelona',     name:'BARCELONA',        region:'EUROPE',     flag:'🇪🇸', videoId:'fqJMKP3AGWQ' },
+  { id:'amsterdam',     name:'AMSTERDAM',        region:'EUROPE',     flag:'🇳🇱', videoId:'CZIXbPjbBFI' },
+  { id:'madrid',        name:'MADRID',           region:'EUROPE',     flag:'🇪🇸', videoId:'37Vd6BFHKBU' },
+  { id:'milan',         name:'MILAN',            region:'EUROPE',     flag:'🇮🇹', videoId:'PQ3X3FEMEFg' },
+  // EUROPE — NORTH/EAST
+  { id:'prague',        name:'PRAGUE',           region:'EUROPE',     flag:'🇨🇿', videoId:'InjwvdDijwE' },
+  { id:'vienna',        name:'VIENNA',           region:'EUROPE',     flag:'🇦🇹', videoId:'5VhHJMHPX6I' },
+  { id:'berlin',        name:'BERLIN',           region:'EUROPE',     flag:'🇩🇪', videoId:'nT4JFHWbHss' },
+  { id:'zurich',        name:'ZURICH',           region:'EUROPE',     flag:'🇨🇭', videoId:'fEu4EXSQ4EM' },
+  { id:'santorini',     name:'SANTORINI',        region:'EUROPE',     flag:'🇬🇷', videoId:'QIiCbzGjwJ8' },
+  { id:'lisbon',        name:'LISBON',           region:'EUROPE',     flag:'🇵🇹', videoId:'FpMzJY7WL7o' },
+  { id:'edinburgh',     name:'EDINBURGH',        region:'EUROPE',     flag:'🇬🇧', videoId:'sZ5XFnBPtI8' },
+  { id:'copenhagen',    name:'COPENHAGEN',       region:'EUROPE',     flag:'🇩🇰', videoId:'kEgouIO0FpA' },
+  // AMERICAS
+  { id:'new-york',      name:'NEW YORK',         region:'AMERICAS',   flag:'🇺🇸', videoId:'n61ULEU7CO0' },
+  { id:'los-angeles',   name:'LOS ANGELES',      region:'AMERICAS',   flag:'🇺🇸', videoId:'bkXSaS1cT5I' },
+  { id:'chicago',       name:'CHICAGO',          region:'AMERICAS',   flag:'🇺🇸', videoId:'KmMGS7FKOBM' },
+  { id:'miami',         name:'MIAMI',            region:'AMERICAS',   flag:'🇺🇸', videoId:'jJjSFCWZ8Y8' },
+  { id:'san-francisco', name:'SAN FRANCISCO',    region:'AMERICAS',   flag:'🇺🇸', videoId:'w2TbAXFCGxA' },
+  { id:'toronto',       name:'TORONTO',          region:'AMERICAS',   flag:'🇨🇦', videoId:'PO8PvKUmXes' },
+  { id:'rio',           name:'RIO DE JANEIRO',   region:'AMERICAS',   flag:'🇧🇷', videoId:'7VqsQ96uVTs' },
+  { id:'mexico-city',   name:'MEXICO CITY',      region:'AMERICAS',   flag:'🇲🇽', videoId:'IHlrRSz1kLU' },
+  // AFRICA & OCEANIA
+  { id:'cape-town',     name:'CAPE TOWN',        region:'AFRICA',     flag:'🇿🇦', videoId:'tQwEzrJXLls' },
+  { id:'marrakech',     name:'MARRAKECH',        region:'AFRICA',     flag:'🇲🇦', videoId:'eY6wEYsomj8' },
+  { id:'sydney',        name:'SYDNEY',           region:'OCEANIA',    flag:'🇦🇺', videoId:'Ey3Buk4NJrE' },
+];
+
+const studyState = {
+  active: false,
+  clockInterval: null,
+  chatHistory: [],
+  wakeRec: null,
+  wakeActive: false,
+  micRec: null,
+};
+
+function setupStudyMode() {
+  // Grid back button
+  const gridBack = document.getElementById('study-grid-back-btn');
+  if (gridBack) gridBack.addEventListener('click', () => switchTab('tab-gamehub'));
+
+  // Grid search
+  const searchInput = document.getElementById('study-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      renderStudyGrid(q
+        ? STUDY_LOCATIONS.filter(l => l.name.toLowerCase().includes(q) || l.region.toLowerCase().includes(q))
+        : STUDY_LOCATIONS
+      );
+    });
+  }
+
+  // Video overlay back button
+  const videoBack = document.getElementById('study-back-btn');
+  if (videoBack) videoBack.addEventListener('click', closeStudyVideo);
+
+  // Mini chat controls
+  const minBtn  = document.getElementById('study-chat-min');
+  const head    = document.getElementById('study-chat-head');
+  const sendBtn = document.getElementById('study-send-btn');
+  const input   = document.getElementById('study-input');
+  const micBtn  = document.getElementById('study-mic-btn');
+
+  if (minBtn)  minBtn.addEventListener('click',  (e) => { e.stopPropagation(); toggleStudyChat(); });
+  if (head)    head.addEventListener('click',    () => { const c = document.getElementById('study-chat'); if (c && c.classList.contains('minimized')) toggleStudyChat(); });
+  if (sendBtn) sendBtn.addEventListener('click', sendStudyMessage);
+  if (input)   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendStudyMessage(); });
+  if (micBtn)  micBtn.addEventListener('click',  triggerStudyMic);
+}
+
+/* openStudyPanel — called from STUDY pill, shows the location grid */
+function openStudyPanel() {
+  switchTab('tab-study-grid');
+  renderStudyGrid(STUDY_LOCATIONS);
+  const s = document.getElementById('study-search-input');
+  if (s) s.value = '';
+}
+
+/* openStudyVideo — called when a location card is clicked */
+function openStudyVideo(loc) {
+  const overlay = document.getElementById('study-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'block';
+  studyState.active = true;
+  studyState.chatHistory = [];
+
+  // Reset chat to welcome
+  const msgs = document.getElementById('study-msgs');
+  if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
+
+  // Set video — allow pointer events so user can interact if autoplay is blocked
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) {
+    iframe.style.pointerEvents = 'auto';
+    iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&enablejsapi=0`;
+  }
+
+  startStudyClock();
+  startWakeWord();
+}
+
+function closeStudyVideo() {
+  const overlay = document.getElementById('study-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
+  studyState.active = false;
+
+  if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
+  stopWakeWord();
+
+  const iframe = document.getElementById('study-iframe');
+  if (iframe) iframe.src = '';
+
+  switchTab('tab-study-grid');
+}
+
+/* renderStudyGrid — builds the location card grid */
+function renderStudyGrid(locs) {
+  const grid = document.getElementById('study-loc-grid');
+  if (!grid) return;
+  if (!locs.length) {
+    grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
+    return;
+  }
+  grid.innerHTML = locs.map(loc => `
+    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
+      <div class="hub-card-media study-card-media">
+        <div class="study-card-placeholder">${loc.flag}</div>
+        <img class="hub-card-img" loading="lazy"
+          src="https://img.youtube.com/vi/${loc.videoId}/hqdefault.jpg"
+          onerror="this.style.display='none'"
+          alt="${loc.name}">
+        <div class="hub-card-overlay">
+          <div class="hub-card-title">${loc.name}</div>
+          <div class="hub-card-sub">${loc.region}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('.study-loc-card').forEach(card => {
+    const handler = () => {
+      const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
+      if (loc) openStudyVideo(loc);
+    };
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') handler(); });
+  });
+}
+
+/* Clock */
+function startStudyClock() {
+  if (studyState.clockInterval) clearInterval(studyState.clockInterval);
+  const DAYS   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function tick() {
+    const now = new Date();
+    const clockEl = document.getElementById('study-clock');
+    const dateEl  = document.getElementById('study-date');
+    if (clockEl) clockEl.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    if (dateEl)  dateEl.textContent  = `${DAYS[now.getDay()]} · ${MONTHS[now.getMonth()]} ${now.getDate()}`;
+  }
+  tick();
+  studyState.clockInterval = setInterval(tick, 1000);
+}
+
+/* Wake Word */
+function startWakeWord() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) return;
+  try {
+    const rec = new SpeechRec();
+    rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript.toLowerCase()).join(' ');
+      if (t.includes('hey void') || t.includes('heyvoid') || t.includes('hey, void')) onWakeWordDetected();
+    };
+    rec.onend = () => { if (studyState.active) { try { rec.start(); } catch(_) {} } };
+    rec.onerror = (e) => { if (e.error !== 'no-speech') updateWakePill(false); };
+    rec.start();
+    studyState.wakeRec = rec; studyState.wakeActive = true; updateWakePill(true);
+  } catch(_) {}
+}
+
+function stopWakeWord() {
+  if (studyState.wakeRec) { try { studyState.wakeRec.stop(); } catch(_) {} studyState.wakeRec = null; }
+  studyState.wakeActive = false; updateWakePill(false);
+}
+
+function updateWakePill(on) {
+  const pill = document.getElementById('study-wake-pill');
+  if (pill) pill.classList.toggle('listening', on);
+}
+
+function onWakeWordDetected() {
+  const chat = document.getElementById('study-chat');
+  if (chat) chat.classList.remove('minimized');
+  const minBtn = document.getElementById('study-chat-min');
+  if (minBtn) minBtn.textContent = '−';
+  triggerStudyMic();
+}
+
+/* Chat toggle */
+function toggleStudyChat() {
+  const chat   = document.getElementById('study-chat');
+  const minBtn = document.getElementById('study-chat-min');
+  if (!chat) return;
+  const minimized = chat.classList.toggle('minimized');
+  if (minBtn) minBtn.textContent = minimized ? '+' : '−';
+}
+
+/* Mic in study mode */
+function triggerStudyMic() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('study-mic-btn');
+  if (!SpeechRec) return;
+  if (studyState.micRec) {
+    try { studyState.micRec.stop(); } catch(_) {}
+    studyState.micRec = null;
+    if (btn) btn.classList.remove('active');
+    return;
+  }
+  const rec = new SpeechRec();
+  rec.lang = getSTTLang(); rec.interimResults = false;
+  rec.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    const input = document.getElementById('study-input');
+    if (input) { input.value = transcript; sendStudyMessage(); }
+  };
+  rec.onend  = () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
+  rec.onerror= () => { studyState.micRec = null; if (btn) btn.classList.remove('active'); };
+  rec.start();
+  studyState.micRec = rec;
+  if (btn) btn.classList.add('active');
+}
+
+/* Study chat AI */
+async function sendStudyMessage() {
+  const input = document.getElementById('study-input');
+  const msgs  = document.getElementById('study-msgs');
+  if (!input || !msgs) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  appendStudyMsg('user', text);
+  studyState.chatHistory.push({ role: 'user', content: text });
+
+  const typingEl = document.createElement('div');
+  typingEl.className = 'study-msg study-msg-ai';
+  typingEl.innerHTML = '<span style="opacity:0.45">…</span>';
+  msgs.appendChild(typingEl);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() + '\n\nThe user is studying. Keep responses brief and focused.' },
+    ...studyState.chatHistory.slice(-10),
+  ];
+
+  let reply = null;
+  try { if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch(_) {}
+  if (!reply && App.settings.geminiKey) { try { reply = await callGemini(messages); } catch(_) {} }
+  if (!reply) reply = "Can't reach VOID right now.";
+
+  studyState.chatHistory.push({ role: 'assistant', content: reply });
+  typingEl.remove();
+  appendStudyMsg('ai', reply);
+}
+
+function appendStudyMsg(role, text) {
+  const msgs = document.getElementById('study-msgs');
+  if (!msgs) return;
+  const div = document.createElement('div');
+  div.className = `study-msg study-msg-${role === 'user' ? 'user' : 'ai'}`;
+  div.innerHTML = `<span>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 function renderHeroGrid(heroes) {
@@ -1151,6 +1620,15 @@ function statTileHTML(label, name, img) {
   `;
 }
 
+function attrBarHTML(label, value, color) {
+  return `
+    <div class="hd-attr-row">
+      <span class="hd-attr-label">${label}</span>
+      <div class="hd-attr-bar"><div class="hd-attr-fill" style="width:${value}%;background:${color}"></div></div>
+      <span class="hd-attr-value" style="color:${color}">${value}</span>
+    </div>`;
+}
+
 function openHeroDetail(id) {
   const hero = findHero(id);
   if (!hero) return;
@@ -1158,85 +1636,142 @@ function openHeroDetail(id) {
 
   document.getElementById('hub-detail-header-title').textContent = hero.name.toUpperCase();
 
-  const counterTiles = (hero.counters || []).map(cId => {
-    const c = findHero(cId);
-    if (c) return statTileHTML('COUNTER', c.name, c.img);
-    const it = findItem(cId);
-    if (it) return statTileHTML('ITEM', it.name, it.img);
-    return statTileHTML('COUNTER', cId.replace(/_/g, ' ').toUpperCase(), '');
-  }).join('');
+  const tierTag = hero.tier ? `<span class="hd-tag tag-tier-${hero.tier.toLowerCase()}">${hero.tier === 'S' ? 'TIER S' : hero.tier + ' TIER'}</span>` : '';
+  const roleTag = `<span class="hd-tag tag-role">${hero.role.toUpperCase()}</span>`;
+  const laneTag = hero.lane ? `<span class="hd-tag tag-lane">${hero.lane.toUpperCase()}</span>` : '';
 
-  const buildBlocks = Object.entries(hero.builds || {}).map(([buildName, itemIds]) => `
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">${buildName.toUpperCase()}</div>
-      <div class="hub-detail-build-list">
-        ${itemIds.map((iid, idx) => {
+  const diffLabel = hero.difficulty >= 80 ? 'HARD' : hero.difficulty >= 50 ? 'MEDIUM' : 'EASY';
+  const diffClass = diffLabel === 'EASY' ? 'diff-easy' : diffLabel === 'HARD' ? 'diff-hard' : '';
+  const diffTag = hero.difficulty != null ? `<span class="hd-tag tag-diff ${diffClass}">${diffLabel}</span>` : '';
+
+  const atGlance = (hero.winRate != null) ? `
+    <div class="hd-section-card hd-glance-card">
+      <div class="hd-section-label">AT A GLANCE <span class="hd-live-dot"></span></div>
+      <div class="hd-glance-row">
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">WIN RATE</span>
+          <span class="hd-glance-value wr-color">${hero.winRate}%</span>
+        </div>
+        <div class="hd-glance-divider"></div>
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">PICK RATE</span>
+          <span class="hd-glance-value">${hero.pickRate}%</span>
+        </div>
+        <div class="hd-glance-divider"></div>
+        <div class="hd-glance-stat">
+          <span class="hd-glance-label">BAN RATE</span>
+          <span class="hd-glance-value br-color">${hero.banRate}%</span>
+        </div>
+      </div>
+    </div>` : '';
+
+  const dur = hero.durability ?? 50;
+  const off = hero.offense ?? 50;
+  const ctrl = hero.control ?? 50;
+  const diff = hero.difficulty ?? 50;
+  const overviewPane = `
+    ${atGlance}
+    <div class="hd-section-card">
+      <div class="hd-section-label">ATTRIBUTES</div>
+      ${attrBarHTML('DURABILITY', dur, '#4fc3f7')}
+      ${attrBarHTML('OFFENSE', off, '#ff6b35')}
+      ${attrBarHTML('CONTROL', ctrl, '#4caf50')}
+      ${attrBarHTML('DIFFICULTY', diff, '#ab47bc')}
+    </div>`;
+
+  const buildEntries = Object.entries(hero.builds || {});
+  const buildsPane = buildEntries.map(([buildName, itemIds]) => `
+    <div class="hd-section-card">
+      <div class="hd-section-label">${buildName.toUpperCase()}</div>
+      <div class="hd-build-circles">
+        ${itemIds.map(iid => {
           const item = findItem(iid);
           return item ? `
-            <div class="build-step hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
-              <span class="build-step-num">${idx + 1}</span>
-              <img class="build-step-img" src="${item.img}" alt="" onerror="this.style.display='none'">
-              <div class="hub-detail-stat-tile-text">
-                <span class="hub-detail-stat-label">ITEM</span>
-                <span class="hub-detail-stat-value">${item.name}</span>
-              </div>
+            <div class="hd-build-item hub-detail-stat-tile-clickable" data-stat-name="${item.name}">
+              <div class="hd-build-icon"><img src="${item.img}" alt="${item.name}" onerror="this.style.opacity='0'"></div>
+              <span class="hd-build-name">${item.name}</span>
             </div>` : '';
         }).join('')}
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
+  const ytSearch = `https://www.youtube.com/results?search_query=mlbb+${encodeURIComponent(hero.name)}+combo+montage+player+2025`;
   const comboVid = (typeof HERO_COMBO_VIDEOS !== 'undefined' && HERO_COMBO_VIDEOS[hero.id]) || null;
-  const ytSearch = `https://www.youtube.com/results?search_query=mlbb+${encodeURIComponent(hero.name)}+combo+2025`;
-  const comboSection = `
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">COMBOS</div>
-      ${comboVid ? `
-        <div class="combo-video-wrap">
-          <iframe src="https://www.youtube.com/embed/${comboVid}?rel=0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen loading="lazy"></iframe>
-        </div>` : ''}
-      <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">WATCH COMBO VIDEOS</a>
-    </div>
+  const comboCard = `
+    <div class="hd-section-card">
+      <div class="hd-section-label">COMBOS</div>
+      ${comboVid ? `<div class="combo-video-wrap"><iframe src="https://www.youtube.com/embed/${comboVid}?rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>` : ''}
+      <a class="combo-yt-btn" href="${ytSearch}" target="_blank" rel="noopener noreferrer">▶ WATCH COMBO VIDEOS</a>
+    </div>`;
+
+  // Use scraped weakAgainst data preferably, fall back to counters array
+  const weakList = (hero.weakAgainst && hero.weakAgainst.length)
+    ? hero.weakAgainst
+    : (hero.counters || []).map(cId => {
+        const c = findHero(cId); const it = findItem(cId);
+        return c ? {slug: c.id, name: c.name, wr: null, img: c.img}
+             : it ? {slug: it.id, name: it.name, wr: null, img: it.img, isItem: true}
+             : {slug: cId, name: cId.replace(/_/g,' '), wr: null};
+      });
+
+  const counterRowHTML = (entry, type) => {
+    const heroMatch = findHero(entry.slug) || (entry.img ? null : null);
+    const img = entry.img || (heroMatch && heroMatch.img) || (findHero(entry.slug) ? findHero(entry.slug).img : null) || (findItem(entry.slug) ? findItem(entry.slug).img : null);
+    const targetHero = findHero(entry.slug);
+    const targetItem = findItem(entry.slug);
+    const imgSrc = targetHero ? targetHero.img : targetItem ? targetItem.img : '';
+    const isWeak = type === 'weak';
+    return `
+      <div class="hd-counter-row">
+        <img class="hd-counter-portrait" src="${imgSrc}" alt="${entry.name}" onerror="this.style.opacity='0'">
+        <span class="hd-counter-name">${entry.name}</span>
+        ${entry.wr != null ? `<span class="hd-counter-wr ${isWeak ? 'wr-bad' : 'wr-good'}">${entry.wr}% WR</span>` : `<span class="hd-counter-type">${isWeak ? 'COUNTER' : 'WEAK TO'}</span>`}
+      </div>`;
+  };
+
+  const weakRows = weakList.map(e => counterRowHTML(e, 'weak')).join('');
+  const strongList = hero.strongAgainst || [];
+  const strongRows = strongList.map(e => counterRowHTML(e, 'strong')).join('');
+
+  const countersPane = `
+    ${weakRows ? `<div class="hd-section-card hd-counter-list">
+      <div class="hd-section-label">WEAK AGAINST</div>
+      ${weakRows}
+    </div>` : ''}
+    ${strongRows ? `<div class="hd-section-card hd-counter-list">
+      <div class="hd-section-label">STRONG AGAINST</div>
+      ${strongRows}
+    </div>` : '<p class="muted small">No counter data available.</p>'}
   `;
 
   document.getElementById('hub-detail-content').innerHTML = `
-    <div class="hub-detail-header-card">
-      <div class="hub-detail-avatar-box">
-        <img src="${hero.img}" alt="${hero.name}" onerror="this.style.display='none';">
-      </div>
-      <div class="hub-detail-title-area">
-        <div class="hub-detail-main-title">${hero.name}</div>
-        ${hero.tier ? `
-          <div class="hero-tier-detail">
-            <span class="hero-tier-badge tier-${hero.tier}">${hero.tier}-TIER</span>
-            ${hero.wr ? `<span class="hero-tier-wr">${hero.wr}% WIN RATE</span>` : ''}
-          </div>` : ''}
+    <div class="hd-banner" style="background-image:url('${hero.img}')">
+      <div class="hd-banner-gradient"></div>
+      <div class="hd-banner-info">
+        <div class="hd-hero-name">${hero.name.toUpperCase()}</div>
+        <div class="hd-tags">${tierTag}${roleTag}${laneTag}${diffTag}</div>
       </div>
     </div>
-    <div class="hub-detail-desc-card">
-      <div class="hub-detail-section-name">ROLE</div>
-      <div class="hub-detail-text-body">${hero.role}</div>
+    <div class="hd-tabs">
+      <button class="hd-tab active" data-hdtab="overview">OVERVIEW</button>
+      <button class="hd-tab" data-hdtab="builds">BUILDS</button>
+      <button class="hd-tab" data-hdtab="counters">COUNTERS</button>
     </div>
-    ${(hero.synergies || []).length ? `
-      <div class="hub-detail-desc-card">
-        <div class="hub-detail-section-name">BEST MATCHES</div>
-        <div class="hub-detail-stats-grid">
-          ${hero.synergies.map(sid => {
-            const s = findHero(sid);
-            return s ? statTileHTML('SYNERGY', s.name, s.img) : '';
-          }).join('')}
-        </div>
-      </div>` : ''}
-    ${counterTiles ? `
-      <div class="hub-detail-desc-card">
-        <div class="hub-detail-section-name">COUNTERED BY</div>
-        <div class="hub-detail-stats-grid">${counterTiles}</div>
-      </div>` : ''}
-    ${buildBlocks}
-    ${comboSection}
+    <div class="hd-pane" id="hd-pane-overview">${overviewPane}</div>
+    <div class="hd-pane" id="hd-pane-builds" style="display:none">${buildsPane}${comboCard}</div>
+    <div class="hd-pane" id="hd-pane-counters" style="display:none">${countersPane}</div>
   `;
+
+  document.getElementById('hub-detail-content').querySelectorAll('.hd-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('hub-detail-content').querySelectorAll('.hd-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      ['overview','builds','counters'].forEach(p => {
+        const el = document.getElementById(`hd-pane-${p}`);
+        if (el) el.style.display = p === btn.dataset.hdtab ? '' : 'none';
+      });
+    });
+  });
 
   bindStatTileNav();
   switchTabRaw('tab-hub-detail');
