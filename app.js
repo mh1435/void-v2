@@ -1416,6 +1416,19 @@ function closeStudyVideo() {
   switchTab('tab-study-grid');
 }
 
+const REGION_GRADIENTS = {
+  'VIBES':       'linear-gradient(135deg,#1a0533 0%,#3d1a78 60%,#1a0a2e 100%)',
+  'JAPAN':       'linear-gradient(135deg,#1a0508 0%,#5c1a2a 60%,#2a0a10 100%)',
+  'EAST ASIA':   'linear-gradient(135deg,#050d1f 0%,#0f2d5c 60%,#0a1828 100%)',
+  'SE ASIA':     'linear-gradient(135deg,#061208 0%,#1a4a1f 60%,#0a2010 100%)',
+  'MIDDLE EAST': 'linear-gradient(135deg,#1a0d00 0%,#5c3000 60%,#2a1500 100%)',
+  'SOUTH ASIA':  'linear-gradient(135deg,#1a0800 0%,#5c2000 60%,#2a1000 100%)',
+  'EUROPE':      'linear-gradient(135deg,#04080f 0%,#0d1f3c 60%,#0a1428 100%)',
+  'AMERICAS':    'linear-gradient(135deg,#04050f 0%,#0d0f3c 60%,#080a28 100%)',
+  'AFRICA':      'linear-gradient(135deg,#150800 0%,#4a1e00 60%,#200e00 100%)',
+  'OCEANIA':     'linear-gradient(135deg,#001418 0%,#00404a 60%,#001c22 100%)',
+};
+
 /* renderStudyGrid — builds the location card grid */
 function renderStudyGrid(locs) {
   const grid = document.getElementById('study-loc-grid');
@@ -1424,38 +1437,21 @@ function renderStudyGrid(locs) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
     return;
   }
-  grid.innerHTML = locs.map(loc => `
-    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" data-video-id="${loc.videoId}" role="button" tabindex="0" aria-label="${loc.name}">
-      <div class="hub-card-media study-card-media">
+  grid.innerHTML = locs.map(loc => {
+    const bg = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
+    return `
+    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
+      <div class="hub-card-media study-card-media" style="background:${bg}">
         <div class="study-card-placeholder">${loc.flag}</div>
-        <div class="study-card-vid-wrap"></div>
         <div class="hub-card-overlay">
           <div class="hub-card-title">${loc.name}</div>
           <div class="hub-card-sub">${loc.region}</div>
         </div>
       </div>
-    </div>
-  `).join('');
-
-  const obs = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      const wrap = entry.target.querySelector('.study-card-vid-wrap');
-      if (wrap && !wrap.querySelector('iframe')) {
-        const vid = entry.target.dataset.videoId;
-        const f = document.createElement('iframe');
-        f.src = `https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&mute=1&loop=1&playlist=${vid}&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1`;
-        f.className = 'study-card-vid';
-        f.allow = 'autoplay';
-        f.setAttribute('frameborder', '0');
-        wrap.appendChild(f);
-      }
-      obs.unobserve(entry.target);
-    });
-  }, { threshold: 0.1 });
+    </div>`;
+  }).join('');
 
   grid.querySelectorAll('.study-loc-card').forEach(card => {
-    obs.observe(card);
     const handler = () => {
       const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);
