@@ -1267,47 +1267,37 @@ function setupGameHub() {
    STUDY MODE — 44 world locations + vibes
    ============================================================ */
 
-// Each location uses real, moving stock footage hosted on the Pexels global
-// CDN (works everywhere — not geo-blocked like YouTube). `pexels` is the video
-// id, `file` is the exact mp4 filename suffix. Poster + video URLs are built
-// from these in studyPosterURL() / studyVideoURL() below.
+// Each location is a real, verified YouTube video (4K walking tours, drone
+// flyovers and ambience). YouTube streams adaptively (works on slow networks)
+// and its image CDN is reachable globally. `yt` is the video id; the grid
+// thumbnail and the player embed are both built from it, so what you see in
+// the grid is exactly what plays.
 const STUDY_LOCATIONS = [
   // ---- PLACES ON EARTH ----
-  { id:'london',        name:'LONDON',          region:'EUROPE',     flag:'🇬🇧', pexels:'1721294', file:'hd_1920_1080_25fps' },
-  { id:'covent-garden', name:'COVENT GARDEN',   region:'EUROPE',     flag:'🇬🇧', pexels:'1721303', file:'hd_1920_1080_25fps' },
-  { id:'italy',         name:'ITALY',           region:'EUROPE',     flag:'🇮🇹', pexels:'855565',  file:'hd_1920_1080_24fps' },
-  { id:'old-town',      name:'OLD TOWN',        region:'EUROPE',     flag:'🏛️', pexels:'855564',  file:'hd_1920_1080_24fps' },
-  { id:'the-alps',      name:'THE ALPS',        region:'EUROPE',     flag:'🏔️', pexels:'3214448', file:'hd_1920_1080_25fps' },
-  { id:'downtown',      name:'DOWNTOWN',        region:'AMERICAS',   flag:'🏙️', pexels:'3121459', file:'uhd_2560_1440_24fps' },
-  { id:'cappadocia',    name:'CAPPADOCIA',      region:'MIDDLE EAST',flag:'🎈', pexels:'3015510', file:'hd_1920_1080_24fps' },
-  { id:'sahara',        name:'SAHARA',          region:'AFRICA',     flag:'🐪', pexels:'3015532', file:'hd_1920_1080_24fps' },
-  { id:'desert-drive',  name:'DESERT DRIVE',    region:'AFRICA',     flag:'🏜️', pexels:'2099568', file:'hd_1920_1080_30fps' },
-  { id:'bali',          name:'BALI',            region:'SE ASIA',    flag:'🏝️', pexels:'2169880', file:'uhd_2560_1440_30fps' },
-  { id:'tropical',      name:'TROPICAL',        region:'SE ASIA',    flag:'🌴', pexels:'2169879', file:'uhd_2560_1440_30fps' },
+  { id:'tokyo',         name:'TOKYO',          region:'EAST ASIA',  flag:'🗼', yt:'LBKuAjX7WIY' },
+  { id:'shibuya',       name:'SHIBUYA',        region:'EAST ASIA',  flag:'🇯🇵', yt:'VYvA7AU_3bk' },
+  { id:'new-york',      name:'NEW YORK',       region:'AMERICAS',   flag:'🗽', yt:'3ciZq8ORY5o' },
+  { id:'paris',         name:'PARIS',          region:'EUROPE',     flag:'🗼', yt:'w6C3tDWkhzo' },
+  { id:'venice',        name:'VENICE',         region:'EUROPE',     flag:'🛶', yt:'AK6dYrJpa-s' },
+  { id:'dubai',         name:'DUBAI',          region:'MIDDLE EAST',flag:'🌇', yt:'ss-Le4pherg' },
   // ---- VIBES (ambient real-world scenes) ----
-  { id:'forest',        name:'FOREST',          region:'VIBES',      flag:'🌲', pexels:'1448735', file:'hd_1366_720_24fps' },
-  { id:'forest-stream', name:'FOREST STREAM',   region:'VIBES',      flag:'🏞️', pexels:'2330708', file:'uhd_2560_1440_24fps' },
-  { id:'autumn-road',   name:'AUTUMN ROAD',     region:'VIBES',      flag:'🍂', pexels:'1580455', file:'hd_1920_1080_30fps' },
-  { id:'rain',          name:'RAIN',            region:'VIBES',      flag:'🌧️', pexels:'2491284', file:'hd_1366_720_24fps' },
-  { id:'country-road',  name:'COUNTRY ROAD',    region:'VIBES',      flag:'🛣️', pexels:'2519660', file:'uhd_2560_1440_24fps' },
-  { id:'golden-hour',   name:'GOLDEN HOUR',     region:'VIBES',      flag:'🌅', pexels:'856973',  file:'hd_1920_1080_25fps' },
-  { id:'ocean-waves',   name:'OCEAN WAVES',     region:'VIBES',      flag:'🌊', pexels:'3571264', file:'uhd_2560_1440_30fps' },
-  { id:'rocky-coast',   name:'ROCKY COAST',     region:'VIBES',      flag:'🪨', pexels:'1409899', file:'hd_1920_1080_25fps' },
-  { id:'sunset-sea',    name:'SUNSET SEA',      region:'VIBES',      flag:'🌇', pexels:'2257012', file:'uhd_2560_1440_24fps' },
-  { id:'sunset-coast',  name:'SUNSET COAST',    region:'VIBES',      flag:'🌅', pexels:'1093662', file:'hd_1920_1080_30fps' },
-  { id:'open-sea',      name:'OPEN SEA',        region:'VIBES',      flag:'⛵', pexels:'2257010', file:'uhd_2560_1440_24fps' },
-  { id:'the-harbor',    name:'THE HARBOR',      region:'VIBES',      flag:'⚓', pexels:'2942803', file:'uhd_2560_1440_24fps' },
-  { id:'open-sky',      name:'OPEN SKY',        region:'VIBES',      flag:'☁️', pexels:'3635378', file:'hd_1920_1080_30fps' },
-  { id:'starry-night',  name:'STARRY NIGHT',    region:'VIBES',      flag:'🌌', pexels:'857195',  file:'hd_1280_720_25fps' },
-  { id:'earth',         name:'EARTH AT NIGHT',  region:'VIBES',      flag:'🌍', pexels:'1851190', file:'hd_1920_1080_25fps' },
+  { id:'earth',         name:'PLANET EARTH',   region:'VIBES',      flag:'🌍', yt:'AKeUssuu3Is' },
+  { id:'waterfall',     name:'WATERFALL',      region:'VIBES',      flag:'🏞️', yt:'vemLEwjIxow' },
+  { id:'forest',        name:'FOREST',         region:'VIBES',      flag:'🌲', yt:'XxP8kxUn5bc' },
+  { id:'forest-stream', name:'FOREST STREAM',  region:'VIBES',      flag:'🏕️', yt:'29XymHesxa0' },
+  { id:'autumn',        name:'AUTUMN WOODS',   region:'VIBES',      flag:'🍂', yt:'478TeAxm12g' },
+  { id:'golden-woods',  name:'GOLDEN WOODS',   region:'VIBES',      flag:'🍁', yt:'gWf-D2aeE3o' },
+  { id:'rain',          name:'RAIN',           region:'VIBES',      flag:'🌧️', yt:'LRxy_PI4pEg' },
+  { id:'thunderstorm',  name:'THUNDERSTORM',   region:'VIBES',      flag:'⛈️', yt:'mPZkdNFkNps' },
+  { id:'campfire',      name:'CAMPFIRE',       region:'VIBES',      flag:'🔥', yt:'9lh_becOt4Y' },
 ];
 
-/* Build Pexels poster / video URLs (global CDN, no geo-block) */
+/* Build YouTube thumbnail / embed URLs (global image CDN + adaptive player) */
 function studyPosterURL(loc) {
-  return `https://images.pexels.com/videos/${loc.pexels}/free-video-${loc.pexels}.jpg?auto=compress&cs=tinysrgb&w=700`;
+  return `https://img.youtube.com/vi/${loc.yt}/hqdefault.jpg`;
 }
-function studyVideoURL(loc) {
-  return `https://videos.pexels.com/video-files/${loc.pexels}/${loc.pexels}-${loc.file}.mp4`;
+function studyEmbedURL(loc) {
+  return `https://www.youtube.com/embed/${loc.yt}?autoplay=1&mute=1&loop=1&playlist=${loc.yt}&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3`;
 }
 
 const studyState = {
@@ -1375,18 +1365,12 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Real, moving footage via Pexels (global CDN, plays everywhere). The poster
-  // shows instantly while the mp4 buffers, then the video loops silently.
+  // Real footage via YouTube embed — streams adaptively (good on slow networks)
+  // and works globally. The region gradient + thumbnail show while it loads.
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
-  overlay.style.background = grad;
-  const video = document.getElementById('study-video');
-  if (video) {
-    video.poster = studyPosterURL(loc);
-    video.src = studyVideoURL(loc);
-    video.load();
-    const p = video.play();
-    if (p && p.catch) p.catch(() => {}); // ignore autoplay rejection
-  }
+  overlay.style.background = `url('${studyPosterURL(loc)}') center/cover no-repeat, ${grad}`;
+  const frame = document.getElementById('study-video');
+  if (frame) frame.src = studyEmbedURL(loc);
 
   startStudyClock();
   startWakeWord();
@@ -1401,8 +1385,8 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  const video = document.getElementById('study-video');
-  if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
+  const frame = document.getElementById('study-video');
+  if (frame) frame.src = '';
   overlay.style.background = '';
 
   switchTab('tab-study-grid');
