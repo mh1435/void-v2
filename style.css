@@ -413,6 +413,10 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .games-picker-view {
   flex: 1; overflow-y: auto; padding: 20px 14px 24px; -webkit-overflow-scrolling: touch;
 }
+.games-picker-header-row {
+  display: flex; align-items: center; margin-bottom: 14px;
+}
+.games-picker-header-row .games-lib-header { margin-bottom: 0; }
 .games-lib-header {
   font-family: var(--hub-display); font-size: 10px; font-weight: 700;
   letter-spacing: 0.14em; color: var(--muted); margin-bottom: 14px;
@@ -1085,14 +1089,16 @@ body.reduced-motion *::after {
   -webkit-overflow-scrolling: touch;
 }
 .study-loc-card { cursor: pointer; }
-/* Landscape ratio override for location cards */
-.study-loc-card .hub-card-media { padding-top: 62%; }
-/* Region label below card */
+/* Use aspect-ratio (reliable) instead of padding-top hack for landscape study cards */
+.study-loc-card .hub-card-media {
+  padding-top: 0;
+  aspect-ratio: 16 / 10;
+  height: auto;
+}
 .study-loc-card .hub-card-sub { color: rgba(255,255,255,0.45); }
-/* Placeholder while thumbnail loads */
 .study-card-placeholder {
   position: absolute; inset: 0; display: flex; align-items: center;
-  justify-content: center; font-size: 32px; background: #111418;
+  justify-content: center; font-size: 36px; background: #111418;
 }
 
 /* ===========================================================

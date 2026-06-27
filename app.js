@@ -1186,6 +1186,11 @@ function setupGameHub() {
     studyBtn.addEventListener('click', () => openStudyPanel());
   }
 
+  const studyBtnGlobal = document.getElementById('btn-open-study-global');
+  if (studyBtnGlobal) {
+    studyBtnGlobal.addEventListener('click', () => openStudyPanel());
+  }
+
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.gamehub-tab-btn').forEach(b => b.classList.remove('active'));
