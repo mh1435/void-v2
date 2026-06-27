@@ -1268,36 +1268,83 @@ function setupGameHub() {
    ============================================================ */
 
 // Each location is a real, verified YouTube video (4K walking tours, drone
-// flyovers and ambience). YouTube streams adaptively (works on slow networks)
-// and its image CDN is reachable globally. `yt` is the video id; the grid
-// thumbnail and the player embed are both built from it, so what you see in
-// the grid is exactly what plays.
+// flyovers, window views and ambience). YouTube streams adaptively (works on
+// slow networks) and its image CDN is reachable globally. `yt` is the video
+// id; the grid thumbnail and the player are both built from it, so what you
+// see in the grid is exactly what plays.
 const STUDY_LOCATIONS = [
-  // ---- PLACES ON EARTH ----
+  // ---- FAMOUS LOCATIONS ----
   { id:'tokyo',         name:'TOKYO',          region:'EAST ASIA',  flag:'🗼', yt:'LBKuAjX7WIY' },
-  { id:'shibuya',       name:'SHIBUYA',        region:'EAST ASIA',  flag:'🇯🇵', yt:'VYvA7AU_3bk' },
+  { id:'shibuya',       name:'SHIBUYA',        region:'EAST ASIA',  flag:'🌃', yt:'VYvA7AU_3bk' },
+  { id:'kyoto',         name:'KYOTO',          region:'EAST ASIA',  flag:'⛩️', yt:'bWrVMcrrx3M' },
+  { id:'seoul',         name:'SEOUL',          region:'EAST ASIA',  flag:'🇰🇷', yt:'8kpxPaqFfeY' },
+  { id:'hong-kong',     name:'HONG KONG',      region:'EAST ASIA',  flag:'🇭🇰', yt:'Pklttiyo95I' },
+  { id:'kuala-lumpur',  name:'KUALA LUMPUR',   region:'SE ASIA',    flag:'🇲🇾', yt:'pnnvqXWLKwQ' },
   { id:'new-york',      name:'NEW YORK',       region:'AMERICAS',   flag:'🗽', yt:'3ciZq8ORY5o' },
   { id:'paris',         name:'PARIS',          region:'EUROPE',     flag:'🗼', yt:'w6C3tDWkhzo' },
   { id:'venice',        name:'VENICE',         region:'EUROPE',     flag:'🛶', yt:'AK6dYrJpa-s' },
   { id:'dubai',         name:'DUBAI',          region:'MIDDLE EAST',flag:'🌇', yt:'ss-Le4pherg' },
+  // ---- WINDOW VIEWS (looking out onto a busy street) ----
+  { id:'cafe-window',   name:'CAFÉ WINDOW',    region:'EUROPE',     flag:'🪟', yt:'fpCXdbVKUpU' },
+  { id:'city-window',   name:'CITY WINDOW',    region:'AMERICAS',   flag:'🌧️', yt:'dcEiFOLXy0c' },
   // ---- VIBES (ambient real-world scenes) ----
-  { id:'earth',         name:'PLANET EARTH',   region:'VIBES',      flag:'🌍', yt:'AKeUssuu3Is' },
-  { id:'waterfall',     name:'WATERFALL',      region:'VIBES',      flag:'🏞️', yt:'vemLEwjIxow' },
-  { id:'forest',        name:'FOREST',         region:'VIBES',      flag:'🌲', yt:'XxP8kxUn5bc' },
-  { id:'forest-stream', name:'FOREST STREAM',  region:'VIBES',      flag:'🏕️', yt:'29XymHesxa0' },
-  { id:'autumn',        name:'AUTUMN WOODS',   region:'VIBES',      flag:'🍂', yt:'478TeAxm12g' },
-  { id:'golden-woods',  name:'GOLDEN WOODS',   region:'VIBES',      flag:'🍁', yt:'gWf-D2aeE3o' },
   { id:'rain',          name:'RAIN',           region:'VIBES',      flag:'🌧️', yt:'LRxy_PI4pEg' },
-  { id:'thunderstorm',  name:'THUNDERSTORM',   region:'VIBES',      flag:'⛈️', yt:'mPZkdNFkNps' },
+  { id:'forest',        name:'FOREST',         region:'VIBES',      flag:'🌲', yt:'XxP8kxUn5bc' },
   { id:'campfire',      name:'CAMPFIRE',       region:'VIBES',      flag:'🔥', yt:'9lh_becOt4Y' },
+  { id:'waterfall',     name:'WATERFALL',      region:'VIBES',      flag:'🏞️', yt:'vemLEwjIxow' },
+  { id:'earth',         name:'PLANET EARTH',   region:'VIBES',      flag:'🌍', yt:'AKeUssuu3Is' },
 ];
 
-/* Build YouTube thumbnail / embed URLs (global image CDN + adaptive player) */
+/* YouTube thumbnail (global image CDN) */
 function studyPosterURL(loc) {
   return `https://img.youtube.com/vi/${loc.yt}/hqdefault.jpg`;
 }
-function studyEmbedURL(loc) {
-  return `https://www.youtube.com/embed/${loc.yt}?autoplay=1&mute=1&loop=1&playlist=${loc.yt}&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3`;
+
+/* ---- YouTube IFrame Player ----
+   Built via the IFrame API so we can unMute() inside the card-tap gesture,
+   which lets the video autoplay WITH audio (plain embeds are forced muted). */
+let studyYT = null, studyYTReady = false, studyPendingId = null;
+
+function loadStudyYouTubeAPI() {
+  if (window.YT && window.YT.Player) { initStudyYT(); return; }
+  if (!document.getElementById('yt-iframe-api')) {
+    const tag = document.createElement('script');
+    tag.id = 'yt-iframe-api';
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+}
+window.onYouTubeIframeAPIReady = function () { initStudyYT(); };
+
+function initStudyYT() {
+  if (studyYT || !window.YT || !window.YT.Player || !document.getElementById('study-yt')) return;
+  studyYT = new YT.Player('study-yt', {
+    width: '100%', height: '100%',
+    playerVars: { autoplay: 1, controls: 1, playsinline: 1, rel: 0, modestbranding: 1, iv_load_policy: 3 },
+    events: {
+      onReady: () => {
+        studyYTReady = true;
+        if (studyPendingId) { const id = studyPendingId; studyPendingId = null; playStudyYT(id); }
+      },
+      // single videos don't loop on their own — replay when they end
+      onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED && studyYT) { try { studyYT.playVideo(); } catch (_) {} } }
+    }
+  });
+}
+
+function playStudyYT(videoId) {
+  if (!studyYTReady || !studyYT) { studyPendingId = videoId; return; }
+  try {
+    studyYT.loadVideoById(videoId);
+    studyYT.unMute();
+    studyYT.setVolume(100);
+    studyYT.playVideo();
+  } catch (_) {}
+}
+
+function stopStudyYT() {
+  studyPendingId = null;
+  if (studyYT && studyYTReady) { try { studyYT.stopVideo(); } catch (_) {} }
 }
 
 const studyState = {
@@ -1310,6 +1357,9 @@ const studyState = {
 };
 
 function setupStudyMode() {
+  // Pre-create the YouTube player so it's ready before the first tap
+  loadStudyYouTubeAPI();
+
   // Grid back button
   const gridBack = document.getElementById('study-grid-back-btn');
   if (gridBack) gridBack.addEventListener('click', () => switchTab('tab-gamehub'));
@@ -1365,12 +1415,12 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Real footage via YouTube embed — streams adaptively (good on slow networks)
-  // and works globally. The region gradient + thumbnail show while it loads.
+  // Real footage via the YouTube IFrame player — autoplays WITH audio (the
+  // card tap is the user gesture that unlocks sound). Thumbnail + gradient
+  // show underneath while it buffers.
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
   overlay.style.background = `url('${studyPosterURL(loc)}') center/cover no-repeat, ${grad}`;
-  const frame = document.getElementById('study-video');
-  if (frame) frame.src = studyEmbedURL(loc);
+  playStudyYT(loc.yt);
 
   startStudyClock();
   startWakeWord();
@@ -1385,8 +1435,7 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  const frame = document.getElementById('study-video');
-  if (frame) frame.src = '';
+  stopStudyYT();
   overlay.style.background = '';
 
   switchTab('tab-study-grid');
