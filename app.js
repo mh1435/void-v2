@@ -1273,6 +1273,13 @@ function setupGameHub() {
 // id; the grid thumbnail and the player are both built from it, so what you
 // see in the grid is exactly what plays.
 const STUDY_LOCATIONS = [
+  // ---- COZY SPACES (study vibes) ----
+  { id:'lofi-girl',     name:'LOFI GIRL',      region:'SPACES',     flag:'🎧', yt:'I0T9AOG5hwI' },
+  { id:'rainy-desk',    name:'RAINY DESK',     region:'SPACES',     flag:'🌧️', yt:'cd4kOYDTRdo' },
+  { id:'library',       name:'LIBRARY',        region:'SPACES',     flag:'📚', yt:'ZDNuwXemGxA' },
+  { id:'hogwarts',      name:'HOGWARTS',       region:'SPACES',     flag:'🪄', yt:'wra4tQS3fXk' },
+  { id:'coffee-shop',   name:'COFFEE SHOP',    region:'SPACES',     flag:'☕', yt:'MYPVQccHhAQ' },
+  { id:'fireplace',     name:'FIREPLACE',      region:'SPACES',     flag:'🔥', yt:'bTWD9nVgAhQ' },
   // ---- FAMOUS LOCATIONS ----
   { id:'tokyo',         name:'TOKYO',          region:'EAST ASIA',  flag:'🗼', yt:'LBKuAjX7WIY' },
   { id:'shibuya',       name:'SHIBUYA',        region:'EAST ASIA',  flag:'🌃', yt:'VYvA7AU_3bk' },
@@ -1436,6 +1443,7 @@ function closeStudyVideo() {
 }
 
 const REGION_GRADIENTS = {
+  'SPACES':      'linear-gradient(135deg,#2a1500 0%,#7a4a1a 60%,#1a0d00 100%)',
   'VIBES':       'linear-gradient(135deg,#1a0533 0%,#3d1a78 60%,#1a0a2e 100%)',
   'JAPAN':       'linear-gradient(135deg,#1a0508 0%,#5c1a2a 60%,#2a0a10 100%)',
   'EAST ASIA':   'linear-gradient(135deg,#050d1f 0%,#0f2d5c 60%,#0a1828 100%)',
