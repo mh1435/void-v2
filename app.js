@@ -1393,7 +1393,7 @@ function openStudyVideo(loc) {
   const iframe = document.getElementById('study-iframe');
   if (iframe) {
     iframe.style.pointerEvents = 'auto';
-    iframe.src = `https://www.youtube.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&enablejsapi=0`;
+    iframe.src = `https://www.youtube-nocookie.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1`;
   }
 
   startStudyClock();
@@ -1425,13 +1425,10 @@ function renderStudyGrid(locs) {
     return;
   }
   grid.innerHTML = locs.map(loc => `
-    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
+    <div class="hub-card study-loc-card" data-loc-id="${loc.id}" data-video-id="${loc.videoId}" role="button" tabindex="0" aria-label="${loc.name}">
       <div class="hub-card-media study-card-media">
         <div class="study-card-placeholder">${loc.flag}</div>
-        <img class="hub-card-img" loading="lazy"
-          src="https://img.youtube.com/vi/${loc.videoId}/hqdefault.jpg"
-          onerror="this.style.display='none'"
-          alt="${loc.name}">
+        <div class="study-card-vid-wrap"></div>
         <div class="hub-card-overlay">
           <div class="hub-card-title">${loc.name}</div>
           <div class="hub-card-sub">${loc.region}</div>
@@ -1440,7 +1437,25 @@ function renderStudyGrid(locs) {
     </div>
   `).join('');
 
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const wrap = entry.target.querySelector('.study-card-vid-wrap');
+      if (wrap && !wrap.querySelector('iframe')) {
+        const vid = entry.target.dataset.videoId;
+        const f = document.createElement('iframe');
+        f.src = `https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&mute=1&loop=1&playlist=${vid}&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1`;
+        f.className = 'study-card-vid';
+        f.allow = 'autoplay';
+        f.setAttribute('frameborder', '0');
+        wrap.appendChild(f);
+      }
+      obs.unobserve(entry.target);
+    });
+  }, { threshold: 0.1 });
+
   grid.querySelectorAll('.study-loc-card').forEach(card => {
+    obs.observe(card);
     const handler = () => {
       const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);

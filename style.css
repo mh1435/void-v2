@@ -1182,6 +1182,19 @@ body.reduced-motion *::after {
   position: absolute; inset: 0; display: flex; align-items: center;
   justify-content: center; font-size: 36px; background: #111418;
 }
+.study-card-vid-wrap {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 177.78%; /* 16:9 in a ~56% aspect box */
+  height: 177.78%;
+  pointer-events: none;
+  overflow: hidden;
+}
+.study-card-vid {
+  width: 100%; height: 100%;
+  border: none; pointer-events: none;
+}
 
 /* ===========================================================
    STUDY MODE OVERLAY
