@@ -1377,6 +1377,128 @@ function openStudyPanel() {
   if (s) s.value = '';
 }
 
+/* ── Study mode canvas ambient animation ── */
+let _sRAF = null;
+const _sr = (a, b) => a + Math.random() * (b - a);
+
+const _LOC_ANIM = {
+  'rain':       'rain',  'ocean':    'waves', 'fireplace': 'fire',
+  'forest':     'leaves','night-sky':'stars', 'lofi-cafe': 'glow',
+  'kyoto':      'petals','bali':     'waves', 'bangkok':   'rain',
+  'hanoi':      'rain',  'mumbai':   'rain',  'cape-town': 'waves',
+  'marrakech':  'dust',  'dubai':    'dust',  'sydney':    'waves',
+  'busan':      'waves', 'tokyo':    'stars', 'osaka':     'stars',
+};
+const _REG_ANIM = {
+  'VIBES':'stars','JAPAN':'petals','EAST ASIA':'stars','SE ASIA':'rain',
+  'MIDDLE EAST':'dust','SOUTH ASIA':'rain','EUROPE':'glow',
+  'AMERICAS':'glow','AFRICA':'dust','OCEANIA':'waves',
+};
+function _animType(loc) { return _LOC_ANIM[loc.id] || _REG_ANIM[loc.region] || 'glow'; }
+
+function _mkP(type, W, H, scatter) {
+  switch (type) {
+    case 'rain':   return { x:_sr(0,W), y:scatter?_sr(-H,0):-10, l:_sr(10,25), s:_sr(10,18), a:_sr(.07,.2), w:_sr(.4,1) };
+    case 'stars':  return { x:_sr(0,W), y:_sr(0,H), r:_sr(.3,1.8), a:Math.random(), f:_sr(.008,.035), d:Math.random()>.5?1:-1 };
+    case 'fire':   return { x:_sr(W*.15,W*.85), y:H+_sr(0,20), r:_sr(3,12), vx:_sr(-.8,.8), vy:-_sr(1.5,4), life:1, ml:_sr(.4,.9) };
+    case 'waves':  return { x:scatter?_sr(0,W):-50, y:_sr(H*.25,H*.85), amp:_sr(6,22), freq:_sr(.005,.015), ph:_sr(0,Math.PI*2), s:_sr(.4,1.2), a:_sr(.04,.14) };
+    case 'leaves': return { x:scatter?_sr(-W,W):-20, y:scatter?_sr(-H*.5,H):-20, vx:_sr(.6,2), vy:_sr(.3,1.5), rot:Math.random()*Math.PI*2, rs:_sr(-.05,.05), r:_sr(3,7), a:_sr(.3,.7) };
+    case 'petals': return { x:scatter?_sr(-W,W):-20, y:scatter?_sr(-H*.5,H):-20, vx:_sr(.5,1.8), vy:_sr(.25,1.2), rot:Math.random()*Math.PI*2, rs:_sr(-.04,.04), r:_sr(3,8), a:_sr(.25,.65) };
+    case 'dust':   return { x:scatter?_sr(0,W):W+10, y:_sr(0,H), vx:-_sr(.2,1.3), vy:_sr(-.3,.3), r:_sr(.5,3), a:_sr(.03,.18) };
+    default:       return { x:_sr(0,W), y:_sr(0,H), vx:_sr(-.3,.3), vy:-_sr(.1,.6), r:_sr(.5,2.5), a:_sr(.06,.3), life:Math.random() };
+  }
+}
+
+function _drawP(ctx, p, type, t) {
+  ctx.save();
+  switch (type) {
+    case 'rain':
+      ctx.strokeStyle = `rgba(185,215,245,${p.a})`;
+      ctx.lineWidth = p.w;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.l*0.18, p.y + p.l);
+      ctx.stroke();
+      break;
+    case 'stars':
+      ctx.fillStyle = `rgba(220,235,255,${Math.max(0, p.a)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+      break;
+    case 'fire': {
+      const pct = 1 - p.life / p.ml;
+      ctx.fillStyle = `rgba(255,${Math.round(255*(1-pct*.75))},0,${p.life*.75})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.5, p.r*(1-pct*.5)), 0, Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'waves': {
+      const y = p.y + Math.sin(p.ph + t * p.s * 0.018) * p.amp;
+      ctx.strokeStyle = `rgba(90,170,215,${p.a})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, y, 1.2, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'leaves':
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = `rgba(80,160,80,${p.a})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, p.r, p.r*.55, 0, 0, Math.PI*2); ctx.fill();
+      break;
+    case 'petals':
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = `rgba(255,190,205,${p.a})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, p.r, p.r*.55, 0, 0, Math.PI*2); ctx.fill();
+      break;
+    case 'dust':
+      ctx.fillStyle = `rgba(205,185,145,${p.a})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+      break;
+    default:
+      ctx.fillStyle = `rgba(110,170,255,${p.a * Math.max(0,p.life)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function _stepP(p, type, W, H, t) {
+  switch (type) {
+    case 'rain':   p.x -= p.s*.18; p.y += p.s; return p.y > H+30 || p.x < -10;
+    case 'stars':  p.a += p.f*p.d; if (p.a>.92||p.a<.04) p.d=-p.d; return false;
+    case 'fire':   p.x += p.vx; p.y += p.vy; p.r *= .97; p.life -= .013; p.vx += _sr(-.05,.05); return p.life<=0||p.r<.4;
+    case 'waves':  p.x += p.s*.5; return p.x > W+60;
+    case 'leaves':
+    case 'petals': p.x += p.vx; p.y += p.vy; p.rot += p.rs; p.vx += Math.sin(t*.018)*.018; return p.x>W+20||p.y>H+20;
+    case 'dust':   p.x += p.vx; p.y += p.vy; return p.x < -10;
+    default:       p.x += p.vx; p.y += p.vy; p.life -= .004; return p.life<=0||p.y<-10||p.x<-10||p.x>W+10;
+  }
+}
+
+function startStudyCanvas(loc) {
+  stopStudyCanvas();
+  const cv = document.getElementById('study-canvas');
+  if (!cv) return;
+  cv.width = innerWidth; cv.height = innerHeight;
+  const ctx = cv.getContext('2d');
+  const type = _animType(loc);
+  const N = type==='rain'?180:type==='waves'?50:type==='fire'?60:100;
+  const ps = Array.from({length:N}, () => _mkP(type, cv.width, cv.height, true));
+  let t = 0;
+  function frame() {
+    _sRAF = requestAnimationFrame(frame);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    t++;
+    for (let i = 0; i < ps.length; i++) {
+      _drawP(ctx, ps[i], type, t);
+      if (_stepP(ps[i], type, cv.width, cv.height, t)) {
+        ps[i] = _mkP(type, cv.width, cv.height, false);
+      }
+    }
+  }
+  frame();
+}
+
+function stopStudyCanvas() {
+  if (_sRAF) { cancelAnimationFrame(_sRAF); _sRAF = null; }
+  const cv = document.getElementById('study-canvas');
+  if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+}
+
 /* openStudyVideo — called when a location card is clicked */
 function openStudyVideo(loc) {
   const overlay = document.getElementById('study-overlay');
@@ -1389,16 +1511,12 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Apply region gradient so overlay is never pure black
+  // Apply region gradient as overlay base
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
   overlay.style.background = grad;
 
-  // Set video
-  const iframe = document.getElementById('study-iframe');
-  if (iframe) {
-    iframe.style.pointerEvents = 'auto';
-    iframe.src = `https://www.youtube-nocookie.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=1&rel=0&playsinline=1`;
-  }
+  // Start canvas ambient animation
+  startStudyCanvas(loc);
 
   startStudyClock();
   startWakeWord();
@@ -1413,9 +1531,7 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-
-  const iframe = document.getElementById('study-iframe');
-  if (iframe) iframe.src = '';
+  stopStudyCanvas();
 
   switchTab('tab-study-grid');
 }
