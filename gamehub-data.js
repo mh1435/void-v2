@@ -496,11 +496,14 @@ const MLBB_ITEM_DATA_RAW = [
   { id: 'swift_boots',            name: 'Swift Boots',            type: 'Movement',  tier: 'TIER I'   },
 ];
 
-/* Item images via MLBB wiki (Special:FilePath redirects to CDN) */
+/* Item images via mobile-legends Fandom wiki CDN (Special:FilePath → CDN redirect).
+   mobile-legends.fandom.com has better coverage and no Item_ prefix required.
+   Overrides fix apostrophes + lowercase prepositions (of/the/of_the). */
 const ITEM_WIKI_OVERRIDES = {
   berserker_fury:          "Berserker%27s_Fury",
   haas_claws:              "Haas%27s_Claws",
   athena_shield:           "Athena%27s_Shield",
+  blade_of_despair:        "Blade_of_Despair",
   blade_of_the_heptaseas:  "Blade_of_the_Heptaseas",
   wind_of_nature:          "Wind_of_Nature",
   demon_hunter_sword:      "Demon_Hunter_Sword",
@@ -543,7 +546,7 @@ const ITEM_WIKI_OVERRIDES = {
 function resolveItemImg(id) {
   const wiki = ITEM_WIKI_OVERRIDES[id]
     || id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
-  return `https://mlbb.fandom.com/wiki/Special:FilePath/Item_${wiki}.png`;
+  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${wiki}.png`;
 }
 
 function buildHeroTitleString(id) {

@@ -1616,8 +1616,9 @@ function renderTypeGrid(gridId, items) {
   }
   grid.innerHTML = items.map(i => `
     <div class="hub-card" data-item-id="${i.id}">
-      <div class="hub-card-media">
-        <img src="${i.img}" alt="${i.name}" class="hub-card-img" onerror="this.style.display='none';">
+      <div class="hub-card-media" data-item-type="${i.type}">
+        <img src="${i.img}" alt="${i.name}" class="hub-card-img"
+          onerror="this.onerror=null;this.style.display='none';this.parentElement.classList.add('item-img-fallback')" loading="lazy">
         <div class="hub-card-overlay">
           <div class="hub-card-title">${i.name}</div>
           <div class="hub-card-sub">${i.type}</div>
