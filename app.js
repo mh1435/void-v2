@@ -1295,56 +1295,25 @@ const STUDY_LOCATIONS = [
   { id:'earth',         name:'PLANET EARTH',   region:'VIBES',      flag:'🌍', yt:'AKeUssuu3Is' },
 ];
 
-/* YouTube thumbnail (global image CDN) */
+/* YouTube thumbnail — mqdefault is true 16:9 with NO black bars (hqdefault has
+   letterbox bars baked in), so it fills the card cleanly. */
 function studyPosterURL(loc) {
-  return `https://img.youtube.com/vi/${loc.yt}/hqdefault.jpg`;
+  return `https://img.youtube.com/vi/${loc.yt}/mqdefault.jpg`;
 }
 
-/* ---- YouTube IFrame Player ----
-   Built via the IFrame API so we can unMute() inside the card-tap gesture,
-   which lets the video autoplay WITH audio (plain embeds are forced muted). */
-let studyYT = null, studyYTReady = false, studyPendingId = null;
-
-function loadStudyYouTubeAPI() {
-  if (window.YT && window.YT.Player) { initStudyYT(); return; }
-  if (!document.getElementById('yt-iframe-api')) {
-    const tag = document.createElement('script');
-    tag.id = 'yt-iframe-api';
-    tag.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(tag);
-  }
-}
-window.onYouTubeIframeAPIReady = function () { initStudyYT(); };
-
-function initStudyYT() {
-  if (studyYT || !window.YT || !window.YT.Player || !document.getElementById('study-yt')) return;
-  studyYT = new YT.Player('study-yt', {
-    width: '100%', height: '100%',
-    playerVars: { autoplay: 1, controls: 1, playsinline: 1, rel: 0, modestbranding: 1, iv_load_policy: 3 },
-    events: {
-      onReady: () => {
-        studyYTReady = true;
-        if (studyPendingId) { const id = studyPendingId; studyPendingId = null; playStudyYT(id); }
-      },
-      // single videos don't loop on their own — replay when they end
-      onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED && studyYT) { try { studyYT.playVideo(); } catch (_) {} } }
-    }
-  });
+/* Plain embed — loads reliably even on slow networks. mute=1 guarantees the
+   autoplay actually starts; we then try to unmute via postMessage (works
+   without loading the external iframe_api script, which can fail to load). */
+function studyEmbedURL(loc) {
+  return `https://www.youtube.com/embed/${loc.yt}?autoplay=1&mute=1&loop=1&playlist=${loc.yt}&enablejsapi=1&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
 }
 
-function playStudyYT(videoId) {
-  if (!studyYTReady || !studyYT) { studyPendingId = videoId; return; }
-  try {
-    studyYT.loadVideoById(videoId);
-    studyYT.unMute();
-    studyYT.setVolume(100);
-    studyYT.playVideo();
-  } catch (_) {}
-}
-
-function stopStudyYT() {
-  studyPendingId = null;
-  if (studyYT && studyYTReady) { try { studyYT.stopVideo(); } catch (_) {} }
+function studyUnmute(frame) {
+  if (!frame || !frame.contentWindow) return;
+  const send = (func, args) => {
+    try { frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), '*'); } catch (_) {}
+  };
+  send('unMute'); send('setVolume', [100]); send('playVideo');
 }
 
 const studyState = {
@@ -1357,9 +1326,6 @@ const studyState = {
 };
 
 function setupStudyMode() {
-  // Pre-create the YouTube player so it's ready before the first tap
-  loadStudyYouTubeAPI();
-
   // Grid back button
   const gridBack = document.getElementById('study-grid-back-btn');
   if (gridBack) gridBack.addEventListener('click', () => switchTab('tab-gamehub'));
@@ -1415,12 +1381,15 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Real footage via the YouTube IFrame player — autoplays WITH audio (the
-  // card tap is the user gesture that unlocks sound). Thumbnail + gradient
-  // show underneath while it buffers.
+  // Real footage via YouTube embed (loads reliably on slow networks). Thumbnail
+  // + gradient show underneath while it buffers; we try to unmute once it loads.
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
   overlay.style.background = `url('${studyPosterURL(loc)}') center/cover no-repeat, ${grad}`;
-  playStudyYT(loc.yt);
+  const frame = document.getElementById('study-video');
+  if (frame) {
+    frame.src = studyEmbedURL(loc);
+    frame.onload = () => { studyUnmute(frame); setTimeout(() => studyUnmute(frame), 1200); };
+  }
 
   startStudyClock();
   startWakeWord();
@@ -1435,7 +1404,8 @@ function closeStudyVideo() {
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();
-  stopStudyYT();
+  const frame = document.getElementById('study-video');
+  if (frame) { frame.onload = null; frame.src = ''; }
   overlay.style.background = '';
 
   switchTab('tab-study-grid');
