@@ -1389,11 +1389,15 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Set video — allow pointer events so user can interact if autoplay is blocked
+  // Apply region gradient so overlay is never pure black
+  const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
+  overlay.style.background = grad;
+
+  // Set video
   const iframe = document.getElementById('study-iframe');
   if (iframe) {
     iframe.style.pointerEvents = 'auto';
-    iframe.src = `https://www.youtube-nocookie.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1`;
+    iframe.src = `https://www.youtube-nocookie.com/embed/${loc.videoId}?autoplay=1&mute=1&loop=1&playlist=${loc.videoId}&controls=1&rel=0&playsinline=1`;
   }
 
   startStudyClock();
