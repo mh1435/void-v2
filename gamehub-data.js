@@ -309,6 +309,7 @@ const MLBB_HERO_DATA_RAW = [
   { id: 'suyou', role: 'Fighter/Assassin', rarity: 'B-TIER', counters: ['khufra', 'saber'], builds: { 'Meta Flex Core': ['hunter_strike', 'blade_of_the_heptaseas', 'war_axe', 'malefic_roar', 'rose_gold_meteor', 'immortality'] } },
   { id: 'lukas', role: 'Fighter', rarity: 'B-TIER', counters: ['baxia', 'valir'], builds: { 'Fighter Core': ['war_axe', 'hunter_strike', 'brute_force_breastplate', 'athena_shield', 'antique_cuirass', 'immortality'] } },
   { id: 'kalea', role: 'Fighter', rarity: 'A-TIER', counters: ['khufra', 'franco'], builds: { 'EXP Sustainer': ['war_axe', 'queens_wings', 'dominance_ice', 'oracle', 'antique_cuirass', 'immortality'] } },
+  { id: 'yi-sun-shin', role: 'Fighter/Marksman', rarity: 'A-TIER', counters: ['khufra', 'saber', 'masha'], builds: { 'Jungle Hyper Carry': ['corrosion_scythe', 'demon_hunter_sword', 'berserker_fury', 'malefic_roar', 'blade_of_despair', 'immortality'], 'Gold Lane Carry': ['windtalker', 'demon_hunter_sword', 'great_dragon_spear', 'berserker_fury', 'malefic_roar', 'rose_gold_meteor'] } },
 
   // --- MARKSMEN / GOLD LANE ---
   { 
@@ -624,6 +625,7 @@ function resolveHeroFilename(id) {
   if (id === 'popol') return 'Popol and Kupa.png';
   if (id === 'yu-zhong') return 'Yu Zhong.png';
   if (id === 'x-borg') return 'X-Borg.png';
+  if (id === 'yi-sun-shin') return 'Yi Sun-shin.png';
   return id.charAt(0).toUpperCase() + id.slice(1) + '.png';
 }
 
@@ -693,6 +695,7 @@ const HERO_STATS = {
   suyou:      { tier:'S', wr:53.2, pr:9.4,  br:8.6,  dur:56, off:80, ctrl:54, diff:74  },
   lukas:      { tier:'A', wr:51.4, pr:4.8,  br:2.4,  dur:64, off:74, ctrl:46, diff:56  },
   kalea:      { tier:'A', wr:51.2, pr:4.6,  br:2.2,  dur:66, off:68, ctrl:54, diff:48  },
+  'yi-sun-shin': { tier:'A', wr:51.4, pr:5.8, br:2.6, dur:52, off:82, ctrl:28, diff:68 },
   // Marksmen
   miya:       { tier:'A', wr:52.5, pr:9.8,  br:2.8,  dur:36, off:78, ctrl:32, diff:26  },
   popol:      { tier:'B', wr:50.8, pr:5.4,  br:2.8,  dur:50, off:74, ctrl:62, diff:56  },
@@ -848,6 +851,7 @@ const HERO_SUBTITLES = {
   suyou:       'Wanderer',
   lukas:       'The Invincible Shield',
   kalea:       'Tribal Guardian',
+  'yi-sun-shin': 'The Great Admiral',
   miya:        'Moonlit Archer',
   popol:       'Wolf Boy',
   bruno:       'The Protector',
