@@ -929,7 +929,6 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 :root[data-theme="light"] .workspace-mode-card:hover { background: rgba(0,0,0,0.04); }
 :root[data-theme="light"] .workspace-heading { color: var(--muted); }
 :root[data-theme="light"] .gamehub-search-box input { background: #fff; color: var(--text); border-color: var(--border); }
-:root[data-theme="light"] .study-loc-card { border: 1px solid var(--border); }
 :root[data-theme="light"] .tab-bar { background: #f5f5fa; border-color: var(--border); }
 :root[data-theme="light"] .nav-pill { color: var(--muted); }
 :root[data-theme="light"] .nav-pill.active { background: var(--text); color: #fff; }
@@ -1178,38 +1177,15 @@ body.reduced-motion *::after {
 .study-grid-panel {
   display: flex; flex-direction: column; height: calc(100% - 57px); overflow: hidden;
 }
+/* Same column layout as the heroes menu (.hub-grid) — the study cards reuse
+   the .hub-card markup, so this is just the scrollable container around them. */
 .study-loc-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 12px; padding: 12px 12px 90px; overflow-y: auto; flex: 1;
-  align-content: start;            /* keep rows their natural square height */
+  align-content: start;
   -webkit-overflow-scrolling: touch;
 }
-.study-loc-card {
-  aspect-ratio: 1 / 1;
-  align-self: start;               /* don't let grid stretch the square */
-  border-radius: 16px; overflow: hidden;
-  background-color: #111; position: relative; cursor: pointer;
-  transition: transform 0.12s, opacity 0.12s;
-}
-.study-loc-card:active { transform: scale(0.95); opacity: 0.85; }
-.study-card-img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; z-index: 0;
-}
-.study-card-overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
-  display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 8px 10px; box-sizing: border-box;
-}
-.study-card-flag { font-size: 18px; line-height: 1; margin-bottom: 2px; }
-.study-card-name {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
-  color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.study-card-region { font-size: 8px; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; margin-top: 1px; }
 
 /* ===========================================================
    STUDY MODE OVERLAY
