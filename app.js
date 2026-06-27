@@ -1179,7 +1179,7 @@ function openMLBBContent() {
   const picker  = document.getElementById('games-picker-view');
   const content = document.getElementById('mlbb-content-view');
   if (picker)  picker.style.display = 'none';
-  if (content) content.classList.add('active');
+  if (content) { content.style.display = ''; content.classList.add('active'); }
 }
 
 function closeMLBBContent() {

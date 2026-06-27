@@ -546,7 +546,8 @@ const ITEM_WIKI_OVERRIDES = {
 function resolveItemImg(id) {
   const wiki = ITEM_WIKI_OVERRIDES[id]
     || id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
-  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${wiki}.png`;
+  const fandomSrc = `https://mobile-legends.fandom.com/wiki/Special:FilePath/${wiki}.png`;
+  return `https://wsrv.nl/?url=${encodeURIComponent(fandomSrc)}&output=png&w=256`;
 }
 
 function buildHeroTitleString(id) {
