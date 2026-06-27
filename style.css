@@ -1186,11 +1186,15 @@ body.reduced-motion *::after {
 }
 .study-loc-card {
   aspect-ratio: 1; border-radius: 14px; overflow: hidden;
-  background-size: cover; background-position: center;
   background-color: #111; position: relative; cursor: pointer;
   transition: transform 0.12s, opacity 0.12s;
 }
 .study-loc-card:active { transform: scale(0.95); opacity: 0.85; }
+.study-card-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; z-index: 0;
+}
 .study-card-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
@@ -1214,10 +1218,11 @@ body.reduced-motion *::after {
 }
 .study-overlay.active { display: block; }
 
-.study-iframe {
+.study-video {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  border: none; z-index: 0;
+  object-fit: cover; z-index: 0;
+  background: #000;
 }
 
 /* Gradient scrims — always dark regardless of app theme */
