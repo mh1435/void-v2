@@ -143,18 +143,49 @@ function setupNav() {
     pill.addEventListener('click', () => switchTab(pill.dataset.target));
   });
 
-  document.getElementById('open-settings-btn').addEventListener('click', () => {
-    document.getElementById('view-main').classList.remove('active');
-    document.getElementById('view-settings').classList.add('active');
-  });
-  document.getElementById('close-settings-btn').addEventListener('click', () => {
-    document.getElementById('view-settings').classList.remove('active');
-    document.getElementById('view-main').classList.add('active');
-  });
+  document.getElementById('open-settings-btn').addEventListener('click', openSettingsDrawer);
+  document.getElementById('close-settings-btn').addEventListener('click', closeSettingsDrawer);
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
 
   document.getElementById('hub-detail-back-btn').addEventListener('click', () => {
     switchTab(App.hubDetailReturnTab);
   });
+}
+
+function openSettingsDrawer() {
+  document.getElementById('view-main').classList.remove('active');
+  document.getElementById('view-settings').classList.add('active');
+  populateProfileDrawer();
+}
+
+function closeSettingsDrawer() {
+  document.getElementById('view-settings').classList.remove('active');
+  document.getElementById('view-main').classList.add('active');
+}
+
+function logoutUser() {
+  if (!confirm('Log out of VOID?')) return;
+  localStorage.removeItem('void_current_user');
+  location.reload();
+}
+
+function populateProfileDrawer() {
+  const profile = getUserProfile();
+  const name     = profile?.name    || (App.currentUser ? App.currentUser.split('@')[0] : 'VOID USER');
+  const email    = App.currentUser  || '';
+  const initial  = name.charAt(0).toUpperCase();
+
+  const avatarEl  = document.getElementById('settings-avatar');
+  const nameEl    = document.getElementById('settings-profile-name');
+  const emailEl   = document.getElementById('settings-profile-email');
+  const hdrAvatar = document.getElementById('avatar-initial');
+
+  if (avatarEl)  avatarEl.textContent  = initial;
+  if (nameEl)    nameEl.textContent    = name.toUpperCase();
+  if (emailEl)   emailEl.textContent   = email;
+  if (hdrAvatar) hdrAvatar.textContent = initial;
 }
 
 function switchTab(targetId) {
@@ -176,7 +207,7 @@ function switchTabRaw(targetId) {
 /* ============ Settings panel navigation ============ */
 
 function setupSettingsPanels() {
-  document.querySelectorAll('.menu-item').forEach(item => {
+  document.querySelectorAll('.menu-item, .drawer-item').forEach(item => {
     item.addEventListener('click', () => openSettingsPanel(item.dataset.openPanel));
   });
 
@@ -606,14 +637,14 @@ function appendMessage(role, text) {
   App.msgCount++;
   updateWelcomeStatsLine();
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const bubbleClass = role === 'user' ? 'user' : 'assistant';
-  const label = role === 'user' ? 'USER::NODE' : 'VOID::CORE';
+  const label = role === 'user' ? `YOU  ${time}` : 'VOID';
 
   const el = document.createElement('div');
   el.className = `chat-bubble ${bubbleClass}`;
   el.innerHTML = `
-    <div class="bubble-meta">${label} // ${time}</div>
+    <div class="bubble-meta">${label}</div>
     <div class="bubble-body">${escapeHTML(text)}</div>
   `;
   box.appendChild(el);
@@ -631,7 +662,7 @@ function appendTyping() {
   const el = document.createElement('div');
   el.className = 'chat-bubble assistant';
   el.id = id;
-  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body">...</div>`;
+  el.innerHTML = `<div class="bubble-meta">VOID</div><div class="bubble-body void-typing">···</div>`;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return id;
@@ -806,9 +837,17 @@ function renderMemoryInfo() {
 
 function updateUserDisplay() {
   const statusEl = document.getElementById('hud-status');
+<<<<<<< Updated upstream
   if (statusEl && App.currentUser) {
     statusEl.textContent = App.currentUser.split('@')[0].toUpperCase() + '::ONLINE';
   }
+=======
+  if (!statusEl || !App.currentUser) return;
+  const profile = getUserProfile();
+  const displayName = profile?.name || App.currentUser.split('@')[0];
+  statusEl.textContent = displayName.toUpperCase() + '::ONLINE';
+  populateProfileDrawer();
+>>>>>>> Stashed changes
 }
 
 /* ============ Commands panel ============ */
@@ -961,6 +1000,44 @@ function renderTasks() {
 /* ============ GameHub ============ */
 
 function setupGameHub() {
+<<<<<<< Updated upstream
+=======
+  // Sub-nav: GAMING ↔ STUDY
+  const navGaming = document.getElementById('games-nav-gaming');
+  const navStudy  = document.getElementById('games-nav-study');
+  if (navGaming) navGaming.addEventListener('click', () => {
+    navGaming.classList.add('active');
+    navStudy?.classList.remove('active');
+    closeMLBBContent();
+  });
+  if (navStudy) navStudy.addEventListener('click', () => {
+    navStudy.classList.add('active');
+    navGaming?.classList.remove('active');
+    openStudyPanel();
+  });
+
+  // MLBB tile → enter MLBB content
+  const mlbbTile = document.getElementById('mlbb-tile');
+  if (mlbbTile) {
+    mlbbTile.addEventListener('click', openMLBBContent);
+    mlbbTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openMLBBContent(); });
+  }
+
+  // Back to games (from MLBB content header)
+  const backToGames = document.getElementById('mlbb-back-to-games');
+  if (backToGames) backToGames.addEventListener('click', () => {
+    closeMLBBContent();
+    // Reset sub-nav to GAMING
+    navGaming?.classList.add('active');
+    navStudy?.classList.remove('active');
+  });
+
+  const studyBtn = document.getElementById('btn-open-study');
+  if (studyBtn) {
+    studyBtn.addEventListener('click', () => openStudyPanel());
+  }
+
+>>>>>>> Stashed changes
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.gamehub-tab-btn').forEach(b => b.classList.remove('active'));

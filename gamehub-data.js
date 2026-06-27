@@ -296,7 +296,7 @@ const MLBB_HERO_DATA_RAW = [
   { id: 'dyrroth', role: 'Fighter', rarity: 'A-TIER', counters: ['khufra', 'saber'], builds: { 'Armor Shredder Core': ['hunter_strike', 'blade_of_the_heptaseas', 'bloodlust_axe', 'malefic_roar', 'antique_cuirass', 'immortality'] } },
   { id: 'silvanna', role: 'Fighter', rarity: 'B-TIER', counters: ['diggie', 'athena_shield'], builds: { 'Magic Lock Core': ['genius_wand', 'feather_of_heaven', 'holy_crystal', 'radiant_armor', 'athena_shield', 'immortality'] } },
   { id: 'yu-zhong', role: 'Fighter', rarity: 'S-TIER (META)', counters: ['baxia', 'dominance_ice'], builds: { 'Dragon Meta Sustain': ['hunter_strike', 'bloodlust_axe', 'war_axe', 'dominance_ice', 'oracle', 'immortality'] } },
-  { id: 'khaleed', role: 'Fighter', rarity: 'A-TIER', counters: ['saber', 'franco'], builds: { 'Early Game Aggro': ['blade_of_the_heptaseas', 'hunter_strike', 'bloodlust_axe', 'athena_shield', 'antique_cuirass', 'immortality'] } },
+  { id: 'khaleed', role: 'Fighter', rarity: 'B-TIER', counters: ['saber', 'franco'], builds: { 'Early Game Aggro': ['blade_of_the_heptaseas', 'hunter_strike', 'bloodlust_axe', 'athena_shield', 'antique_cuirass', 'immortality'] } },
   { id: 'paquito', role: 'Fighter', rarity: 'S-TIER (META)', counters: ['khufra', 'saber'], builds: { 'Combo Burst Jungle': ['hunter_strike', 'blade_of_the_heptaseas', 'bloodlust_axe', 'blade_of_despair', 'malefic_roar', 'immortality'] } },
   { id: 'phoveus', role: 'Fighter', rarity: 'B-TIER', counters: ['athena_shield', 'esmeralda'], builds: { 'Anti-Dash Counter Magic': ['clock_of_destiny', 'lightning_truncheon', 'holy_crystal', 'oracle', 'brute_force_breastplate', 'immortality'] } },
   { id: 'yin', role: 'Fighter', rarity: 'B-TIER', counters: ['winter_crown', 'wind_of_nature'], builds: { 'Domain Arena Executioner': ['blade_of_the_heptaseas', 'hunter_strike', 'endless_battle', 'blade_of_despair', 'malefic_roar', 'immortality'] } },
@@ -507,17 +507,54 @@ function resolveHeroImg(id) {
   return `images/heroes/${resolveHeroFilename(id)}`;
 }
 
+/* Hero stats — win/pick/ban rates and attributes from mlbbhub.
+   Keys match hero IDs in MLBB_HERO_DATA_RAW.
+   Fields: wr (win%), pr (pick%), br (ban%), dur, off, ctrl, diff (0-100),
+   tier ('S'|'A'|'B'|'C'|'D'), weak [], strong [] */
+const HERO_STATS = {};
+
+function rarityToTier(rarity) {
+  if (!rarity) return null;
+  const m = rarity.match(/^([A-Z](?:\+)?)-TIER/);
+  return m ? m[1] : null;
+}
+
+function roleToLane(role) {
+  if (role === 'Assassin') return 'Jungle';
+  if (role === 'Fighter') return 'Exp Lane';
+  if (role === 'Mage') return 'Mid Lane';
+  if (role === 'Marksman') return 'Gold Lane';
+  if (role === 'Tank') return 'Roam';
+  if (role === 'Support') return 'Roam';
+  return 'Flex';
+}
+
 const GameHubData = {
-  heroes: MLBB_HERO_DATA_RAW.map(h => ({
-    id: h.id,
-    name: buildHeroTitleString(h.id),
-    role: h.role,
-    rarity: h.rarity,
-    img: resolveHeroImg(h.id), 
-    counters: h.counters || [],
-    builds: h.builds || {},
-    desc: `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
-  })),
+  heroes: MLBB_HERO_DATA_RAW.map(h => {
+    const s = HERO_STATS[h.id] || {};
+    const tier = s.tier || rarityToTier(h.rarity);
+    return {
+      id: h.id,
+      name: h.name || buildHeroTitleString(h.id),
+      role: Array.isArray(h.role) ? h.role[0] : h.role,
+      rarity: tier ? `${tier}-TIER${tier === 'S' ? ' (META)' : ''}` : h.rarity,
+      tier,
+      lane: h.lane || roleToLane(Array.isArray(h.role) ? h.role[0] : h.role),
+      img: resolveHeroImg(h.id),
+      counters: h.counters || [],
+      builds: h.builds || {},
+      winRate: s.wr,
+      pickRate: s.pr,
+      banRate: s.br,
+      durability: s.dur,
+      offense: s.off,
+      control: s.ctrl,
+      difficulty: s.diff,
+      weakAgainst: s.weak || [],
+      strongAgainst: s.strong || [],
+      desc: h.desc || `Battlefield tactical asset database log parsing parameters for registry unit [${h.id.toUpperCase()}].`
+    };
+  }),
   items: MLBB_ITEM_DATA_RAW.map(i => ({
     id: i.id,
     name: i.name,
