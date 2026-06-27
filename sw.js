@@ -1,48 +1,21 @@
-const CACHE_NAME = 'void-shell-v2';
-const SHELL_FILES = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json'
-];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES).catch(() => {}))
-  );
-  self.skipWaiting();
-});
+// Self-destructing service worker.
+// Earlier versions cached the app shell and kept serving stale builds. This
+// version takes control, deletes every cache, unregisters itself, and reloads
+// open pages so they fetch everything fresh from the network from now on.
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      await self.registration.unregister();
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((c) => { try { c.navigate(c.url); } catch (_) {} });
+    } catch (_) {}
+  })());
 });
 
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Never cache API calls — those need to always hit the live server.
-  if (url.pathname.startsWith('/api/')) {
-    return;
-  }
-
-  // NETWORK-FIRST: always try to get the freshest file when online so updates
-  // show up immediately. Fall back to the cache only when the network fails
-  // (offline / bad signal). This avoids the stale-shell problem cache-first had.
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.status === 200 && event.request.method === 'GET') {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
-});
+// Pure pass-through — never serve from cache.
+self.addEventListener('fetch', () => {});
