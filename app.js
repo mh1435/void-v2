@@ -1301,23 +1301,41 @@ function studyPosterURL(loc) {
   return `https://img.youtube.com/vi/${loc.yt}/mqdefault.jpg`;
 }
 
-/* Plain embed — loads reliably even on slow networks. mute=1 guarantees the
-   autoplay actually starts; we then try to unmute via postMessage (works
-   without loading the external iframe_api script, which can fail to load). */
+/* Plain embed — loads reliably even on slow networks. controls=0 + disablekb=1
+   + fs=0 hide all UI; the iframe also gets pointer-events:none in CSS, so the
+   video can't be tapped, paused or scrubbed — it's just footage playing.
+   mute=1 guarantees autoplay starts; we then try to unmute via postMessage. */
 function studyEmbedURL(loc) {
-  return `https://www.youtube.com/embed/${loc.yt}?autoplay=1&mute=1&loop=1&playlist=${loc.yt}&enablejsapi=1&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
+  return `https://www.youtube.com/embed/${loc.yt}?autoplay=1&mute=1&loop=1&playlist=${loc.yt}&controls=0&disablekb=1&fs=0&enablejsapi=1&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
 }
 
-function studyUnmute(frame) {
+function studySendCmd(func, args) {
+  const frame = document.getElementById('study-video');
   if (!frame || !frame.contentWindow) return;
-  const send = (func, args) => {
-    try { frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), '*'); } catch (_) {}
-  };
-  send('unMute'); send('setVolume', [100]); send('playVideo');
+  try { frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), '*'); } catch (_) {}
+}
+
+function studyUnmute() {
+  studySendCmd('unMute'); studySendCmd('setVolume', [100]); studySendCmd('playVideo');
+  studyState.muted = false;
+  const btn = document.getElementById('study-sound-btn');
+  if (btn) btn.classList.remove('muted');
+}
+
+function toggleStudySound() {
+  if (studyState.muted) {
+    studyUnmute();
+  } else {
+    studySendCmd('mute');
+    studyState.muted = true;
+    const btn = document.getElementById('study-sound-btn');
+    if (btn) btn.classList.add('muted');
+  }
 }
 
 const studyState = {
   active: false,
+  muted: true,
   clockInterval: null,
   chatHistory: [],
   wakeRec: null,
@@ -1345,6 +1363,10 @@ function setupStudyMode() {
   // Video overlay back button
   const videoBack = document.getElementById('study-back-btn');
   if (videoBack) videoBack.addEventListener('click', closeStudyVideo);
+
+  // Sound toggle (the video itself is non-interactive, so sound lives here)
+  const soundBtn = document.getElementById('study-sound-btn');
+  if (soundBtn) soundBtn.addEventListener('click', toggleStudySound);
 
   // Mini chat controls
   const minBtn  = document.getElementById('study-chat-min');
@@ -1388,7 +1410,9 @@ function openStudyVideo(loc) {
   const frame = document.getElementById('study-video');
   if (frame) {
     frame.src = studyEmbedURL(loc);
-    frame.onload = () => { studyUnmute(frame); setTimeout(() => studyUnmute(frame), 1200); };
+    // try to start sound automatically; if the browser blocks it, the sound
+    // button in the top bar lets the user enable it with one tap.
+    frame.onload = () => { studyUnmute(); setTimeout(studyUnmute, 1200); };
   }
 
   startStudyClock();
