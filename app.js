@@ -1390,11 +1390,17 @@ function openStudyVideo(loc) {
   const msgs = document.getElementById('study-msgs');
   if (msgs) msgs.innerHTML = `<div class="study-msg study-msg-ai"><span>Now in <strong>${loc.flag} ${loc.name}</strong>. Ask me anything, or say <strong>"Hey VOID"</strong> 🎤</span></div>`;
 
-  // Apply region gradient as overlay base
+  // Show real thumbnail instantly — YouTube image CDN works globally even when videos are geo-blocked
   const grad = REGION_GRADIENTS[loc.region] || 'linear-gradient(135deg,#111418 0%,#1c2028 100%)';
-  overlay.style.background = grad;
+  if (loc.videoId) {
+    overlay.style.backgroundImage = `url('https://img.youtube.com/vi/${loc.videoId}/maxresdefault.jpg'), ${grad}`;
+    overlay.style.backgroundSize = 'cover, cover';
+    overlay.style.backgroundPosition = 'center, center';
+  } else {
+    overlay.style.background = grad;
+  }
 
-  // Load video via Invidious (YouTube proxy — bypasses geo-blocks, works in Middle East)
+  // Also load actual video via Invidious on top (plays when it loads, thumbnail always shows underneath)
   const iframe = document.getElementById('study-iframe');
   if (iframe && loc.videoId) {
     iframe.src = `https://yewtu.be/embed/${loc.videoId}?autoplay=1&muted=1&loop=1`;
@@ -1415,6 +1421,9 @@ function closeStudyVideo() {
   stopWakeWord();
   const iframe = document.getElementById('study-iframe');
   if (iframe) iframe.src = '';
+  overlay.style.backgroundImage = '';
+  overlay.style.backgroundSize = '';
+  overlay.style.backgroundPosition = '';
 
   switchTab('tab-study-grid');
 }
@@ -1440,20 +1449,25 @@ function renderStudyGrid(locs) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
     return;
   }
-  grid.innerHTML = locs.map(loc => `
-    <button class="study-loc-btn" data-loc-id="${loc.id}" aria-label="${loc.name}">
-      <span class="study-btn-flag">${loc.flag}</span>
-      <span class="study-btn-info">
-        <span class="study-btn-name">${loc.name}</span>
-        <span class="study-btn-region">${loc.region}</span>
-      </span>
-    </button>`).join('');
+  grid.innerHTML = locs.map(loc => {
+    const thumb = loc.videoId ? `https://img.youtube.com/vi/${loc.videoId}/hqdefault.jpg` : '';
+    const bg = thumb ? `background-image:url('${thumb}')` : `background:${REGION_GRADIENTS[loc.region] || '#111'}`;
+    return `<div class="study-loc-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="${bg}">
+      <div class="study-card-overlay">
+        <span class="study-card-flag">${loc.flag}</span>
+        <span class="study-card-name">${loc.name}</span>
+        <span class="study-card-region">${loc.region}</span>
+      </div>
+    </div>`;
+  }).join('');
 
-  grid.querySelectorAll('.study-loc-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const loc = STUDY_LOCATIONS.find(l => l.id === btn.dataset.locId);
+  grid.querySelectorAll('.study-loc-card').forEach(card => {
+    const handler = () => {
+      const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);
-    });
+    };
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
   });
 }
 
