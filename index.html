@@ -39,7 +39,7 @@ if ('serviceWorker' in navigator) {
     <div class="hud-center">
       <div class="tab-pill-box">
         <button class="tab-pill active" data-target="tab-chat">INTELLIGENCE</button>
-        <button class="tab-pill" data-target="tab-gamehub">GAMES</button>
+        <button class="tab-pill" data-target="tab-gamehub">WORKSPACE</button>
       </div>
     </div>
     <div class="hud-right">
@@ -93,16 +93,44 @@ if ('serviceWorker' in navigator) {
     <div class="view-tab" id="tab-gamehub">
       <div class="gamehub-container">
 
-        <!-- GAMES PICKER (default view) -->
-        <div class="games-picker-view" id="games-picker-view">
-          <div class="games-picker-header-row">
-            <div class="games-lib-header">GAME LIBRARY</div>
-            <button class="study-pill-btn" id="btn-open-study-global">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-              </svg>
-              STUDY
+        <!-- WORKSPACE LANDING (default view) -->
+        <div class="workspace-landing" id="workspace-landing">
+          <div class="workspace-heading">WORKSPACE</div>
+          <div class="workspace-modes">
+
+            <button class="workspace-mode-card" id="ws-gaming-btn">
+              <div class="ws-mode-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L3 7v5c0 4.97 3.87 9.62 9 10.93C17.13 21.62 21 16.97 21 12V7L12 2z" fill="rgba(255,140,0,0.18)" stroke="#ff8c00" stroke-width="1.5" stroke-linejoin="round"/>
+                  <path d="M8 11l2.5 2.5L16 8" stroke="#ff8c00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="ws-mode-name">GAMING</div>
+              <div class="ws-mode-sub">MLBB · Hero files · Builds · Items</div>
             </button>
+
+            <button class="workspace-mode-card" id="ws-study-btn">
+              <div class="ws-mode-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" stroke="rgba(100,200,255,0.9)" fill="rgba(100,200,255,0.1)"/>
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" stroke="rgba(100,200,255,0.9)" fill="rgba(100,200,255,0.1)"/>
+                </svg>
+              </div>
+              <div class="ws-mode-name">STUDYING</div>
+              <div class="ws-mode-sub">Focus mode · Locations · Ambient</div>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- GAMES PICKER -->
+        <div class="games-picker-view" id="games-picker-view" style="display:none">
+          <div class="games-picker-header-row">
+            <button class="mlbb-back-games-btn" id="games-back-to-workspace" aria-label="Back to workspace">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              WORKSPACE
+            </button>
+            <div class="games-lib-header" style="margin-bottom:0;margin-left:10px">GAME LIBRARY</div>
           </div>
           <div class="games-grid">
 

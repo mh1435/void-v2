@@ -319,11 +319,30 @@ function setupNav() {
 
   document.getElementById('hub-detail-back-btn').addEventListener('click', () => {
     switchTab(App.hubDetailReturnTab);
-    if (App.hubDetailReturnTab === 'tab-gamehub') openMLBBContent();
+    if (App.hubDetailReturnTab === 'tab-gamehub') {
+      showGamingView();
+      openMLBBContent();
+    }
   });
 
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
+}
+
+function showWorkspaceLanding() {
+  const landing = document.getElementById('workspace-landing');
+  const picker = document.getElementById('games-picker-view');
+  const mlbb = document.getElementById('mlbb-content-view');
+  if (landing) landing.style.display = '';
+  if (picker) picker.style.display = 'none';
+  if (mlbb) mlbb.style.display = 'none';
+}
+
+function showGamingView() {
+  const landing = document.getElementById('workspace-landing');
+  const picker = document.getElementById('games-picker-view');
+  if (landing) landing.style.display = 'none';
+  if (picker) picker.style.display = '';
 }
 
 function switchTab(targetId) {
@@ -335,6 +354,8 @@ function switchTab(targetId) {
       p.classList.toggle('active', p.dataset.target === targetId);
     });
   }
+
+  if (targetId === 'tab-gamehub') showWorkspaceLanding();
 }
 
 function switchTabRaw(targetId) {
@@ -1165,10 +1186,9 @@ function openMLBBContent() {
 }
 
 function closeMLBBContent() {
-  const picker  = document.getElementById('games-picker-view');
   const content = document.getElementById('mlbb-content-view');
   if (content) content.classList.remove('active');
-  if (picker)  picker.style.display = '';
+  showGamingView();
 }
 
 function setupGameHub() {
@@ -1187,9 +1207,16 @@ function setupGameHub() {
   }
 
   const studyBtnGlobal = document.getElementById('btn-open-study-global');
-  if (studyBtnGlobal) {
-    studyBtnGlobal.addEventListener('click', () => openStudyPanel());
-  }
+  if (studyBtnGlobal) studyBtnGlobal.addEventListener('click', () => openStudyPanel());
+
+  const wsGamingBtn = document.getElementById('ws-gaming-btn');
+  if (wsGamingBtn) wsGamingBtn.addEventListener('click', showGamingView);
+
+  const wsStudyBtn = document.getElementById('ws-study-btn');
+  if (wsStudyBtn) wsStudyBtn.addEventListener('click', () => openStudyPanel());
+
+  const backToWorkspace = document.getElementById('games-back-to-workspace');
+  if (backToWorkspace) backToWorkspace.addEventListener('click', showWorkspaceLanding);
 
   document.querySelectorAll('.gamehub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {

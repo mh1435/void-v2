@@ -408,6 +408,43 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 
 /* ===========================================================
+   WORKSPACE LANDING
+   =========================================================== */
+.workspace-landing {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px 20px; gap: 20px;
+}
+.workspace-heading {
+  font-family: var(--hub-display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.18em; color: var(--muted);
+}
+.workspace-modes {
+  display: flex; gap: 14px; width: 100%; max-width: 480px;
+}
+.workspace-mode-card {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 28px 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+  cursor: pointer; transition: border-color 0.15s, transform 0.12s, background 0.15s;
+  font-family: var(--hub-display); text-align: center;
+}
+.workspace-mode-card:hover { background: rgba(255,255,255,0.05); }
+.workspace-mode-card:active { transform: scale(0.96); }
+#ws-gaming-btn { border-color: rgba(255,140,0,0.25); }
+#ws-gaming-btn:hover { border-color: rgba(255,140,0,0.55); }
+#ws-study-btn { border-color: rgba(100,200,255,0.2); }
+#ws-study-btn:hover { border-color: rgba(100,200,255,0.45); }
+.ws-mode-icon { display: flex; align-items: center; justify-content: center; }
+.ws-mode-name {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--text);
+}
+.ws-mode-sub {
+  font-size: 10px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em;
+  font-family: var(--mono);
+}
+
+/* ===========================================================
    GAMES PICKER
    =========================================================== */
 .games-picker-view {
