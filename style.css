@@ -1194,10 +1194,10 @@ body.reduced-motion *::after {
 }
 .study-overlay.active { display: block; }
 
-.study-iframe {
-  position: absolute; inset: -60px -2px; /* extend past edges to hide YT border */
-  width: calc(100% + 4px); height: calc(100% + 120px);
-  border: none; pointer-events: none; /* JS sets pointer-events:auto after load */
+.study-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
 }
 
 /* Gradient scrims — always dark regardless of app theme */
@@ -1221,11 +1221,11 @@ body.reduced-motion *::after {
 }
 
 .study-ui-btn {
-  width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
-  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.18);
+  width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.25);
   color: #fff; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  transition: background 0.15s;
+  cursor: pointer; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  transition: background 0.15s; box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 .study-ui-btn:active { background: rgba(255,255,255,0.2); }
 
