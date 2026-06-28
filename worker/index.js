@@ -236,27 +236,51 @@ async function handlePay(request, env, url) {
         if (!r.ok) return cors(JSON.stringify({ error: data.error?.message || 'stripe error' }), 502);
         return cors(JSON.stringify({ url: data.url }));
       } else {
-        // Xendit hosted invoice — shows every method you've enabled (TNG, GrabPay,
-        // ShopeePay, FPX online banking, cards…). No payment_methods filter so all show.
-        if (!env.XENDIT_SECRET_KEY) return cors(JSON.stringify({ error: 'e-wallet payments not configured yet' }), 503);
-        const payload = {
-          external_id: `void:${email}:${plan}:${Date.now()}`,
-          amount: PLAN_AMOUNT_MYR[plan],
-          currency: 'MYR',
-          payer_email: email,
-          description: `VOID ${plan.toUpperCase()} subscription`,
-          success_redirect_url: `${appUrl}/?upgraded=${plan}`,
-          failure_redirect_url: `${appUrl}/?canceled=1`,
-          metadata: { email, plan },
-        };
-        const r = await fetch('https://api.xendit.co/v2/invoices', {
-          method: 'POST',
-          headers: { 'Authorization': 'Basic ' + btoa(env.XENDIT_SECRET_KEY + ':'), 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await r.json();
-        if (!r.ok) return cors(JSON.stringify({ error: data.message || 'xendit error' }), 502);
-        return cors(JSON.stringify({ url: data.invoice_url }));
+        // E-wallet: Xendit if key set (TNG/GrabPay/FPX), else fall back to Stripe
+        // with automatic payment methods (GrabPay + FPX show up for MY customers).
+        if (env.XENDIT_SECRET_KEY) {
+          const payload = {
+            external_id: `void:${email}:${plan}:${Date.now()}`,
+            amount: PLAN_AMOUNT_MYR[plan],
+            currency: 'MYR',
+            payer_email: email,
+            description: `VOID ${plan.toUpperCase()} subscription`,
+            success_redirect_url: `${appUrl}/?upgraded=${plan}`,
+            failure_redirect_url: `${appUrl}/?canceled=1`,
+            metadata: { email, plan },
+          };
+          const r = await fetch('https://api.xendit.co/v2/invoices', {
+            method: 'POST',
+            headers: { 'Authorization': 'Basic ' + btoa(env.XENDIT_SECRET_KEY + ':'), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json();
+          if (!r.ok) return cors(JSON.stringify({ error: data.message || 'xendit error' }), 502);
+          return cors(JSON.stringify({ url: data.invoice_url }));
+        } else {
+          // Stripe fallback — automatic payment methods includes GrabPay + FPX in Malaysia
+          if (!env.STRIPE_SECRET_KEY) return cors(JSON.stringify({ error: 'payments not configured yet' }), 503);
+          const price = env['STRIPE_PRICE_' + plan.toUpperCase()] || PRICE_FALLBACK[plan];
+          const form = new URLSearchParams();
+          form.set('mode', 'subscription');
+          form.set('line_items[0][price]', price);
+          form.set('line_items[0][quantity]', '1');
+          form.set('customer_email', email);
+          form.set('success_url', `${appUrl}/?upgraded=${plan}`);
+          form.set('cancel_url', `${appUrl}/?canceled=1`);
+          form.set('metadata[email]', email);
+          form.set('metadata[plan]', plan);
+          form.set('subscription_data[metadata][email]', email);
+          form.set('subscription_data[metadata][plan]', plan);
+          const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form.toString(),
+          });
+          const data = await r.json();
+          if (!r.ok) return cors(JSON.stringify({ error: data.error?.message || 'stripe error' }), 502);
+          return cors(JSON.stringify({ url: data.url }));
+        }
       }
     } catch (e) {
       return cors(JSON.stringify({ error: String(e) }), 500);
