@@ -7,7 +7,7 @@ compatibility_date = "2025-01-01"
 # then paste the printed id below (replace REPLACE_WITH_KV_ID).
 [[kv_namespaces]]
 binding = "PLANS"
-id = "REPLACE_WITH_KV_ID"
+id = "a8d07ae804494a348475dd33d974b1e4"
 
 # Plain var (not secret):
 [vars]
