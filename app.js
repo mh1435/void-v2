@@ -255,6 +255,7 @@ function bootApp() {
   setupStudyMode();
   setupNavDrawer();
   setupClonedPanels();
+  refreshPlanUI();
   loadTasks();
   loadCommands();
   loadChats();
@@ -421,6 +422,86 @@ function setupSettingsPanels() {
   }
 }
 
+/* ============ VOID Pro — plans, gating, checkout ============ */
+
+const PLAN_RANK = { free: 0, pro: 1, max: 2 };
+const FREE_DAILY_LIMIT = 50;
+const FREE_STUDY_LIMIT = 5;
+
+function getPlan() { return (App.currentUser && localStorage.getItem(userKey('plan'))) || 'free'; }
+function isPro() { return getPlan() !== 'free'; }
+
+function setPlan(plan) {
+  if (App.currentUser) localStorage.setItem(userKey('plan'), plan);
+  refreshPlanUI();
+  if (typeof renderStudyGrid === 'function' && document.getElementById('study-loc-grid')) {
+    try { renderStudyGrid(STUDY_LOCATIONS); } catch (e) {}
+  }
+}
+
+function refreshPlanUI() {
+  const plan = getPlan();
+  document.querySelectorAll('.account-badge').forEach(b => {
+    b.textContent = plan.toUpperCase();
+    b.classList.toggle('badge-free', plan === 'free');
+  });
+  hydrateBilling();
+}
+
+function hydrateBilling() {
+  const plan = getPlan();
+  document.querySelectorAll('#panel-billing .plan-card').forEach(card => {
+    const p = card.dataset.plan;
+    const cur = p === plan;
+    card.classList.toggle('current', cur);
+    const tag = card.querySelector('.plan-tag'); if (tag) tag.style.display = cur ? '' : 'none';
+    const btn = card.querySelector('.plan-action');
+    if (btn) {
+      btn.disabled = cur;
+      btn.textContent = cur ? 'Current plan'
+        : (PLAN_RANK[p] > PLAN_RANK[plan] ? 'Upgrade to ' + cap1(p) : 'Switch to ' + cap1(p));
+    }
+  });
+}
+
+// Where a real Stripe Checkout / Payment Link will go once a key is in the
+// Worker. For now it activates the plan instantly (no charge).
+function startCheckout(plan) {
+  // TODO(stripe): redirect to Stripe Checkout for `plan`, confirm via webhook.
+  setPlan(plan);
+  const btn = document.querySelector(`#panel-billing .plan-card[data-plan="${plan}"] .plan-action`);
+  if (btn) flashButton(btn, 'Activated ✓');
+}
+
+function openBilling() {
+  const main = document.getElementById('view-main');
+  const settings = document.getElementById('view-settings');
+  if (main) main.classList.remove('active');
+  if (settings) settings.classList.add('active');
+  openSettingsPanel('panel-billing');
+}
+
+/* Free daily message gate */
+function freeUsageToday() {
+  let d = {};
+  try { d = JSON.parse(localStorage.getItem(userKey('msgday'))) || {}; } catch (e) {}
+  const today = new Date().toDateString();
+  if (d.date !== today) d = { date: today, count: 0 };
+  return d;
+}
+function consumeFreeMessage() {
+  if (isPro()) return true;
+  const d = freeUsageToday();
+  if (d.count >= FREE_DAILY_LIMIT) return false;
+  d.count++;
+  try { localStorage.setItem(userKey('msgday'), JSON.stringify(d)); } catch (e) {}
+  return true;
+}
+function showUpgradePrompt() {
+  appendMessage('system', `⚡ You've hit the free limit of ${FREE_DAILY_LIMIT} messages today. Upgrade to Pro for unlimited chats — opening Billing.`);
+  setTimeout(openBilling, 400);
+}
+
 /* ============ Cloned settings panels (functional) ============ */
 
 const CAP_KEYS = ['voiceEnabled', 'studyMode', 'floatingAssistantEnabled', 'haptic'];
@@ -530,13 +611,12 @@ function setupClonedPanels() {
     flashButton(saveProf, 'Saved');
   });
 
-  // Billing actions
-  const manage = document.getElementById('billing-manage-btn');
-  if (manage) manage.addEventListener('click', () => flashButton(manage, 'Pro is active'));
-  document.querySelectorAll('.plan-action').forEach(b => b.addEventListener('click', () => {
-    const plan = b.dataset.plan;
-    const orig = b.textContent; b.textContent = plan === 'Free' ? 'Stays on Pro' : 'Coming soon';
-    setTimeout(() => { b.textContent = orig; }, 1500);
+  // Billing — real plan changes
+  document.querySelectorAll('#panel-billing .plan-action').forEach(b => b.addEventListener('click', () => {
+    const target = b.dataset.plan;
+    if (target === getPlan()) return;
+    if (target === 'free') { setPlan('free'); flashButton(b, 'Switched to Free'); return; }
+    startCheckout(target);
   }));
 
   // Capabilities toggles
@@ -604,6 +684,8 @@ function openSettingsPanel(panelId) {
     setVal('input-mistral-model', App.settings.mistralModel);
   } else if (panelId === 'panel-memory') {
     renderMemoryInfo();
+  } else if (panelId === 'panel-billing') {
+    hydrateBilling();
   } else if (panelId === 'panel-profile') {
     hydrateProfilePanel();
   } else if (panelId === 'panel-usage') {
@@ -924,6 +1006,8 @@ async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+
+  if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
 
   App.chatHistory.push({ role: 'user', content: text });
   appendMessage('user', text);
@@ -1840,18 +1924,28 @@ function renderStudyGrid(locs) {
   const titleCSS= 'font-family:var(--hub-display);font-weight:800;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,0.8)';
   const subCSS  = 'font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:0.04em;margin-top:2px';
 
-  grid.innerHTML = locs.map(loc => `
-    <div class="study-tile" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="${cardCSS}">
+  const pro = isPro();
+  const lockCSS = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);';
+  const badgeCSS = 'font-family:var(--hub-display);font-weight:800;font-size:10px;letter-spacing:0.08em;color:#fff;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.4);padding:4px 10px;border-radius:12px;';
+
+  grid.innerHTML = locs.map((loc) => {
+    // free users: only the first FREE_STUDY_LIMIT locations are unlocked
+    const fullIdx = STUDY_LOCATIONS.indexOf(loc);
+    const locked = !pro && fullIdx >= FREE_STUDY_LIMIT;
+    return `
+    <div class="study-tile" data-loc-id="${loc.id}" data-locked="${locked ? '1' : ''}" role="button" tabindex="0" aria-label="${loc.name}" style="${cardCSS}">
       <img src="${studyPosterURL(loc)}" alt="${loc.name}" loading="lazy" style="${imgCSS}" onerror="this.style.display='none';">
       <div style="${ovCSS}">
         <div style="${titleCSS}">${loc.flag} ${loc.name}</div>
         <div style="${subCSS}">${loc.region}</div>
       </div>
-    </div>
-  `).join('');
+      ${locked ? `<div style="${lockCSS}"><span style="${badgeCSS}">🔒 PRO</span></div>` : ''}
+    </div>`;
+  }).join('');
 
   grid.querySelectorAll('.study-tile').forEach(card => {
     const handler = () => {
+      if (card.dataset.locked === '1') { openBilling(); return; }
       const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);
     };

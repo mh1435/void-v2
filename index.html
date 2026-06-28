@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260628u">
+<link rel="stylesheet" href="style.css?v=20260628v">
 <style>
   html,body{background:#0b0c10;margin:0;padding:0;width:100%;height:100%;overflow:hidden;position:fixed;}
 </style>
@@ -965,24 +965,26 @@ if (window.caches && caches.keys) {
       <span>Billing</span>
     </div>
     <div class="panel-content">
-      <div class="settings-section-label">YOUR PLAN</div>
-      <div class="plan-card current">
+      <div class="settings-section-label">PLANS</div>
+      <div class="plan-card" data-plan="free">
+        <div class="plan-top"><span class="plan-name">Free</span><span class="plan-price">$0</span></div>
+        <div class="plan-tag">Current plan</div>
+        <ul class="plan-feats"><li>50 messages / day</li><li>Free AI core</li><li>Basic game hub</li><li>5 study locations</li></ul>
+        <button class="ghost-btn full plan-action" data-plan="free">Current plan</button>
+      </div>
+      <div class="plan-card" data-plan="pro">
         <div class="plan-top"><span class="plan-name">Pro</span><span class="plan-price">$5<small>/mo</small></span></div>
         <div class="plan-tag">Current plan</div>
-        <ul class="plan-feats"><li>Unlimited chats</li><li>All AI providers</li><li>Study mode &amp; locations</li><li>Priority responses</li></ul>
-        <button class="ghost-btn full" id="billing-manage-btn">Manage subscription</button>
+        <ul class="plan-feats"><li>Unlimited chats</li><li>All AI providers</li><li>All 47 study locations</li><li>All themes &amp; voice</li></ul>
+        <button class="primary-btn full plan-action" data-plan="pro">Upgrade to Pro</button>
       </div>
-      <div class="settings-section-label">OTHER PLANS</div>
-      <div class="plan-card">
-        <div class="plan-top"><span class="plan-name">Free</span><span class="plan-price">$0</span></div>
-        <ul class="plan-feats"><li>Standard chats</li><li>Free AI core</li><li>Basic game hub</li></ul>
-        <button class="ghost-btn full plan-action" data-plan="Free">Downgrade</button>
-      </div>
-      <div class="plan-card">
+      <div class="plan-card" data-plan="max">
         <div class="plan-top"><span class="plan-name">Max</span><span class="plan-price">$15<small>/mo</small></span></div>
-        <ul class="plan-feats"><li>Everything in Pro</li><li>Highest rate limits</li><li>Early features</li></ul>
-        <button class="primary-btn plan-action" data-plan="Max">Upgrade to Max</button>
+        <div class="plan-tag">Current plan</div>
+        <ul class="plan-feats"><li>Everything in Pro</li><li>Highest rate limits</li><li>Priority responses</li><li>Early features</li></ul>
+        <button class="primary-btn full plan-action" data-plan="max">Upgrade to Max</button>
       </div>
+      <p class="muted small panel-desc" style="margin-top:6px;">Cancel anytime. Manage your subscription from this page.</p>
     </div>
   </div>
 
@@ -1176,7 +1178,7 @@ if (window.caches && caches.keys) {
   </div>
 </div>
 
-<script src="gamehub-data.js?v=20260628u"></script>
-<script src="app.js?v=20260628u"></script>
+<script src="gamehub-data.js?v=20260628v"></script>
+<script src="app.js?v=20260628v"></script>
 </body>
 </html>
