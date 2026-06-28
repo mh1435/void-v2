@@ -20,7 +20,9 @@ const App = {
   },
   tasks: [],
   commands: [],
-  chatHistory: [],
+  chatHistory: [],   // messages of the ACTIVE chat (reference into chats[].messages)
+  chats: [],         // [{ id, title, messages:[], updatedAt }]
+  currentChatId: null,
   msgCount: 0,
   location: null,
   hubDetailReturnTab: 'tab-gamehub',
@@ -250,9 +252,10 @@ function bootApp() {
   setupProviderPicker();
   setupMemoryPanel();
   setupStudyMode();
+  setupNavDrawer();
   loadTasks();
   loadCommands();
-  loadChatHistory();
+  loadChats();
   updateUserDisplay();
 }
 
@@ -283,10 +286,15 @@ function resolveThemeForSystem(name) {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'frost';
 }
 
+const LIGHT_THEMES = ['light', 'cream', 'paper', 'softgray'];
+
 function applyTheme(name) {
   App.settings.theme = name;
   const resolved = resolveThemeForSystem(name);
   document.documentElement.setAttribute('data-theme', resolved === 'frost' ? '' : resolved);
+  // shared flag so every [data-light] override applies to all light variants
+  if (LIGHT_THEMES.includes(resolved)) document.documentElement.setAttribute('data-light', '1');
+  else document.documentElement.removeAttribute('data-light');
   document.querySelectorAll('.theme-swatch').forEach(d => {
     d.classList.toggle('active', d.dataset.theme === name);
   });
@@ -308,10 +316,7 @@ function setupNav() {
     pill.addEventListener('click', () => switchTab(pill.dataset.target));
   });
 
-  document.getElementById('open-settings-btn').addEventListener('click', () => {
-    document.getElementById('view-main').classList.remove('active');
-    document.getElementById('view-settings').classList.add('active');
-  });
+  document.getElementById('open-settings-btn').addEventListener('click', openNavDrawer);
   document.getElementById('close-settings-btn').addEventListener('click', () => {
     document.getElementById('view-settings').classList.remove('active');
     document.getElementById('view-main').classList.add('active');
@@ -841,28 +846,174 @@ function escapeHTML(str) {
   );
 }
 
-/* ============ Chat History Persistence ============ */
+/* ============ Multi-Chat (Gemini-style sessions) ============ */
 
-function saveChatHistory() {
-  try {
-    localStorage.setItem(userKey('chat'), JSON.stringify(App.chatHistory.slice(-100)));
-  } catch(e) {}
+function getCurrentChat() {
+  return App.chats.find(c => c.id === App.currentChatId) || null;
 }
 
-function loadChatHistory() {
+// Persist all chats + which one is active.
+function saveChats() {
   try {
-    const raw = localStorage.getItem(userKey('chat'));
+    const cur = getCurrentChat();
+    if (cur) { cur.messages = App.chatHistory; cur.updatedAt = Date.now(); }
+    localStorage.setItem(userKey('chats'), JSON.stringify(App.chats.slice(-50)));
+    localStorage.setItem(userKey('currentChatId'), App.currentChatId || '');
+  } catch(e) {}
+}
+// Called after each reply — keep the name the chat flow already uses.
+function saveChatHistory() {
+  const cur = getCurrentChat();
+  if (cur && (!cur.title || cur.title === 'New chat')) {
+    const firstUser = App.chatHistory.find(m => m.role === 'user');
+    if (firstUser) cur.title = firstUser.content.slice(0, 40).trim() || 'New chat';
+  }
+  saveChats();
+  renderChatList();
+}
+
+function loadChats() {
+  try {
+    const raw = localStorage.getItem(userKey('chats'));
     if (raw) {
-      App.chatHistory = JSON.parse(raw) || [];
-      if (App.chatHistory.length > 0) {
-        const box = document.getElementById('messages-box');
-        box.innerHTML = '';
-        App.chatHistory.forEach(msg => {
-          appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content);
-        });
-      }
+      App.chats = JSON.parse(raw) || [];
     }
-  } catch(e) { App.chatHistory = []; }
+    // migrate the old single-history store into the first chat
+    if (!App.chats.length) {
+      let legacy = [];
+      try { legacy = JSON.parse(localStorage.getItem(userKey('chat'))) || []; } catch(e) {}
+      App.chats = [{ id: 'c' + Date.now(), title: titleFromMessages(legacy), messages: legacy, updatedAt: Date.now() }];
+    }
+    App.currentChatId = localStorage.getItem(userKey('currentChatId')) || App.chats[App.chats.length - 1].id;
+    if (!getCurrentChat()) App.currentChatId = App.chats[App.chats.length - 1].id;
+  } catch(e) {
+    App.chats = [{ id: 'c' + Date.now(), title: 'New chat', messages: [], updatedAt: Date.now() }];
+    App.currentChatId = App.chats[0].id;
+  }
+  App.chatHistory = getCurrentChat().messages;
+  renderActiveChat();
+  renderChatList();
+}
+
+function titleFromMessages(msgs) {
+  const u = (msgs || []).find(m => m.role === 'user');
+  return u ? u.content.slice(0, 40).trim() : 'New chat';
+}
+
+// Re-render the message area for the active chat.
+function renderActiveChat() {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  box.innerHTML = '';
+  App.msgCount = 0;
+  if (App.chatHistory.length) {
+    App.chatHistory.forEach(msg => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content));
+  } else {
+    box.innerHTML = `<div class="matrix-welcome"><div class="welcome-logo">VOID</div>
+      <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
+      <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div></div>`;
+  }
+}
+
+function newChat() {
+  // don't pile up empty chats
+  const cur = getCurrentChat();
+  if (cur && cur.messages.length === 0) { closeNavDrawer(); switchTab('tab-chat'); return; }
+  const chat = { id: 'c' + Date.now(), title: 'New chat', messages: [], updatedAt: Date.now() };
+  App.chats.push(chat);
+  App.currentChatId = chat.id;
+  App.chatHistory = chat.messages;
+  saveChats();
+  renderActiveChat();
+  renderChatList();
+  closeNavDrawer();
+  switchTab('tab-chat');
+}
+
+function switchChat(id) {
+  const chat = App.chats.find(c => c.id === id);
+  if (!chat) return;
+  App.currentChatId = id;
+  App.chatHistory = chat.messages;
+  saveChats();
+  renderActiveChat();
+  renderChatList();
+  closeNavDrawer();
+  switchTab('tab-chat');
+}
+
+function deleteChat(id) {
+  const idx = App.chats.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  App.chats.splice(idx, 1);
+  if (!App.chats.length) App.chats.push({ id: 'c' + Date.now(), title: 'New chat', messages: [], updatedAt: Date.now() });
+  if (App.currentChatId === id) {
+    App.currentChatId = App.chats[App.chats.length - 1].id;
+    App.chatHistory = getCurrentChat().messages;
+    renderActiveChat();
+  }
+  saveChats();
+  renderChatList();
+}
+
+function renderChatList() {
+  const list = document.getElementById('chat-list');
+  if (!list) return;
+  const sorted = [...App.chats].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  list.innerHTML = sorted.map(c => `
+    <div class="nav-chat-item${c.id === App.currentChatId ? ' active' : ''}" data-chat-id="${c.id}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span class="nav-chat-title">${escapeHTML(c.title || 'New chat')}</span>
+      <button class="nav-chat-del" data-del-id="${c.id}" aria-label="Delete chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>`).join('');
+  list.querySelectorAll('.nav-chat-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.nav-chat-del')) return;
+      switchChat(item.dataset.chatId);
+    });
+  });
+  list.querySelectorAll('.nav-chat-del').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); deleteChat(btn.dataset.delId); });
+  });
+}
+
+/* ============ Nav Drawer ============ */
+
+function openNavDrawer() {
+  const d = document.getElementById('nav-drawer');
+  const s = document.getElementById('nav-scrim');
+  renderChatList();
+  // sync profile bits
+  const av = document.getElementById('nav-profile-avatar');
+  const nm = document.getElementById('nav-profile-name');
+  if (av) av.textContent = (App.currentUser || 'V')[0].toUpperCase();
+  if (nm) nm.textContent = App.currentUser ? App.currentUser.split('@')[0] : 'USER';
+  if (d) d.classList.add('open');
+  if (s) s.classList.add('show');
+}
+
+function closeNavDrawer() {
+  const d = document.getElementById('nav-drawer');
+  const s = document.getElementById('nav-scrim');
+  if (d) d.classList.remove('open');
+  if (s) s.classList.remove('show');
+}
+
+function setupNavDrawer() {
+  const burger = document.getElementById('nav-menu-btn');
+  if (burger) burger.addEventListener('click', openNavDrawer);
+  const scrim = document.getElementById('nav-scrim');
+  if (scrim) scrim.addEventListener('click', closeNavDrawer);
+  const nc = document.getElementById('nav-newchat-btn');
+  if (nc) nc.addEventListener('click', newChat);
+  const prof = document.getElementById('nav-profile-btn');
+  if (prof) prof.addEventListener('click', () => {
+    closeNavDrawer();
+    document.getElementById('view-main').classList.remove('active');
+    document.getElementById('view-settings').classList.add('active');
+  });
 }
 
 /* ============ Provider Picker ============ */
@@ -959,17 +1110,13 @@ function setupMemoryPanel() {
   const clearBtn = document.getElementById('clear-memory-btn');
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
-      App.chatHistory = [];
-      saveChatHistory();
+      const cur = getCurrentChat();
+      if (cur) { cur.messages = []; cur.title = 'New chat'; }
+      App.chatHistory = cur ? cur.messages : [];
       App.msgCount = 0;
-      const box = document.getElementById('messages-box');
-      box.innerHTML = `
-        <div class="matrix-welcome">
-          <div class="welcome-logo">VOID</div>
-          <p>Memory cleared. Fresh session started.</p>
-          <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div>
-        </div>
-      `;
+      saveChats();
+      renderActiveChat();
+      renderChatList();
       closeSettingsPanel();
       renderMemoryInfo();
     });
