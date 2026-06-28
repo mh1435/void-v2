@@ -616,7 +616,7 @@ if (window.caches && caches.keys) {
         </div>
         <div class="menu-item" data-open-panel="panel-preferences">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
-          <div class="menu-label"><span>Language &amp; system</span></div>
+          <div class="menu-label"><span>General</span></div>
         </div>
         <div class="menu-item" data-open-panel="panel-permissions">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
@@ -739,26 +739,26 @@ if (window.caches && caches.keys) {
       <button class="icon-btn back-btn" data-close-panel aria-label="Back">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
       </button>
-      <span>Language &amp; System</span>
+      <span>General</span>
     </div>
     <div class="panel-content">
-      <div class="settings-section-label">MAPPING AND COMPUTE PLATFORMS</div>
+      <div class="settings-section-label">SYSTEM</div>
       <div class="setting-row stacked">
-        <div class="setting-label"><span>Telemetry Map Engine</span></div>
+        <div class="setting-label"><span>Map Provider</span></div>
         <select class="select-input" id="select-map-provider">
-          <option value="google">Google Maps Engine</option>
-          <option value="osm">OpenStreetMap Core</option>
+          <option value="google">Google Maps</option>
+          <option value="osm">OpenStreetMap</option>
         </select>
       </div>
       <div class="setting-row stacked">
-        <div class="setting-label"><span>Context Response Mode</span></div>
+        <div class="setting-label"><span>Response Style</span></div>
         <select class="select-input" id="select-response-mode">
-          <option value="standard">Standard Synthesizer</option>
-          <option value="concise">Compressed (Low Tokens)</option>
+          <option value="standard">Detailed</option>
+          <option value="concise">Quick &amp; short</option>
         </select>
       </div>
       <div class="setting-row stacked">
-        <div class="setting-label"><span>Core Translation Language</span></div>
+        <div class="setting-label"><span>Language</span></div>
         <select class="select-input" id="select-lang">
           <option value="auto">Auto (System Language)</option>
           <option value="en">English</option>
@@ -780,16 +780,16 @@ if (window.caches && caches.keys) {
         </select>
       </div>
       
-      <div class="settings-section-label">HARDWARE OPTIMIZATION</div>
+      <div class="settings-section-label">PERFORMANCE</div>
       <div class="setting-row">
-        <div class="setting-label"><span>Reduced Animation Metrics</span><span class="setting-sub">Disables canvas filters for slow CPU threads</span></div>
+        <div class="setting-label"><span>Reduce animations</span><span class="setting-sub">Helps on older or slower devices</span></div>
         <label class="switch"><input type="checkbox" id="toggle-reduced-motion"><span class="switch-track"><span class="switch-thumb"></span></span></label>
       </div>
       <div class="setting-row">
-        <div class="setting-label"><span>Location Services</span><span class="setting-sub">Authorize device GPS telemetry</span></div>
-        <button class="ghost-btn compact" id="btn-request-gps">ACQUIRE GPS</button>
+        <div class="setting-label"><span>Location</span><span class="setting-sub">Allow VOID to use your location</span></div>
+        <button class="ghost-btn compact" id="btn-request-gps">Enable</button>
       </div>
-      <p class="muted small monospace" id="gps-status-line">GPS::UNAVAILABLE</p>
+      <p class="muted small" id="gps-status-line">Location not enabled</p>
     </div>
   </div>
 
