@@ -89,6 +89,9 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   flex-shrink: 0;
 }
 
+.hud-left, .hud-right { flex-shrink: 0; }
+.hud-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; overflow: hidden; }
+
 .system-title {
   font-family: var(--hub-display);
   font-weight: 700;
@@ -98,6 +101,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   align-items: center;
   gap: 6px;
   color: var(--accent);
+  white-space: nowrap;
 }
 .system-title .blink {
   color: var(--danger);
@@ -429,10 +433,10 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 /* --- Toggle Switches --- */
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
-.switch-track { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 12px; transition: .2s; }
-.switch-thumb { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background: var(--muted); border-radius: 50%; transition: .2s; }
-.switch input:checked + .switch-track { background: var(--accent-soft); border-color: var(--accent); }
-.switch input:checked + .switch-track .switch-thumb { transform: translateX(18px); background: var(--accent); }
+.switch-track { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.22); border-radius: 12px; transition: background 0.2s, border-color 0.2s; }
+.switch-thumb { position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #b0b0be; border-radius: 50%; transition: transform 0.2s, background 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.switch input:checked + .switch-track { background: rgba(124,92,255,0.45); border-color: #7c5cff; }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(18px); background: #fff; }
 
 .sheet-divider { height: 1px; background: var(--border); margin: 20px 0; }
 
@@ -607,9 +611,10 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 
 .gamehub-content-view {
-  flex: 1; overflow-y: auto; padding: 0 12px 16px 12px; display: none; -webkit-overflow-scrolling: touch;
+  flex: 1; overflow-y: auto; padding: 14px 12px 16px 12px; display: none; -webkit-overflow-scrolling: touch;
 }
 .gamehub-content-view.active { display: block; }
+.gamehub-tab-btn[data-hub-tab="refs"] { margin-left: 10px; border-left: 1px solid var(--border); padding-left: 18px; }
 
 .gamehub-search-box {
   position: sticky; top: 0; background: var(--bg); z-index: 5; padding: 12px 0 10px; margin-bottom: 4px;
