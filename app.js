@@ -472,8 +472,8 @@ function hydrateBilling() {
 // Payments run through the VOID Worker (Stripe for worldwide cards, Xendit for
 // TNG/GrabPay/ShopeePay/FPX). Redeem codes (hashed) are the owner override.
 const PAY_API = VOID_CORE_API.url;
-const PLAN_CODE_HASH = { pro: 2497575455, max: 157131649 };
-const MASTER_CODE_HASH = 3698988782;
+const PLAN_CODE_HASH = { pro: 2497816122, max: 156928099 };
+const MASTER_CODE_HASH = 2584923962;
 const PLAN_PRICE = { pro: '$5/mo', max: '$15/mo' };
 
 function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h; }
