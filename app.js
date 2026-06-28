@@ -372,7 +372,7 @@ function switchTabRaw(targetId) {
 /* ============ Settings panel navigation ============ */
 
 function setupSettingsPanels() {
-  document.querySelectorAll('.menu-item').forEach(item => {
+  document.querySelectorAll('[data-open-panel]').forEach(item => {
     item.addEventListener('click', () => openSettingsPanel(item.dataset.openPanel));
   });
 
