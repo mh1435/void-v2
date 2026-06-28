@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260628o">
+<link rel="stylesheet" href="style.css?v=20260628p">
 <style>
   html,body{background:#0b0c10;margin:0;padding:0;width:100%;height:100%;overflow:hidden;position:fixed;}
 </style>
@@ -92,25 +92,25 @@ if (window.caches && caches.keys) {
             <div class="provider-picker-title">VOID AI — SELECT PROVIDER</div>
             <div id="provider-list"></div>
           </div>
-          <div class="input-row">
+          <div class="chat-box">
             <textarea id="chat-input" rows="1" placeholder="Ask Void anything..."></textarea>
-            <button class="send-btn" id="send-msg-btn" aria-label="Send or Mic" data-mode="mic">
-              <svg class="btn-icon-mic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-              </svg>
-              <svg class="btn-icon-send" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
-          </div>
-          <div class="quick-utilities-row">
-            <button class="util-badge provider-btn" id="provider-pick-btn">VOID AI &#9662;</button>
-            <div class="util-spacer"></div>
-            <span class="model-badge monospace" id="active-model-indicator">AI</span>
+            <div class="chat-box-bar">
+              <button class="util-badge provider-btn" id="provider-pick-btn">VOID AI &#9662;</button>
+              <span class="model-badge monospace" id="active-model-indicator">AI</span>
+              <div class="util-spacer"></div>
+              <button class="send-btn" id="send-msg-btn" aria-label="Send or Mic" data-mode="mic">
+                <svg class="btn-icon-mic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+                <svg class="btn-icon-send" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -995,7 +995,7 @@ if (window.caches && caches.keys) {
   </div>
 </div>
 
-<script src="gamehub-data.js?v=20260628o"></script>
-<script src="app.js?v=20260628o"></script>
+<script src="gamehub-data.js?v=20260628p"></script>
+<script src="app.js?v=20260628p"></script>
 </body>
 </html>

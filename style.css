@@ -207,10 +207,16 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: rgba(13, 13, 16, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   padding-bottom: calc(12px + var(--safe-bottom)); flex-shrink: 0;
 }
-.input-row { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 4px 6px 4px 14px; align-items: center; }
+/* Claude-style: textarea on top, model selector + send inside the same box */
+.chat-box {
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 22px; padding: 10px 12px 8px;
+}
+.chat-box-bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 #chat-input {
-  flex: 1; background: transparent; border: none; color: var(--text); font-family: var(--hub-body);
-  font-size: 14px; padding: 8px 0; resize: none; max-height: 100px; outline: none;
+  width: 100%; background: transparent; border: none; color: var(--text); font-family: var(--hub-body);
+  font-size: 14px; padding: 4px 2px; resize: none; max-height: 100px; outline: none;
 }
 .send-btn {
   background: var(--accent); color: var(--accent-text); border: none;
@@ -523,7 +529,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .gamehub-content-view.active { display: block; }
 
 .gamehub-search-box {
-  position: sticky; top: 0; background: #15151a; z-index: 5; padding: 12px 0; margin-bottom: 4px;
+  position: sticky; top: 0; background: var(--bg); z-index: 5; padding: 12px 0; margin-bottom: 4px;
 }
 
 .hub-grid {
@@ -941,6 +947,12 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 :root[data-light] .chat-bubble.assistant .bubble-body { background: #fff; border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 8px 10px; }
 :root[data-light] .content-frame,
 :root[data-light] .settings-panel { background: var(--bg); }
+:root[data-light] .input-panel-wrapper { background: rgba(245,245,250,0.92); }
+:root[data-light] .chat-box { background: #fff; }
+:root[data-light] .util-badge { background: rgba(0,0,0,0.04); }
+:root[data-light] .util-badge:active { background: rgba(0,0,0,0.1); color: var(--text); }
+/* don't invert ghost buttons to solid black on tap in light themes */
+:root[data-light] .ghost-btn:active { background: var(--accent-soft); color: var(--text); border-color: var(--border); }
 
 /* --- More light variants (share every [data-light] override above) --- */
 :root[data-theme="cream"] {
@@ -1431,7 +1443,7 @@ body.reduced-motion *::after {
   border: 1px solid rgba(255,255,255,0.12);
   box-shadow: 0 12px 40px rgba(0,0,0,0.55);
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  background: rgba(10,10,16,0.78);
+  background: rgba(10,10,16,0.5);
   transition: transform 0.2s ease;
 }
 .study-chat-head {
