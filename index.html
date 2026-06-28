@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260628s">
+<link rel="stylesheet" href="style.css?v=20260628t">
 <style>
   html,body{background:#0b0c10;margin:0;padding:0;width:100%;height:100%;overflow:hidden;position:fixed;}
 </style>
@@ -600,15 +600,15 @@ if (window.caches && caches.keys) {
 
       <!-- Group: account -->
       <div class="settings-card tile-menu">
-        <div class="menu-item" data-open-panel="panel-about">
+        <div class="menu-item" data-open-panel="panel-profile">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg></div>
           <div class="menu-label"><span>Profile</span></div>
         </div>
-        <div class="menu-item" data-open-panel="panel-about">
+        <div class="menu-item" data-open-panel="panel-billing">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M14.8 9a2.5 2.5 0 0 0-2.3-1.5c-1.4 0-2.5.8-2.5 2s1.1 1.8 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2A2.5 2.5 0 0 1 9.2 15"></path><line x1="12" y1="6" x2="12" y2="7.5"></line><line x1="12" y1="16.5" x2="12" y2="18"></line></svg></div>
           <div class="menu-label"><span>Billing</span></div>
         </div>
-        <div class="menu-item" data-open-panel="panel-memory">
+        <div class="menu-item" data-open-panel="panel-usage">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 17 9 11 13 15 21 7"></polyline><polyline points="14 7 21 7 21 14"></polyline></svg></div>
           <div class="menu-label"><span>Usage</span></div>
         </div>
@@ -616,11 +616,11 @@ if (window.caches && caches.keys) {
 
       <!-- Group: capabilities & permissions -->
       <div class="settings-card tile-menu">
-        <div class="menu-item" data-open-panel="panel-commands">
+        <div class="menu-item" data-open-panel="panel-capabilities">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></div>
           <div class="menu-label"><span>Capabilities</span><span class="sub">4 enabled</span></div>
         </div>
-        <div class="menu-item" data-open-panel="panel-keys">
+        <div class="menu-item" data-open-panel="panel-permissions">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
           <div class="menu-label"><span>Permissions</span></div>
         </div>
@@ -628,11 +628,11 @@ if (window.caches && caches.keys) {
 
       <!-- Group: appearance & voice -->
       <div class="settings-card tile-menu">
-        <div class="menu-item" data-open-panel="panel-preferences">
+        <div class="menu-item" data-open-panel="panel-colormode">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"></path></svg></div>
           <div class="menu-label"><span>Color mode</span><span class="sub">System</span></div>
         </div>
-        <div class="menu-item" data-open-panel="panel-preferences">
+        <div class="menu-item" data-open-panel="panel-fontstyle">
           <div class="menu-icon menu-icon-text">Aa</div>
           <div class="menu-label"><span>Font style</span><span class="sub">Default</span></div>
         </div>
@@ -652,7 +652,7 @@ if (window.caches && caches.keys) {
             <span class="switch-track"><span class="switch-thumb"></span></span>
           </label>
         </div>
-        <div class="menu-item" data-open-panel="panel-floating">
+        <div class="menu-item" data-open-panel="panel-notifications">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></div>
           <div class="menu-label"><span>Notifications</span></div>
         </div>
@@ -934,6 +934,150 @@ if (window.caches && caches.keys) {
     </div>
   </div>
 
+  <!-- PROFILE -->
+  <div class="settings-panel" id="panel-profile">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Profile</span>
+    </div>
+    <div class="panel-content">
+      <div class="profile-hero">
+        <div class="profile-hero-avatar" id="profile-hero-avatar">V</div>
+        <div class="profile-hero-email" id="profile-hero-email"></div>
+        <span class="account-badge">PRO</span>
+      </div>
+      <div class="settings-section-label">DISPLAY NAME</div>
+      <div class="setting-row stacked">
+        <input type="text" class="text-input" id="profile-name-input" placeholder="Your name" maxlength="40">
+      </div>
+      <div class="settings-section-label">EMAIL</div>
+      <div class="setting-row stacked">
+        <input type="text" class="text-input" id="profile-email-input" disabled>
+      </div>
+      <button class="primary-btn" id="profile-save-btn">Save changes</button>
+    </div>
+  </div>
+
+  <!-- BILLING -->
+  <div class="settings-panel" id="panel-billing">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Billing</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">YOUR PLAN</div>
+      <div class="plan-card current">
+        <div class="plan-top"><span class="plan-name">Pro</span><span class="plan-price">$20<small>/mo</small></span></div>
+        <div class="plan-tag">Current plan</div>
+        <ul class="plan-feats"><li>Unlimited chats</li><li>All AI providers</li><li>Study mode &amp; locations</li><li>Priority responses</li></ul>
+        <button class="ghost-btn full" id="billing-manage-btn">Manage subscription</button>
+      </div>
+      <div class="settings-section-label">OTHER PLANS</div>
+      <div class="plan-card">
+        <div class="plan-top"><span class="plan-name">Free</span><span class="plan-price">$0</span></div>
+        <ul class="plan-feats"><li>Standard chats</li><li>Free AI core</li><li>Basic game hub</li></ul>
+        <button class="ghost-btn full plan-action" data-plan="Free">Downgrade</button>
+      </div>
+      <div class="plan-card">
+        <div class="plan-top"><span class="plan-name">Max</span><span class="plan-price">$100<small>/mo</small></span></div>
+        <ul class="plan-feats"><li>Everything in Pro</li><li>Highest rate limits</li><li>Early features</li></ul>
+        <button class="primary-btn plan-action" data-plan="Max">Upgrade to Max</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USAGE -->
+  <div class="settings-panel" id="panel-usage">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Usage</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">THIS ACCOUNT</div>
+      <div class="usage-grid" id="usage-grid"></div>
+      <div class="settings-section-label">MESSAGES THIS MONTH</div>
+      <div class="usage-bar"><div class="usage-bar-fill" id="usage-bar-fill"></div></div>
+      <p class="muted small" id="usage-bar-label" style="margin-top:8px;"></p>
+    </div>
+  </div>
+
+  <!-- CAPABILITIES -->
+  <div class="settings-panel" id="panel-capabilities">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Capabilities</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">ENABLED FEATURES</div>
+      <div class="setting-row"><div class="setting-label"><span>Voice output</span><span class="setting-sub">Speak AI responses aloud</span></div><label class="switch"><input type="checkbox" class="cap-toggle" data-cap="voiceEnabled"><span class="switch-track"><span class="switch-thumb"></span></span></label></div>
+      <div class="setting-row"><div class="setting-label"><span>Study mode</span><span class="setting-sub">Immersive focus locations</span></div><label class="switch"><input type="checkbox" class="cap-toggle" data-cap="studyMode"><span class="switch-track"><span class="switch-thumb"></span></span></label></div>
+      <div class="setting-row"><div class="setting-label"><span>Floating assistant</span><span class="setting-sub">Quick VOID overlay button</span></div><label class="switch"><input type="checkbox" class="cap-toggle" data-cap="floatingAssistantEnabled"><span class="switch-track"><span class="switch-thumb"></span></span></label></div>
+      <div class="setting-row"><div class="setting-label"><span>Haptic feedback</span><span class="setting-sub">Vibrate on actions</span></div><label class="switch"><input type="checkbox" class="cap-toggle" data-cap="haptic"><span class="switch-track"><span class="switch-thumb"></span></span></label></div>
+    </div>
+  </div>
+
+  <!-- PERMISSIONS -->
+  <div class="settings-panel" id="panel-permissions">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Permissions</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">DEVICE ACCESS</div>
+      <div class="setting-row"><div class="setting-label"><span>Microphone</span><span class="setting-sub" id="perm-mic-status">Not granted</span></div><button class="ghost-btn compact" id="perm-mic-btn">Allow</button></div>
+      <div class="setting-row"><div class="setting-label"><span>Location</span><span class="setting-sub" id="perm-geo-status">Not granted</span></div><button class="ghost-btn compact" id="perm-geo-btn">Allow</button></div>
+      <div class="setting-row"><div class="setting-label"><span>Notifications</span><span class="setting-sub" id="perm-notif-status">Not granted</span></div><button class="ghost-btn compact" id="perm-notif-btn">Allow</button></div>
+    </div>
+  </div>
+
+  <!-- COLOR MODE -->
+  <div class="settings-panel" id="panel-colormode">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Color mode</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">MODE</div>
+      <div class="segmented" id="colormode-seg">
+        <button class="seg-btn" data-theme="auto">System</button>
+        <button class="seg-btn" data-theme="frost">Dark</button>
+        <button class="seg-btn" data-theme="light">Light</button>
+      </div>
+      <p class="muted small" style="margin-top:10px;">For more themes (Cream, Matrix, Nebula…) open <strong>Appearance</strong>.</p>
+      <button class="ghost-btn full" data-open-panel="panel-preferences" style="margin-top:14px;">All themes</button>
+    </div>
+  </div>
+
+  <!-- FONT STYLE -->
+  <div class="settings-panel" id="panel-fontstyle">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Font style</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">TEXT SIZE</div>
+      <div class="segmented" id="fontsize-seg">
+        <button class="seg-btn" data-size="small">Small</button>
+        <button class="seg-btn" data-size="default">Default</button>
+        <button class="seg-btn" data-size="large">Large</button>
+      </div>
+      <p class="muted small" id="fontsize-preview" style="margin-top:16px;">The quick brown fox jumps over the lazy dog.</p>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="settings-panel" id="panel-notifications">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Notifications</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">PUSH NOTIFICATIONS</div>
+      <div class="setting-row"><div class="setting-label"><span>Enable notifications</span><span class="setting-sub" id="notif-status">Off</span></div><button class="ghost-btn compact" id="notif-enable-btn">Allow</button></div>
+      <div class="setting-row"><div class="setting-label"><span>Sound</span><span class="setting-sub">Play a sound on alerts</span></div><label class="switch"><input type="checkbox" id="notif-sound-toggle"><span class="switch-track"><span class="switch-thumb"></span></span></label></div>
+    </div>
+  </div>
+
 </div>
 
 <div class="login-modal" id="login-modal" style="display:none">
@@ -1032,7 +1176,7 @@ if (window.caches && caches.keys) {
   </div>
 </div>
 
-<script src="gamehub-data.js?v=20260628s"></script>
-<script src="app.js?v=20260628s"></script>
+<script src="gamehub-data.js?v=20260628t"></script>
+<script src="app.js?v=20260628t"></script>
 </body>
 </html>
