@@ -1988,7 +1988,7 @@ function renderStudyGrid(locs) {
   // stale/missing stylesheet — inline styles always win. padding-top:100% on a
   // relative box is a bulletproof square; the image fills it absolutely.
   grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
   grid.style.gap = '12px';
   grid.style.alignContent = 'start';
 
