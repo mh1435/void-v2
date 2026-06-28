@@ -17,6 +17,7 @@ const App = {
     reducedMotion: false,
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
     floatingAssistantEnabled: false,
+    haptic: true,
   },
   tasks: [],
   commands: [],
@@ -375,6 +376,16 @@ function setupSettingsPanels() {
   document.querySelectorAll('[data-open-panel]').forEach(item => {
     item.addEventListener('click', () => openSettingsPanel(item.dataset.openPanel));
   });
+
+  const haptic = document.getElementById('haptic-toggle');
+  if (haptic) {
+    haptic.checked = App.settings.haptic !== false;
+    haptic.addEventListener('change', () => {
+      App.settings.haptic = haptic.checked;
+      saveSettings();
+      if (haptic.checked && navigator.vibrate) navigator.vibrate(15);
+    });
+  }
 
   document.querySelectorAll('.settings-panel').forEach(panel => {
     const closeBtn = panel.querySelector('.panel-close-btn, [data-close-panel]');
