@@ -1192,6 +1192,31 @@ if (window.caches && caches.keys) {
   </div>
 </div>
 
+<!-- ── Floating VOID Assistant ─────────────────────────────── -->
+<div id="void-float" class="void-float" style="display:none;" aria-hidden="true">
+  <div id="void-float-panel" class="void-float-panel" role="dialog" aria-label="VOID Assistant" aria-hidden="true">
+    <div class="void-float-header">
+      <span class="void-float-name">VOID</span>
+      <button class="void-float-close" id="void-float-close-btn" aria-label="Close">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="void-float-log" class="void-float-log"></div>
+    <div class="void-float-footer">
+      <input id="void-float-input" class="void-float-input" type="text" placeholder="Ask anything…" autocomplete="off" enterkeyhint="send">
+      <button id="void-float-send-btn" class="void-float-send" aria-label="Send">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="void-float-orb" class="void-float-orb" role="button" tabindex="0" aria-label="VOID floating assistant">
+    <svg width="22" height="22" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+      <path d="M 108 140 L 256 372 L 404 140" stroke="#9a87ff" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="void-float-pulse" aria-hidden="true"></div>
+  </div>
+</div>
+
 <script src="gamehub-data.js?v=20260628y"></script>
 <script src="app.js?v=20260628y"></script>
 </body>

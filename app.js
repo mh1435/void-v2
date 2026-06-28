@@ -30,7 +30,20 @@ const App = {
   currentUser: null,
 };
 
-const VOID_SYSTEM = `You are VOID, an intelligent AI assistant and gaming companion. You specialize in Mobile Legends Bang Bang (MLBB) — hero guides, builds, counters, team comps, patch meta — and you also help with general questions. Be concise, helpful, and direct.`;
+const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VOID app. You have access to the following capabilities:
+- Multi-provider AI chat (Gemini, Groq, OpenRouter, Together, Mistral, Pollinations)
+- Study Mode: immersive ambient video environments for focus and deep work
+- GPS location access (if the user grants permission)
+- Voice output: read responses aloud via text-to-speech
+- MLBB Game Hub: hero guides, builds, counters, and meta (only when the user asks about it)
+- Floating assistant overlay: accessible over other apps
+- Custom commands and task lists
+
+Rules:
+- NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
+- Match your response length to the question — short question = short answer, complex question = detailed answer
+- If asked what you can do, describe the capabilities above naturally
+- Be direct, useful, and conversational`;
 
 const LANG_NAMES = {
   en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
@@ -845,8 +858,20 @@ function setupPreferencesPanel() {
     floatToggle.addEventListener('change', () => {
       App.settings.floatingAssistantEnabled = floatToggle.checked;
       saveSettings();
+      setFloatingAssistant(floatToggle.checked);
     });
   }
+
+  // Also sync the Modules panel toggle
+  const capFloatToggle = document.querySelector('.cap-toggle[data-cap="floatingAssistantEnabled"]');
+  if (capFloatToggle) {
+    capFloatToggle.addEventListener('change', () => {
+      setFloatingAssistant(capFloatToggle.checked);
+    });
+  }
+
+  // Show on boot if previously enabled
+  if (App.settings.floatingAssistantEnabled) setFloatingAssistant(true);
 }
 
 /* ============ Voice ============ */
@@ -2486,4 +2511,177 @@ function bindStatTileNav() {
       if (item) openItemDetail(item.id);
     });
   });
+}
+
+/* ================================================================
+   FLOATING VOID ASSISTANT
+   ================================================================ */
+
+const VoidFloat = (() => {
+  let floatEl, panel, orb, log, input;
+  let panelOpen = false;
+  let history   = [];
+
+  // drag state
+  let dragging = false, startX, startY, origLeft, origBottom;
+
+  function init() {
+    floatEl = document.getElementById('void-float');
+    panel   = document.getElementById('void-float-panel');
+    orb     = document.getElementById('void-float-orb');
+    log     = document.getElementById('void-float-log');
+    input   = document.getElementById('void-float-input');
+    if (!floatEl) return;
+
+    // Close button
+    document.getElementById('void-float-close-btn')?.addEventListener('click', closePanel);
+
+    // Send button + enter key
+    document.getElementById('void-float-send-btn')?.addEventListener('click', sendMsg);
+    input?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendMsg(); } });
+
+    // Orb: drag vs tap
+    orb.addEventListener('pointerdown', onDown);
+    orb.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') togglePanel(); });
+  }
+
+  /* ── Drag ─────────────────────────────────────────────── */
+
+  function onDown(e) {
+    e.preventDefault();
+    orb.setPointerCapture(e.pointerId);
+    startX   = e.clientX;
+    startY   = e.clientY;
+    const style = window.getComputedStyle(floatEl);
+    origLeft   = parseInt(style.right, 10)   || 16;
+    origBottom = parseInt(style.bottom, 10)  || 88;
+    dragging   = false;
+    orb.addEventListener('pointermove', onMove);
+    orb.addEventListener('pointerup',   onUp,   { once: true });
+    orb.addEventListener('pointercancel', onUp, { once: true });
+  }
+
+  function onMove(e) {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) dragging = true;
+    if (dragging) {
+      floatEl.style.right  = Math.max(0, origLeft  - dx) + 'px';
+      floatEl.style.bottom = Math.max(0, origBottom + dy) + 'px';
+    }
+  }
+
+  function onUp() {
+    orb.removeEventListener('pointermove', onMove);
+    if (!dragging) togglePanel();
+    dragging = false;
+  }
+
+  /* ── Panel toggle ─────────────────────────────────────── */
+
+  function togglePanel() { panelOpen ? closePanel() : openPanel(); }
+
+  function openPanel() {
+    panelOpen = true;
+    panel.classList.add('vf-open');
+    panel.setAttribute('aria-hidden', 'false');
+    floatEl.setAttribute('aria-hidden', 'false');
+    input?.focus();
+  }
+
+  function closePanel() {
+    panelOpen = false;
+    panel.classList.remove('vf-open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ── Messaging ────────────────────────────────────────── */
+
+  function sendMsg() {
+    const text = input?.value.trim();
+    if (!text) return;
+    input.value = '';
+    addBubble(text, 'vf-user');
+    history.push({ role: 'user', content: text });
+
+    const typingId = addBubble('…', 'vf-typing');
+
+    const msgs = [
+      { role: 'system', content: VOID_SYSTEM + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
+      ...history.slice(-10)
+    ];
+
+    (async () => {
+      let reply = null;
+      try {
+        if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs);
+      } catch(_) {}
+      if (!reply && App.settings.geminiKey) { try { reply = await callGemini(msgs); } catch(_) {} }
+      if (!reply) { try { reply = await callPollinations(msgs); } catch(_) {} }
+
+      removeBubble(typingId);
+      if (reply) {
+        history.push({ role: 'assistant', content: reply });
+        addBubble(reply, 'vf-ai');
+        if (App.settings.voiceEnabled) speak(reply);
+      } else {
+        addBubble('Error — no response.', 'vf-ai');
+      }
+    })();
+  }
+
+  let msgId = 0;
+  function addBubble(text, cls) {
+    const id  = 'vfm-' + (++msgId);
+    const div = document.createElement('div');
+    div.id    = id;
+    div.className = 'vf-msg ' + cls;
+    div.textContent = text;
+    log?.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return id;
+  }
+
+  function removeBubble(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  /* ── Show / hide widget ───────────────────────────────── */
+
+  function show() {
+    if (!floatEl) init();
+    if (floatEl) floatEl.style.display = '';
+  }
+
+  function hide() {
+    closePanel();
+    if (floatEl) floatEl.style.display = 'none';
+  }
+
+  return { init, show, hide };
+})();
+
+/* Start / stop the floating assistant (web + native) */
+async function setFloatingAssistant(enabled) {
+  if (enabled) {
+    VoidFloat.show();
+    // Native overlay (when running as APK)
+    if (window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const { FloatingPlugin } = Capacitor.Plugins;
+        if (FloatingPlugin) await FloatingPlugin.startFloating();
+      } catch (e) {
+        // OVERLAY_PERMISSION_REQUIRED — Android already opened settings, user will toggle back
+        if (e?.message !== 'OVERLAY_PERMISSION_REQUIRED') console.warn('FloatingPlugin:', e);
+      }
+    }
+  } else {
+    VoidFloat.hide();
+    if (window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const { FloatingPlugin } = Capacitor.Plugins;
+        if (FloatingPlugin) await FloatingPlugin.stopFloating();
+      } catch (e) { console.warn('FloatingPlugin:', e); }
+    }
+  }
 }
