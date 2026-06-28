@@ -254,6 +254,7 @@ function bootApp() {
   setupMemoryPanel();
   setupStudyMode();
   setupNavDrawer();
+  setupClonedPanels();
   loadTasks();
   loadCommands();
   loadChats();
@@ -420,6 +421,170 @@ function setupSettingsPanels() {
   }
 }
 
+/* ============ Cloned settings panels (functional) ============ */
+
+const CAP_KEYS = ['voiceEnabled', 'studyMode', 'floatingAssistantEnabled', 'haptic'];
+
+function saveUserProfile(patch) {
+  if (!App.currentUser) return;
+  const key = `void_profile_${App.currentUser}`;
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem(key)) || {}; } catch (e) {}
+  Object.assign(p, patch);
+  try { localStorage.setItem(key, JSON.stringify(p)); } catch (e) {}
+}
+
+function hydrateProfilePanel() {
+  const prof = getUserProfile() || {};
+  const name = prof.name || (App.currentUser ? App.currentUser.split('@')[0] : 'USER');
+  setEl('profile-hero-avatar', name.charAt(0).toUpperCase());
+  setEl('profile-hero-email', App.currentUser || '');
+  const ni = document.getElementById('profile-name-input'); if (ni) ni.value = name;
+  const ei = document.getElementById('profile-email-input'); if (ei) ei.value = App.currentUser || '';
+}
+
+function renderUsagePanel() {
+  const chats = App.chats.length;
+  const msgs = App.chats.reduce((n, c) => n + (c.messages ? c.messages.length : 0), 0);
+  const studyCount = (typeof STUDY_LOCATIONS !== 'undefined') ? STUDY_LOCATIONS.length : 0;
+  let since = localStorage.getItem(userKey('since'));
+  if (!since) { since = String(Date.now()); localStorage.setItem(userKey('since'), since); }
+  const days = Math.max(1, Math.ceil((Date.now() - Number(since)) / 86400000));
+  const grid = document.getElementById('usage-grid');
+  if (grid) grid.innerHTML = [
+    ['Chats', chats], ['Messages', msgs], ['Locations', studyCount], ['Day' + (days === 1 ? '' : 's'), days],
+  ].map(([l, n]) => `<div class="usage-stat"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
+  const cap = 1000, pct = Math.min(100, Math.round((msgs / cap) * 100));
+  const fill = document.getElementById('usage-bar-fill'); if (fill) fill.style.width = pct + '%';
+  setEl('usage-bar-label', `${msgs} / ${cap} messages used`);
+}
+
+function hydrateCapabilities() {
+  document.querySelectorAll('.cap-toggle').forEach(t => {
+    const k = t.dataset.cap;
+    t.checked = (k === 'studyMode') ? (App.settings.studyMode !== false) : (App.settings[k] !== false ? !!App.settings[k] : false);
+    if (k === 'voiceEnabled') t.checked = App.settings.voiceEnabled !== false;
+    if (k === 'haptic') t.checked = App.settings.haptic !== false;
+    if (k === 'studyMode') t.checked = App.settings.studyMode !== false;
+    if (k === 'floatingAssistantEnabled') t.checked = !!App.settings.floatingAssistantEnabled;
+  });
+}
+
+function capCount() {
+  return CAP_KEYS.filter(k => k === 'floatingAssistantEnabled' ? !!App.settings[k] : App.settings[k] !== false).length;
+}
+
+async function refreshPermissions() {
+  const q = async (name) => { try { return (await navigator.permissions.query({ name })).state; } catch (e) { return 'unknown'; } };
+  if (navigator.permissions) {
+    setEl('perm-mic-status', cap1(await q('microphone')));
+    setEl('perm-geo-status', cap1(await q('geolocation')));
+  }
+  setEl('perm-notif-status', ('Notification' in window) ? cap1(Notification.permission) : 'Unsupported');
+}
+function cap1(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown'; }
+
+function refreshNotifStatus() {
+  const granted = ('Notification' in window) && Notification.permission === 'granted';
+  setEl('notif-status', granted ? 'On' : (('Notification' in window) ? cap1(Notification.permission) : 'Unsupported'));
+  const btn = document.getElementById('notif-enable-btn'); if (btn) btn.textContent = granted ? 'Enabled' : 'Allow';
+  const st = document.getElementById('notif-sound-toggle'); if (st) st.checked = App.settings.notifSound !== false;
+}
+
+function syncColorModeSeg() {
+  const map = { auto: 'auto', light: 'light', frost: 'frost' };
+  const cur = map[App.settings.theme] || '';
+  document.querySelectorAll('#colormode-seg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === cur));
+}
+function colorModeLabel() {
+  return ({ auto: 'System', light: 'Light', frost: 'Dark' })[App.settings.theme] || 'Custom';
+}
+
+function applyFontSize(size) {
+  if (size && size !== 'default') document.documentElement.setAttribute('data-size', size);
+  else document.documentElement.removeAttribute('data-size');
+}
+function syncFontSizeSeg() {
+  const cur = App.settings.fontSize || 'default';
+  document.querySelectorAll('#fontsize-seg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.size === cur));
+}
+
+/* Update the value subtitles shown on the settings menu rows */
+function refreshSettingsSubvalues() {
+  document.querySelectorAll('.menu-item[data-open-panel="panel-capabilities"] .sub').forEach(s => s.textContent = capCount() + ' enabled');
+  document.querySelectorAll('.menu-item[data-open-panel="panel-colormode"] .sub').forEach(s => s.textContent = colorModeLabel());
+  document.querySelectorAll('.menu-item[data-open-panel="panel-fontstyle"] .sub').forEach(s => s.textContent = (App.settings.fontSize || 'default').replace(/^./, c => c.toUpperCase()));
+}
+
+function setEl(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+
+function setupClonedPanels() {
+  applyFontSize(App.settings.fontSize);
+  refreshSettingsSubvalues();
+
+  // Profile save
+  const saveProf = document.getElementById('profile-save-btn');
+  if (saveProf) saveProf.addEventListener('click', () => {
+    const name = (document.getElementById('profile-name-input').value || '').trim();
+    if (name) { saveUserProfile({ name }); updateUserDisplay(); hydrateProfilePanel(); }
+    flashButton(saveProf, 'Saved');
+  });
+
+  // Billing actions
+  const manage = document.getElementById('billing-manage-btn');
+  if (manage) manage.addEventListener('click', () => flashButton(manage, 'Pro is active'));
+  document.querySelectorAll('.plan-action').forEach(b => b.addEventListener('click', () => {
+    const plan = b.dataset.plan;
+    const orig = b.textContent; b.textContent = plan === 'Free' ? 'Stays on Pro' : 'Coming soon';
+    setTimeout(() => { b.textContent = orig; }, 1500);
+  }));
+
+  // Capabilities toggles
+  document.querySelectorAll('.cap-toggle').forEach(t => t.addEventListener('change', () => {
+    const k = t.dataset.cap;
+    App.settings[k] = t.checked;
+    saveSettings();
+    refreshSettingsSubvalues();
+    // keep the voice panel toggle and floating button in sync where relevant
+    if (k === 'voiceEnabled') { const v = document.getElementById('toggle-voice-enabled'); if (v) v.checked = t.checked; }
+  }));
+
+  // Permissions
+  const micBtn = document.getElementById('perm-mic-btn');
+  if (micBtn) micBtn.addEventListener('click', async () => {
+    try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(x => x.stop()); } catch (e) {}
+    refreshPermissions();
+  });
+  const geoBtn = document.getElementById('perm-geo-btn');
+  if (geoBtn) geoBtn.addEventListener('click', () => {
+    navigator.geolocation && navigator.geolocation.getCurrentPosition(() => refreshPermissions(), () => refreshPermissions());
+  });
+  const notifPermBtn = document.getElementById('perm-notif-btn');
+  if (notifPermBtn) notifPermBtn.addEventListener('click', async () => {
+    if ('Notification' in window) { try { await Notification.requestPermission(); } catch (e) {} }
+    refreshPermissions();
+  });
+
+  // Color mode segmented
+  document.querySelectorAll('#colormode-seg .seg-btn').forEach(b => b.addEventListener('click', () => {
+    applyTheme(b.dataset.theme); saveSettings(); syncColorModeSeg(); refreshSettingsSubvalues();
+  }));
+
+  // Font size segmented
+  document.querySelectorAll('#fontsize-seg .seg-btn').forEach(b => b.addEventListener('click', () => {
+    App.settings.fontSize = b.dataset.size; saveSettings(); applyFontSize(b.dataset.size); syncFontSizeSeg(); refreshSettingsSubvalues();
+  }));
+
+  // Notifications
+  const notifEnable = document.getElementById('notif-enable-btn');
+  if (notifEnable) notifEnable.addEventListener('click', async () => {
+    if ('Notification' in window) { try { await Notification.requestPermission(); } catch (e) {} }
+    refreshNotifStatus();
+  });
+  const notifSound = document.getElementById('notif-sound-toggle');
+  if (notifSound) notifSound.addEventListener('change', () => { App.settings.notifSound = notifSound.checked; saveSettings(); });
+}
+
 function openSettingsPanel(panelId) {
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(panelId);
@@ -439,6 +604,20 @@ function openSettingsPanel(panelId) {
     setVal('input-mistral-model', App.settings.mistralModel);
   } else if (panelId === 'panel-memory') {
     renderMemoryInfo();
+  } else if (panelId === 'panel-profile') {
+    hydrateProfilePanel();
+  } else if (panelId === 'panel-usage') {
+    renderUsagePanel();
+  } else if (panelId === 'panel-capabilities') {
+    hydrateCapabilities();
+  } else if (panelId === 'panel-permissions') {
+    refreshPermissions();
+  } else if (panelId === 'panel-colormode') {
+    syncColorModeSeg();
+  } else if (panelId === 'panel-fontstyle') {
+    syncFontSizeSeg();
+  } else if (panelId === 'panel-notifications') {
+    refreshNotifStatus();
   }
 }
 
