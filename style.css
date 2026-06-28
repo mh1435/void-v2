@@ -310,6 +310,25 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .primary-btn.full { width: 100%; display: block; }
 .plan-action:disabled { opacity: 0.5; cursor: default; }
 
+/* Checkout modal */
+.checkout-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.checkout-scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+.checkout-card {
+  position: relative; z-index: 1; width: 100%; max-width: 340px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+  padding: 26px 22px 22px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.checkout-close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.checkout-badge { font-family: var(--hub-display); font-size: 22px; font-weight: 800; letter-spacing: 0.06em; color: var(--text); }
+.checkout-badge span { color: var(--accent); }
+.checkout-price-big { font-family: var(--hub-display); font-size: 34px; font-weight: 800; color: var(--text); margin: 4px 0 8px; }
+.checkout-desc { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 18px; }
+.checkout-or { display: flex; align-items: center; gap: 10px; margin: 16px 0 12px; color: var(--muted); font-size: 11px; }
+.checkout-or::before, .checkout-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.checkout-error { color: var(--hub-red); font-size: 12px; margin: 8px 0; }
+.disabled-btn { opacity: 0.5; cursor: default; }
+#checkout-code { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+
 /* Grouped menu cards */
 .tile-menu { padding: 4px 0; }
 .menu-item {
@@ -539,8 +558,9 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .game-tile:not(.game-tile-soon):not(.game-tile-add):active { transform: scale(0.97); }
 .game-tile-media {
   width: 100%; aspect-ratio: 16/10; background: rgba(255,140,0,0.08);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; padding: 14px; box-sizing: border-box;
 }
+.game-logo { max-width: 84%; max-height: 100%; object-fit: contain; }
 .game-tile-info { padding: 11px 12px 13px; }
 .game-tile-name {
   font-family: var(--hub-display); font-size: 13px; font-weight: 700;

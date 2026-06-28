@@ -57,11 +57,14 @@ function getActiveLang() {
 }
 
 function buildSystemPrompt() {
-  const lang = getActiveLang();
-  const name = LANG_NAMES[lang] || 'English';
-  const inject = lang !== 'en'
-    ? `\n\nIMPORTANT: The user's system language is ${name}. Always respond in ${name} unless the user writes in a different language.`
-    : '';
+  const s = App.settings.lang;
+  let inject;
+  if (s && s !== 'auto' && s !== 'en') {
+    const name = LANG_NAMES[s] || 'English';
+    inject = `\n\nLANGUAGE: Prefer ${name}, but if the user clearly writes in another language, reply in THAT language. Always match the language the user wrote in.`;
+  } else {
+    inject = `\n\nLANGUAGE: Detect the language of the user's latest message and ALWAYS reply in that exact same language (English → English, Arabic → العربية, etc.). Mirror the user's language and script; never switch on your own.`;
+  }
   return VOID_SYSTEM + inject;
 }
 
@@ -464,13 +467,46 @@ function hydrateBilling() {
   });
 }
 
-// Where a real Stripe Checkout / Payment Link will go once a key is in the
-// Worker. For now it activates the plan instantly (no charge).
+// Real Stripe Payment Links go here (one per plan). Until set, upgrades require
+// a redeem code, so nobody can just click to switch for free.
+const STRIPE_LINKS = { pro: '', max: '' };
+// Redeem-code gate (codes are hashed; plaintext never ships in the repo).
+const PLAN_CODE_HASH = { pro: 2497575455, max: 157131649 };
+const MASTER_CODE_HASH = 3698988782; // unlocks any plan (owner override)
+const PLAN_PRICE = { pro: '$5/mo', max: '$15/mo' };
+
+function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h; }
+
+let pendingPlan = null;
 function startCheckout(plan) {
-  // TODO(stripe): redirect to Stripe Checkout for `plan`, confirm via webhook.
-  setPlan(plan);
-  const btn = document.querySelector(`#panel-billing .plan-card[data-plan="${plan}"] .plan-action`);
-  if (btn) flashButton(btn, 'Activated ✓');
+  pendingPlan = plan;
+  const modal = document.getElementById('checkout-modal');
+  if (!modal) return;
+  setEl('checkout-plan', cap1(plan));
+  setEl('checkout-price', PLAN_PRICE[plan] || '');
+  const codeInput = document.getElementById('checkout-code'); if (codeInput) codeInput.value = '';
+  const err = document.getElementById('checkout-error'); if (err) err.style.display = 'none';
+  const payBtn = document.getElementById('checkout-pay-btn');
+  if (payBtn) {
+    const link = STRIPE_LINKS[plan];
+    payBtn.textContent = link ? `Pay with card · ${PLAN_PRICE[plan]}` : 'Card payment coming soon';
+    payBtn.classList.toggle('disabled-btn', !link);
+  }
+  modal.style.display = 'flex';
+}
+function closeCheckout() { const m = document.getElementById('checkout-modal'); if (m) m.style.display = 'none'; }
+
+function tryRedeem() {
+  const code = (document.getElementById('checkout-code').value || '').trim().toUpperCase();
+  const h = djb2(code);
+  const ok = h === MASTER_CODE_HASH || h === PLAN_CODE_HASH[pendingPlan];
+  if (ok) {
+    setPlan(pendingPlan);
+    closeCheckout();
+  } else {
+    const err = document.getElementById('checkout-error');
+    if (err) { err.textContent = 'Invalid code.'; err.style.display = 'block'; }
+  }
 }
 
 function openBilling() {
@@ -618,6 +654,15 @@ function setupClonedPanels() {
     if (target === 'free') { setPlan('free'); flashButton(b, 'Switched to Free'); return; }
     startCheckout(target);
   }));
+  // Checkout modal
+  const coClose = document.getElementById('checkout-close'); if (coClose) coClose.addEventListener('click', closeCheckout);
+  const coScrim = document.getElementById('checkout-scrim'); if (coScrim) coScrim.addEventListener('click', closeCheckout);
+  const coRedeem = document.getElementById('checkout-redeem-btn'); if (coRedeem) coRedeem.addEventListener('click', tryRedeem);
+  const coPay = document.getElementById('checkout-pay-btn');
+  if (coPay) coPay.addEventListener('click', () => {
+    const link = STRIPE_LINKS[pendingPlan];
+    if (link) window.open(link, '_blank');
+  });
 
   // Capabilities toggles
   document.querySelectorAll('.cap-toggle').forEach(t => t.addEventListener('change', () => {
