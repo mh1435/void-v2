@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260628r">
+<link rel="stylesheet" href="style.css?v=20260628s">
 <style>
   html,body{background:#0b0c10;margin:0;padding:0;width:100%;height:100%;overflow:hidden;position:fixed;}
 </style>
@@ -598,19 +598,31 @@ if (window.caches && caches.keys) {
         <span class="account-badge">PRO</span>
       </div>
 
-      <!-- Group: data & workspace -->
+      <!-- Group: account -->
       <div class="settings-card tile-menu">
+        <div class="menu-item" data-open-panel="panel-about">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg></div>
+          <div class="menu-label"><span>Profile</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-about">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M14.8 9a2.5 2.5 0 0 0-2.3-1.5c-1.4 0-2.5.8-2.5 2s1.1 1.8 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2A2.5 2.5 0 0 1 9.2 15"></path><line x1="12" y1="6" x2="12" y2="7.5"></line><line x1="12" y1="16.5" x2="12" y2="18"></line></svg></div>
+          <div class="menu-label"><span>Billing</span></div>
+        </div>
         <div class="menu-item" data-open-panel="panel-memory">
-          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg></div>
-          <div class="menu-label"><span>Memory</span><span class="sub">View and manage AI chat history</span></div>
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 17 9 11 13 15 21 7"></polyline><polyline points="14 7 21 7 21 14"></polyline></svg></div>
+          <div class="menu-label"><span>Usage</span></div>
         </div>
+      </div>
+
+      <!-- Group: capabilities & permissions -->
+      <div class="settings-card tile-menu">
         <div class="menu-item" data-open-panel="panel-commands">
-          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg></div>
-          <div class="menu-label"><span>Shortcuts</span><span class="sub">Custom commands and prompts</span></div>
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></div>
+          <div class="menu-label"><span>Capabilities</span><span class="sub">4 enabled</span></div>
         </div>
-        <div class="menu-item" data-open-panel="panel-tasks">
-          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></div>
-          <div class="menu-label"><span>Tasks</span><span class="sub">To-do and task scheduling</span></div>
+        <div class="menu-item" data-open-panel="panel-keys">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+          <div class="menu-label"><span>Permissions</span></div>
         </div>
       </div>
 
@@ -618,19 +630,31 @@ if (window.caches && caches.keys) {
       <div class="settings-card tile-menu">
         <div class="menu-item" data-open-panel="panel-preferences">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"></path></svg></div>
-          <div class="menu-label"><span>Appearance</span><span class="sub">Themes and display</span></div>
+          <div class="menu-label"><span>Color mode</span><span class="sub">System</span></div>
+        </div>
+        <div class="menu-item" data-open-panel="panel-preferences">
+          <div class="menu-icon menu-icon-text">Aa</div>
+          <div class="menu-label"><span>Font style</span><span class="sub">Default</span></div>
         </div>
         <div class="menu-item" data-open-panel="panel-voice">
-          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></div>
-          <div class="menu-label"><span>Voice</span><span class="sub">Speech and voice output</span></div>
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="10" x2="4" y2="14"></line><line x1="8" y1="6" x2="8" y2="18"></line><line x1="12" y1="9" x2="12" y2="15"></line><line x1="16" y1="5" x2="16" y2="19"></line><line x1="20" y1="10" x2="20" y2="14"></line></svg></div>
+          <div class="menu-label"><span>Voice</span></div>
         </div>
       </div>
 
-      <!-- Group: about -->
+      <!-- Group: device -->
       <div class="settings-card tile-menu">
-        <div class="menu-item" data-open-panel="panel-about">
-          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
-          <div class="menu-label"><span>About</span><span class="sub">VOID version info</span></div>
+        <div class="menu-item no-nav">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="3" y1="9" x2="3" y2="15"></line><line x1="21" y1="9" x2="21" y2="15"></line></svg></div>
+          <div class="menu-label"><span>Haptic feedback</span></div>
+          <label class="switch menu-right" onclick="event.stopPropagation()">
+            <input type="checkbox" id="haptic-toggle" checked>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+        <div class="menu-item" data-open-panel="panel-floating">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></div>
+          <div class="menu-label"><span>Notifications</span></div>
         </div>
       </div>
 
@@ -1008,7 +1032,7 @@ if (window.caches && caches.keys) {
   </div>
 </div>
 
-<script src="gamehub-data.js?v=20260628r"></script>
-<script src="app.js?v=20260628r"></script>
+<script src="gamehub-data.js?v=20260628s"></script>
+<script src="app.js?v=20260628s"></script>
 </body>
 </html>

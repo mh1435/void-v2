@@ -314,10 +314,14 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 .menu-item:last-child { border-bottom: none; }
 .menu-item:active { background: var(--card-soft); }
-.menu-icon { color: var(--text); display: flex; align-items: center; flex-shrink: 0; }
-.menu-label { display: flex; flex-direction: column; gap: 2px; }
+.menu-item.no-nav { cursor: default; }
+.menu-item.no-nav:active { background: transparent; }
+.menu-icon { color: var(--text); display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 22px; }
+.menu-icon-text { font-family: var(--hub-display); font-weight: 700; font-size: 16px; color: var(--text); }
+.menu-label { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .menu-label span:first-child { font-size: 16px; font-weight: 500; color: var(--text); }
 .menu-label .sub { font-size: 12px; color: var(--muted); }
+.menu-right { margin-left: auto; flex-shrink: 0; }
 
 /* --- Floating Sliding Configurations --- */
 .settings-panel {
