@@ -207,21 +207,23 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: rgba(13, 13, 16, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   padding-bottom: calc(12px + var(--safe-bottom)); flex-shrink: 0;
 }
-/* Claude-style: textarea on top, model selector + send inside the same box */
+/* Claude-style composer: textarea on top, model pill + send inside one box */
 .chat-box {
   display: flex; flex-direction: column;
   background: var(--card); border: 1px solid var(--border);
-  border-radius: 22px; padding: 10px 12px 8px;
+  border-radius: 26px; padding: 12px 14px 10px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
 }
-.chat-box-bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.chat-box-bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 #chat-input {
   width: 100%; background: transparent; border: none; color: var(--text); font-family: var(--hub-body);
-  font-size: 14px; padding: 4px 2px; resize: none; max-height: 100px; outline: none;
+  font-size: 15px; line-height: 1.4; padding: 4px 4px 2px; resize: none; max-height: 120px; outline: none;
 }
+#chat-input::placeholder { color: var(--muted); }
 .send-btn {
   background: var(--accent); color: var(--accent-text); border: none;
-  width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0; transition: transform 0.1s ease;
+  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; transition: transform 0.1s ease, opacity 0.15s;
 }
 .send-btn:active { transform: scale(0.92); }
 
@@ -234,6 +236,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .util-badge:active { background: rgba(255,255,255,0.08); color: var(--text); }
 .util-spacer { flex: 1; }
 .model-badge { font-size: 10px; color: var(--muted); opacity: 0.5; letter-spacing: 0.02em; }
+.chat-box-bar .model-badge { display: none; }  /* model shown in the pill itself */
 
 /* --- Workspace Canvas Dashboard --- */
 .canvas-container { flex: 1; display: flex; flex-direction: column; height: 100%; }
@@ -1273,10 +1276,12 @@ body.reduced-motion *::after {
 }
 
 .util-badge.provider-btn {
-  font-family: var(--hub-display); font-size: 10px; font-weight: 700;
-  color: var(--accent); border-color: rgba(238,240,243,0.2);
-  background: rgba(238,240,243,0.06);
+  font-family: var(--hub-body); font-size: 12px; font-weight: 600;
+  color: var(--muted); border: 1px solid var(--border);
+  background: transparent; border-radius: 16px; padding: 6px 12px;
+  display: inline-flex; align-items: center; gap: 4px;
 }
+.util-badge.provider-btn:active { background: var(--accent-soft); color: var(--text); }
 
 /* ===========================================================
    MEMORY PANEL
