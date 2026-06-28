@@ -259,6 +259,8 @@ function bootApp() {
   setupNavDrawer();
   setupClonedPanels();
   refreshPlanUI();
+  handlePaymentReturn();
+  verifyPlanFromServer();
   loadTasks();
   loadCommands();
   loadChats();
@@ -467,12 +469,11 @@ function hydrateBilling() {
   });
 }
 
-// Real Stripe Payment Links go here (one per plan). Until set, upgrades require
-// a redeem code, so nobody can just click to switch for free.
-const STRIPE_LINKS = { pro: '', max: '' };
-// Redeem-code gate (codes are hashed; plaintext never ships in the repo).
+// Payments run through the VOID Worker (Stripe for worldwide cards, Xendit for
+// TNG/GrabPay/ShopeePay/FPX). Redeem codes (hashed) are the owner override.
+const PAY_API = VOID_CORE_API.url;
 const PLAN_CODE_HASH = { pro: 2497575455, max: 157131649 };
-const MASTER_CODE_HASH = 3698988782; // unlocks any plan (owner override)
+const MASTER_CODE_HASH = 3698988782;
 const PLAN_PRICE = { pro: '$5/mo', max: '$15/mo' };
 
 function djb2(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h; }
@@ -486,15 +487,46 @@ function startCheckout(plan) {
   setEl('checkout-price', PLAN_PRICE[plan] || '');
   const codeInput = document.getElementById('checkout-code'); if (codeInput) codeInput.value = '';
   const err = document.getElementById('checkout-error'); if (err) err.style.display = 'none';
-  const payBtn = document.getElementById('checkout-pay-btn');
-  if (payBtn) {
-    const link = STRIPE_LINKS[plan];
-    payBtn.textContent = link ? `Pay with card · ${PLAN_PRICE[plan]}` : 'Card payment coming soon';
-    payBtn.classList.toggle('disabled-btn', !link);
-  }
   modal.style.display = 'flex';
 }
 function closeCheckout() { const m = document.getElementById('checkout-modal'); if (m) m.style.display = 'none'; }
+
+// Kick off a real hosted checkout via the Worker, then redirect to the payment page.
+async function payWith(method) {
+  const err = document.getElementById('checkout-error');
+  const show = (msg) => { if (err) { err.textContent = msg; err.style.display = 'block'; } };
+  if (!App.currentUser) { show('Sign in first.'); return; }
+  show('Opening secure checkout…');
+  try {
+    const r = await fetch(`${PAY_API}/pay/create`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: App.currentUser, plan: pendingPlan, method }),
+    });
+    const data = await r.json();
+    if (r.ok && data.url) { window.location.href = data.url; return; }
+    show(data.error || 'Payments aren’t set up yet — use a code below.');
+  } catch (e) {
+    show('Network error. Try again or use a code.');
+  }
+}
+
+// After returning from a hosted payment, confirm the plan with the Worker.
+async function verifyPlanFromServer() {
+  if (!App.currentUser || !PAY_API) return;
+  try {
+    const r = await fetch(`${PAY_API}/pay/status?email=${encodeURIComponent(App.currentUser)}`);
+    const data = await r.json();
+    if (data && data.plan && data.plan !== 'free' && data.plan !== getPlan()) setPlan(data.plan);
+  } catch (e) {}
+}
+
+function handlePaymentReturn() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('upgraded')) {
+    verifyPlanFromServer();
+    history.replaceState({}, '', location.pathname);
+  }
+}
 
 function tryRedeem() {
   const code = (document.getElementById('checkout-code').value || '').trim().toUpperCase();
@@ -658,11 +690,8 @@ function setupClonedPanels() {
   const coClose = document.getElementById('checkout-close'); if (coClose) coClose.addEventListener('click', closeCheckout);
   const coScrim = document.getElementById('checkout-scrim'); if (coScrim) coScrim.addEventListener('click', closeCheckout);
   const coRedeem = document.getElementById('checkout-redeem-btn'); if (coRedeem) coRedeem.addEventListener('click', tryRedeem);
-  const coPay = document.getElementById('checkout-pay-btn');
-  if (coPay) coPay.addEventListener('click', () => {
-    const link = STRIPE_LINKS[pendingPlan];
-    if (link) window.open(link, '_blank');
-  });
+  const coCard = document.getElementById('checkout-card-btn'); if (coCard) coCard.addEventListener('click', () => payWith('card'));
+  const coWallet = document.getElementById('checkout-ewallet-btn'); if (coWallet) coWallet.addEventListener('click', () => payWith('ewallet'));
 
   // Capabilities toggles
   document.querySelectorAll('.cap-toggle').forEach(t => t.addEventListener('change', () => {
