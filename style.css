@@ -301,9 +301,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: var(--bg); z-index: 50; display: flex; flex-direction: column;
   transform: translateX(100%); transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: -10px 0 30px rgba(0,0,0,0.3);
 }
-.settings-panel.active { transform: translateX(0); }
+.settings-panel.active { transform: translateX(0); box-shadow: -10px 0 30px rgba(0,0,0,0.3); }
 .panel-header {
   height: 54px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px;
   flex-shrink: 0; position: sticky; top: 0; z-index: 20;
@@ -988,10 +987,9 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: var(--card); border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   transform: translateX(100%); transition: transform 0.24s cubic-bezier(0.16,1,0.3,1);
-  box-shadow: -6px 0 30px rgba(0,0,0,0.35);
   padding-top: env(safe-area-inset-top, 0px);
 }
-.nav-drawer.open { transform: translateX(0); }
+.nav-drawer.open { transform: translateX(0); box-shadow: -6px 0 30px rgba(0,0,0,0.35); }
 .nav-drawer-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 16px 12px;
