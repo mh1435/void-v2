@@ -1,6 +1,6 @@
 {
-  "appId": "com.mlbbhub.app",
-  "appName": "MLBB Hub",
+  "appId": "com.void.ai",
+  "appName": "VOID AI",
   "webDir": "www",
   "android": {
     "buildOptions": {
@@ -12,6 +12,7 @@
     }
   },
   "server": {
-    "androidScheme": "https"
+    "url": "https://void-v2-1.onrender.com",
+    "cleartext": false
   }
 }
