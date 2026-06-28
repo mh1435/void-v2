@@ -316,7 +316,8 @@ function setupNav() {
     pill.addEventListener('click', () => switchTab(pill.dataset.target));
   });
 
-  document.getElementById('open-settings-btn').addEventListener('click', openNavDrawer);
+  const openSettingsBtn = document.getElementById('open-settings-btn');
+  if (openSettingsBtn) openSettingsBtn.addEventListener('click', openNavDrawer);
   document.getElementById('close-settings-btn').addEventListener('click', () => {
     document.getElementById('view-settings').classList.remove('active');
     document.getElementById('view-main').classList.add('active');
