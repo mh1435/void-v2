@@ -84,6 +84,7 @@ if (window.caches && caches.keys) {
           <div class="matrix-welcome">
             <div class="welcome-logo">VOID</div>
             <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
+            <div class="void-quote" id="void-quote-line"></div>
             <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div>
           </div>
         </div>
@@ -191,6 +192,17 @@ if (window.caches && caches.keys) {
                 <div class="game-tile-name">CLASH ROYALE</div>
                 <div class="game-tile-sub">Card battle</div>
               </div>
+            </div>
+
+            <div class="game-tile" id="trivia-tile" data-game="trivia" role="button" tabindex="0" aria-label="Trivia">
+              <div class="game-tile-media" style="display:flex;align-items:center;justify-content:center;height:100%">
+                <span style="font-size:32px">🧠</span>
+              </div>
+              <div class="game-tile-info">
+                <div class="game-tile-name">TRIVIA</div>
+                <div class="game-tile-sub">Knowledge Quiz · Max</div>
+              </div>
+              <div class="game-tile-max-badge">MAX</div>
             </div>
 
             <div class="game-tile game-tile-add" aria-disabled="true">
@@ -474,6 +486,10 @@ if (window.caches && caches.keys) {
       </div>
     </div>
 
+    <!-- Trivia game panel (Max early access) -->
+    <div class="view-tab" id="trivia-view">
+    </div>
+
     <!-- Study location grid (opened from STUDY pill) -->
     <div class="view-tab" id="tab-study-grid">
       <div class="hud-header" style="border-bottom:1px solid var(--border);">
@@ -519,6 +535,7 @@ if (window.caches && caches.keys) {
     <div class="study-clock-block">
       <div class="study-clock" id="study-clock">00:00:00</div>
       <div class="study-date"  id="study-date"></div>
+      <div class="study-city-live" id="study-city-live" style="display:none"></div>
     </div>
 
     <div class="study-wake-pill" id="study-wake-pill">
@@ -967,7 +984,7 @@ if (window.caches && caches.keys) {
       <div class="plan-card" data-plan="max">
         <div class="plan-top"><span class="plan-name">Max</span><span class="plan-price">$15<small>/mo</small></span></div>
         <div class="plan-tag">Current plan</div>
-        <ul class="plan-feats"><li>Everything in Pro</li><li>Highest rate limits</li><li>Priority responses</li><li>Early features</li></ul>
+        <ul class="plan-feats"><li>Everything in Pro</li><li>Highest rate limits</li><li>Priority responses</li><li>Early features</li><li>Floating assistant overlay</li><li>Live weather &amp; city time</li><li>Trivia game (early access)</li></ul>
         <button class="primary-btn full plan-action" data-plan="max">Upgrade to Max</button>
       </div>
       <p class="muted small panel-desc" style="margin-top:6px;">Cancel anytime. Manage your subscription from this page.</p>

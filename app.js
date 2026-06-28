@@ -28,6 +28,7 @@ const App = {
   location: null,
   hubDetailReturnTab: 'tab-gamehub',
   currentUser: null,
+  liveContext: { city: null, country: null, lat: null, lon: null, weather: null, weatherIcon: null, temp: null, localTime: null, timezone: null },
 };
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VOID app. You have access to the following capabilities:
@@ -78,7 +79,39 @@ function buildSystemPrompt() {
   } else {
     inject = `\n\nLANGUAGE: Detect the language of the user's latest message and ALWAYS reply in that exact same language (English → English, Arabic → العربية, etc.). Mirror the user's language and script; never switch on your own.`;
   }
-  return VOID_SYSTEM + inject;
+  let liveCtx = '';
+  if (App.liveContext.city) {
+    const now = new Date();
+    const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const dateStr = `${DAYS_FULL[now.getDay()]}, ${MONTHS_FULL[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+    liveCtx = `\n\nLIVE CONTEXT (auto-detected, may not be 100% accurate):\n- User location: ${App.liveContext.city}, ${App.liveContext.country}\n- Local time: ${App.liveContext.localTime || ''}\n- Current weather: ${App.liveContext.weather || 'unavailable'}\n- Today's date: ${dateStr}`;
+  }
+  return VOID_SYSTEM + inject + liveCtx;
+}
+
+async function initLiveContext() {
+  try {
+    const r = await fetch('https://ip-api.com/json/?fields=city,country,countryCode,lat,lon,timezone');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.city) return;
+    App.liveContext.city = d.city;
+    App.liveContext.country = d.country;
+    App.liveContext.lat = d.lat;
+    App.liveContext.lon = d.lon;
+    App.liveContext.timezone = d.timezone;
+    try {
+      App.liveContext.localTime = new Date().toLocaleTimeString('en-US', { timeZone: d.timezone, hour: '2-digit', minute: '2-digit' });
+    } catch(_) {}
+    try {
+      const wr = await fetch(`https://wttr.in/${encodeURIComponent(d.city)}?format=%c%t`);
+      if (wr.ok) {
+        const wtext = (await wr.text()).trim();
+        App.liveContext.weather = wtext;
+      }
+    } catch(_) {}
+  } catch(_) {}
 }
 
 // After deploying worker/index.js, paste your Worker URL here.
@@ -278,6 +311,8 @@ function bootApp() {
   loadCommands();
   loadChats();
   updateUserDisplay();
+  initLiveContext();
+  initQuoteWidget();
 }
 
 /* ============ Settings persistence (localStorage) ============ */
@@ -448,6 +483,7 @@ const FREE_STUDY_LIMIT = 5;
 
 function getPlan() { return (App.currentUser && localStorage.getItem(userKey('plan'))) || 'free'; }
 function isPro() { return getPlan() !== 'free'; }
+function isMax() { return getPlan() === 'max'; }
 
 function setPlan(plan) {
   if (App.currentUser) localStorage.setItem(userKey('plan'), plan);
@@ -1106,6 +1142,66 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
+  // /define command
+  if (text.toLowerCase().startsWith('/define ')) {
+    const word = text.slice(8).trim();
+    if (word) {
+      appendMessage('user', text);
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      try {
+        const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+        if (r.ok) {
+          const data = await r.json();
+          const entry = data[0];
+          const phonetic = entry.phonetic || '';
+          const meanings = entry.meanings || [];
+          let defText = `📖 ${entry.word.toUpperCase()}${phonetic ? '  ' + phonetic : ''}\n`;
+          meanings.slice(0, 2).forEach(m => {
+            defText += `\n[${m.partOfSpeech}]\n`;
+            (m.definitions || []).slice(0, 2).forEach((d, i) => {
+              defText += `${i + 1}. ${d.definition}\n`;
+              if (d.example) defText += `   e.g. "${d.example}"\n`;
+            });
+          });
+          appendMessage('system', defText.trim());
+        } else {
+          appendMessage('system', `No definition found for "${word}".`);
+        }
+      } catch(e) {
+        appendMessage('system', `Error fetching definition for "${word}".`);
+      }
+    }
+    return;
+  }
+
+  // /price command
+  if (text.toLowerCase().startsWith('/price ')) {
+    const symbol = text.slice(7).trim().toLowerCase();
+    if (symbol) {
+      appendMessage('user', text);
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      const COIN_MAP = { btc:'bitcoin', eth:'ethereum', sol:'solana', bnb:'binancecoin', xrp:'ripple', ada:'cardano', doge:'dogecoin', dot:'polkadot', matic:'matic-network', avax:'avalanche-2', link:'chainlink', ltc:'litecoin', shib:'shiba-inu', uni:'uniswap', atom:'cosmos' };
+      const coinId = COIN_MAP[symbol] || symbol;
+      try {
+        const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coinId)}&vs_currencies=usd,eur`);
+        if (r.ok) {
+          const data = await r.json();
+          const prices = data[coinId];
+          if (prices) {
+            appendMessage('system', `💰 ${coinId.toUpperCase()}\nUSD: $${prices.usd?.toLocaleString() || 'N/A'}\nEUR: €${prices.eur?.toLocaleString() || 'N/A'}`);
+          } else {
+            appendMessage('system', `No price data found for "${symbol}". Try using the full CoinGecko ID (e.g. /price bitcoin).`);
+          }
+        } else {
+          appendMessage('system', `Could not fetch price for "${symbol}".`);
+        }
+      } catch(e) {
+        appendMessage('system', `Error fetching price for "${symbol}".`);
+      }
+    }
+    return;
+  }
+
   if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
 
   App.chatHistory.push({ role: 'user', content: text });
@@ -1716,6 +1812,12 @@ function setupGameHub() {
     mlbbTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openMLBBContent(); });
   }
 
+  const triviaTile = document.getElementById('trivia-tile');
+  if (triviaTile) {
+    triviaTile.addEventListener('click', openTriviaView);
+    triviaTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openTriviaView(); });
+  }
+
   const backToGames = document.getElementById('mlbb-back-to-games');
   if (backToGames) backToGames.addEventListener('click', closeMLBBContent);
 
@@ -1787,6 +1889,35 @@ function setupGameHub() {
 /* ============================================================
    STUDY MODE — 44 world locations + vibes
    ============================================================ */
+
+const CITY_TZ = {
+  'tokyo':'Asia/Tokyo','kyoto':'Asia/Tokyo','osaka':'Asia/Tokyo',
+  'seoul':'Asia/Seoul','hong-kong':'Asia/Hong_Kong','taipei':'Asia/Taipei',
+  'shanghai':'Asia/Shanghai','beijing':'Asia/Shanghai','singapore':'Asia/Singapore',
+  'kuala-lumpur':'Asia/Kuala_Lumpur','bangkok':'Asia/Bangkok','hanoi':'Asia/Bangkok',
+  'ho-chi-minh':'Asia/Ho_Chi_Minh','jakarta':'Asia/Jakarta','manila':'Asia/Manila',
+  'mumbai':'Asia/Kolkata','dubai':'Asia/Dubai','istanbul':'Europe/Istanbul',
+  'new-york':'America/New_York','los-angeles':'America/Los_Angeles',
+  'san-francisco':'America/Los_Angeles','chicago':'America/Chicago',
+  'toronto':'America/Toronto','mexico-city':'America/Mexico_City',
+  'rio':'America/Sao_Paulo','buenos-aires':'America/Argentina/Buenos_Aires',
+  'paris':'Europe/Paris','london':'Europe/London','rome':'Europe/Rome',
+  'venice':'Europe/Rome','barcelona':'Europe/Madrid','amsterdam':'Europe/Amsterdam',
+  'prague':'Europe/Prague','vienna':'Europe/Vienna','berlin':'Europe/Berlin',
+  'lisbon':'Europe/Lisbon','madrid':'Europe/Madrid','stockholm':'Europe/Stockholm',
+  'copenhagen':'Europe/Copenhagen','zurich':'Europe/Zurich','athens':'Europe/Athens',
+  'iceland':'Atlantic/Reykjavik','marrakech':'Africa/Casablanca','cairo':'Africa/Cairo',
+  'cape-town':'Africa/Johannesburg','lagos':'Africa/Lagos','nairobi':'Africa/Nairobi',
+  'sydney':'Australia/Sydney'
+};
+
+function getCityTime(locId) {
+  const tz = CITY_TZ[locId];
+  if (!tz) return '';
+  try {
+    return new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return ''; }
+}
 
 // Each location is a real, verified YouTube video (4K walking tours, drone
 // flyovers, window views and ambience). YouTube streams adaptively (works on
@@ -2008,6 +2139,31 @@ function openStudyVideo(loc) {
     frame.onload = () => { studyUnmute(); setTimeout(studyUnmute, 1200); };
   }
 
+  // Max-only: live city time + weather in the overlay
+  const cityLiveEl = document.getElementById('study-city-live');
+  if (cityLiveEl) {
+    if (isMax()) {
+      const tz = CITY_TZ[loc.id];
+      let cityTime = '';
+      if (tz) {
+        try { cityTime = new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }); } catch(_) {}
+      }
+      cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · fetching...`;
+      cityLiveEl.style.display = '';
+      fetch(`https://wttr.in/${encodeURIComponent(loc.name)}?format=%c%t`)
+        .then(r => r.ok ? r.text() : null)
+        .then(w => {
+          if (w) cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · ${w.trim()}`;
+        })
+        .catch(() => {
+          cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''}`;
+        });
+    } else {
+      cityLiveEl.style.display = 'none';
+      cityLiveEl.textContent = '';
+    }
+  }
+
   startStudyClock();
   startWakeWord();
 }
@@ -2065,6 +2221,7 @@ function renderStudyGrid(locs) {
   const subCSS  = 'font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:0.04em;margin-top:2px';
 
   const pro = isPro();
+  const max = isMax();
   const lockCSS = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);';
   const badgeCSS = 'font-family:var(--hub-display);font-weight:800;font-size:10px;letter-spacing:0.08em;color:#fff;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.4);padding:4px 10px;border-radius:12px;';
 
@@ -2072,12 +2229,14 @@ function renderStudyGrid(locs) {
     // free users: only the first FREE_STUDY_LIMIT locations are unlocked
     const fullIdx = STUDY_LOCATIONS.indexOf(loc);
     const locked = !pro && fullIdx >= FREE_STUDY_LIMIT;
+    const cityTime = max ? getCityTime(loc.id) : '';
+    const subText = max && cityTime ? `${loc.region} · ${cityTime}` : loc.region;
     return `
     <div class="study-tile" data-loc-id="${loc.id}" data-locked="${locked ? '1' : ''}" role="button" tabindex="0" aria-label="${loc.name}" style="${cardCSS}">
       <img src="${studyPosterURL(loc)}" alt="${loc.name}" loading="lazy" style="${imgCSS}" onerror="this.style.display='none';">
       <div style="${ovCSS}">
         <div style="${titleCSS}">${loc.flag} ${loc.name}</div>
-        <div style="${subCSS}">${loc.region}</div>
+        <div class="study-tile-sub" data-loc-id="${loc.id}" style="${subCSS}">${subText}</div>
       </div>
       ${locked ? `<div style="${lockCSS}"><span style="${badgeCSS}">🔒 PRO</span></div>` : ''}
     </div>`;
@@ -2092,6 +2251,20 @@ function renderStudyGrid(locs) {
     card.addEventListener('click', handler);
     card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
   });
+
+  // Update city times every 60 seconds for Max users
+  if (max) {
+    if (grid._cityTimeInterval) clearInterval(grid._cityTimeInterval);
+    grid._cityTimeInterval = setInterval(() => {
+      grid.querySelectorAll('.study-tile-sub[data-loc-id]').forEach(el => {
+        const id = el.dataset.locId;
+        const loc = STUDY_LOCATIONS.find(l => l.id === id);
+        if (!loc) return;
+        const t = getCityTime(id);
+        el.textContent = t ? `${loc.region} · ${t}` : loc.region;
+      });
+    }, 60000);
+  }
 }
 
 /* Clock */
@@ -2514,6 +2687,178 @@ function bindStatTileNav() {
 }
 
 /* ================================================================
+   TRIVIA GAME (Max early access)
+   ================================================================ */
+
+const triviaState = { questions: [], current: 0, score: 0 };
+
+function openTriviaView() {
+  if (!isMax()) {
+    appendMessage('system', '⚡ Trivia is a Max early access feature. Upgrade to Max to unlock it.');
+    setTimeout(openBilling, 400);
+    return;
+  }
+  switchTab('trivia-view');
+  renderTriviaHome();
+}
+
+function renderTriviaHome() {
+  const panel = document.getElementById('trivia-view');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="trivia-container">
+      <div class="trivia-header">
+        <button class="icon-btn back-btn" id="trivia-back-btn" aria-label="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="system-title">TRIVIA</span>
+      </div>
+      <div class="trivia-body">
+        <div style="font-size:48px;text-align:center;margin:24px 0;">🧠</div>
+        <p style="text-align:center;color:var(--muted);font-size:14px;margin-bottom:24px;">Test your knowledge with 10 random questions from OpenTDB.</p>
+        <button class="primary-btn full" id="trivia-start-btn">Generate 10 Questions</button>
+        <div id="trivia-status" style="text-align:center;color:var(--muted);font-size:12px;margin-top:12px;"></div>
+      </div>
+    </div>`;
+  document.getElementById('trivia-back-btn')?.addEventListener('click', () => switchTab('tab-gamehub'));
+  document.getElementById('trivia-start-btn')?.addEventListener('click', startTrivia);
+}
+
+async function startTrivia() {
+  const statusEl = document.getElementById('trivia-status');
+  const btn = document.getElementById('trivia-start-btn');
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Fetching questions...';
+  try {
+    const r = await fetch('https://opentdb.com/api.php?amount=10&type=multiple');
+    if (!r.ok) throw new Error('API error');
+    const data = await r.json();
+    if (data.response_code !== 0 || !data.results.length) throw new Error('No questions');
+    triviaState.questions = data.results;
+    triviaState.current = 0;
+    triviaState.score = 0;
+    renderTriviaQuestion();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Failed to load questions. Please try again.';
+    if (btn) btn.disabled = false;
+  }
+}
+
+function decodeHTMLEntities(str) {
+  const ta = document.createElement('textarea');
+  ta.innerHTML = str;
+  return ta.value;
+}
+
+function renderTriviaQuestion() {
+  const panel = document.getElementById('trivia-view');
+  if (!panel) return;
+  const q = triviaState.questions[triviaState.current];
+  if (!q) { renderTriviaResult(); return; }
+  const allAnswers = [...q.incorrect_answers, q.correct_answer].map(decodeHTMLEntities).sort(() => Math.random() - 0.5);
+  panel.innerHTML = `
+    <div class="trivia-container">
+      <div class="trivia-header">
+        <button class="icon-btn back-btn" id="trivia-back-btn" aria-label="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="system-title">Q${triviaState.current + 1}/10</span>
+        <span style="font-size:12px;color:var(--muted)">Score: ${triviaState.score}</span>
+      </div>
+      <div class="trivia-body">
+        <div class="trivia-category">${decodeHTMLEntities(q.category)} · ${q.difficulty.toUpperCase()}</div>
+        <div class="trivia-question">${decodeHTMLEntities(q.question)}</div>
+        <div class="trivia-answers" id="trivia-answers">
+          ${allAnswers.map((a, i) => `<button class="trivia-answer-btn" data-answer="${escapeHTML(a)}">${a}</button>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('trivia-back-btn')?.addEventListener('click', () => { switchTab('tab-gamehub'); });
+  document.querySelectorAll('.trivia-answer-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chosen = btn.dataset.answer;
+      const correct = decodeHTMLEntities(q.correct_answer);
+      document.querySelectorAll('.trivia-answer-btn').forEach(b => {
+        b.disabled = true;
+        if (b.dataset.answer === correct) b.classList.add('trivia-correct');
+        else if (b.dataset.answer === chosen && chosen !== correct) b.classList.add('trivia-wrong');
+      });
+      if (chosen === correct) triviaState.score++;
+      setTimeout(() => {
+        triviaState.current++;
+        renderTriviaQuestion();
+      }, 900);
+    });
+  });
+}
+
+function renderTriviaResult() {
+  const panel = document.getElementById('trivia-view');
+  if (!panel) return;
+  const pct = Math.round((triviaState.score / 10) * 100);
+  const emoji = pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '😅';
+  panel.innerHTML = `
+    <div class="trivia-container">
+      <div class="trivia-header">
+        <span class="system-title">RESULTS</span>
+      </div>
+      <div class="trivia-body" style="text-align:center;">
+        <div style="font-size:56px;margin:20px 0;">${emoji}</div>
+        <div style="font-size:32px;font-weight:800;margin-bottom:8px;">${triviaState.score}/10</div>
+        <div style="color:var(--muted);font-size:14px;margin-bottom:28px;">${pct}% correct</div>
+        <button class="primary-btn full" id="trivia-again-btn">Play Again</button>
+        <button class="ghost-btn full" id="trivia-home-btn" style="margin-top:8px;">Back to Games</button>
+      </div>
+    </div>`;
+  document.getElementById('trivia-again-btn')?.addEventListener('click', () => { renderTriviaHome(); });
+  document.getElementById('trivia-home-btn')?.addEventListener('click', () => { switchTab('tab-gamehub'); });
+}
+
+/* ================================================================
+   QUOTE WIDGET
+   ================================================================ */
+
+function initQuoteWidget() {
+  const el = document.getElementById('void-quote-line');
+  if (!el) return;
+  const quotes = [
+    '"The secret of getting ahead is getting started." — Mark Twain',
+    '"Focus is the art of knowing what to ignore." — James Clear',
+    '"It's not that I'm so smart, it's just that I stay with problems longer." — Einstein',
+    '"Done is better than perfect." — Sheryl Sandberg',
+    '"The best way to predict the future is to invent it." — Alan Kay',
+    '"Stay hungry, stay foolish." — Steve Jobs',
+    '"Simplicity is the ultimate sophistication." — Leonardo da Vinci',
+    '"Move fast and break things." — Mark Zuckerberg',
+    '"Code is like humor. When you have to explain it, it's bad." — Cory House',
+    '"First, solve the problem. Then, write the code." — John Johnson',
+    '"Programs must be written for people to read, and only incidentally for machines to execute." — Abelson',
+    '"The function of good software is to make the complex appear to be simple." — Grady Booch',
+    '"Talk is cheap. Show me the code." — Linus Torvalds',
+    '"Any fool can write code that a computer can understand. Good programmers write code that humans can understand." — Martin Fowler',
+    '"The most powerful tool we have as developers is automation." — Scott Hanselman',
+    '"Without deviation from the norm, progress is not possible." — Frank Zappa',
+    '"Creativity is intelligence having fun." — Einstein',
+    '"In the middle of difficulty lies opportunity." — Einstein',
+    '"Ship early. Ship often." — Reid Hoffman',
+    '"The only way to do great work is to love what you do." — Steve Jobs',
+    '"Your time is limited, so don't waste it living someone else's life." — Steve Jobs',
+    '"Innovation distinguishes between a leader and a follower." — Steve Jobs',
+    '"The expert in anything was once a beginner." — Helen Hayes',
+    '"Absorb what is useful, discard what is useless." — Bruce Lee',
+    '"Hard work beats talent when talent doesn't work hard." — Tim Notke',
+    '"You miss 100% of the shots you don't take." — Wayne Gretzky',
+    '"Whether you think you can or think you can't, you're right." — Henry Ford',
+    '"The people who are crazy enough to think they can change the world are the ones who do." — Apple',
+    '"Stay focused and never give up." — Unknown',
+    '"Deep work is the superpower of the 21st century." — Cal Newport',
+  ];
+  const now = new Date();
+  const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+  el.textContent = quotes[dayOfYear % quotes.length];
+}
+
+/* ================================================================
    FLOATING VOID ASSISTANT
    ================================================================ */
 
@@ -2663,6 +3008,16 @@ const VoidFloat = (() => {
 
 /* Start / stop the floating assistant (web + native) */
 async function setFloatingAssistant(enabled) {
+  if (enabled && !isMax()) {
+    appendMessage('system', '⚡ Floating assistant is a Max early access feature. Upgrade to Max to unlock it.');
+    App.settings.floatingAssistantEnabled = false;
+    saveSettings();
+    const t = document.getElementById('toggle-floating-assistant');
+    if (t) t.checked = false;
+    document.querySelectorAll('.cap-toggle[data-cap="floatingAssistantEnabled"]').forEach(el => { el.checked = false; });
+    setTimeout(openBilling, 400);
+    return;
+  }
   if (enabled) {
     VoidFloat.show();
     // Native overlay (when running as APK)
