@@ -90,7 +90,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 
 .hud-left, .hud-right { flex-shrink: 0; }
-.hud-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; overflow: hidden; }
+.hud-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; }
 
 .system-title {
   font-family: var(--hub-display);
