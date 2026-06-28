@@ -1464,22 +1464,31 @@ function renderStudyGrid(locs) {
     grid.innerHTML = `<p class="muted small" style="padding:20px 4px;grid-column:1/-1;">No locations found.</p>`;
     return;
   }
-  // Uses the exact same .hub-card markup as the heroes menu so the cards
-  // render as identical separate boxes (height comes from .hub-card-media's
-  // padding-top, which is bulletproof across browsers — no aspect-ratio).
+  // Grid + square cards are styled INLINE here so they can't be broken by a
+  // stale/missing stylesheet — inline styles always win. padding-top:100% on a
+  // relative box is a bulletproof square; the image fills it absolutely.
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  grid.style.gap = '12px';
+  grid.style.alignContent = 'start';
+
+  const cardCSS = 'position:relative;width:100%;padding-top:100%;height:0;border-radius:14px;overflow:hidden;background:#111418;cursor:pointer;border:1px solid rgba(255,255,255,0.08)';
+  const imgCSS  = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover';
+  const ovCSS   = 'position:absolute;left:0;right:0;bottom:0;padding:18px 8px 8px;background:linear-gradient(to top,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.4) 55%,transparent 100%)';
+  const titleCSS= 'font-family:var(--hub-display);font-weight:800;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,0.8)';
+  const subCSS  = 'font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:0.04em;margin-top:2px';
+
   grid.innerHTML = locs.map(loc => `
-    <div class="hub-card" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}">
-      <div class="hub-card-media">
-        <img src="${studyPosterURL(loc)}" alt="${loc.name}" class="hub-card-img" loading="lazy" onerror="this.style.display='none';">
-        <div class="hub-card-overlay">
-          <div class="hub-card-title">${loc.flag} ${loc.name}</div>
-          <div class="hub-card-sub">${loc.region}</div>
-        </div>
+    <div class="study-tile" data-loc-id="${loc.id}" role="button" tabindex="0" aria-label="${loc.name}" style="${cardCSS}">
+      <img src="${studyPosterURL(loc)}" alt="${loc.name}" loading="lazy" style="${imgCSS}" onerror="this.style.display='none';">
+      <div style="${ovCSS}">
+        <div style="${titleCSS}">${loc.flag} ${loc.name}</div>
+        <div style="${subCSS}">${loc.region}</div>
       </div>
     </div>
   `).join('');
 
-  grid.querySelectorAll('.hub-card').forEach(card => {
+  grid.querySelectorAll('.study-tile').forEach(card => {
     const handler = () => {
       const loc = STUDY_LOCATIONS.find(l => l.id === card.dataset.locId);
       if (loc) openStudyVideo(loc);
