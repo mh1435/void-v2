@@ -1,117 +1,76 @@
 <div align="center">
 
-```
-██╗   ██╗ ██████╗ ██╗██████╗
-██║   ██║██╔═══██╗██║██╔══██╗
-██║   ██║██║   ██║██║██║  ██║
-╚██╗ ██╔╝██║   ██║██║██║  ██║
- ╚████╔╝ ╚██████╔╝██║██████╔╝
-  ╚═══╝   ╚═════╝ ╚═╝╚═════╝
-```
+# VOID AI
 
-**AI assistant & MLBB game companion**
-
-[![Build APK](https://img.shields.io/github/actions/workflow/status/mh1435/void-v2/build-apk.yml?branch=main&label=APK%20Build&logo=android&logoColor=white)](https://github.com/mh1435/void-v2/actions)
-[![PWA](https://img.shields.io/badge/PWA-ready-7c5cff?logo=pwa&logoColor=white)](https://github.com/mh1435/void-v2)
-[![License](https://img.shields.io/badge/license-MIT-00cc55)](LICENSE)
+**Your personal AI assistant — chat, study, and game hub in one.**
 
 </div>
 
----
-
-VOID is a dark-themed Progressive Web App and Android app that combines an AI chat assistant with a Mobile Legends Bang Bang game hub. Chat with AI, look up heroes, builds, and counters — all in one place, with no account required beyond an email to keep your chat memory private.
-
 ## Features
 
-- **AI Chat** — Powered by a shared backend model. Falls back to Gemini, Groq, OpenRouter, Together, Mistral, or Pollinations.ai (free, no key needed)
-- **MLBB Game Hub** — Hero database with roles, tier ratings, builds, counters, and synergies. Item database with stats and descriptions
-- **Per-user memory** — Chat history stored per email in localStorage, stays private on your device
-- **Multi-provider support** — Connect your own API keys for any provider in Settings
-- **Voice I/O** — Mic input (Speech Recognition) and TTS output (SpeechSynthesis)
-- **PWA + Android** — Install as a home screen app or download the APK
-- **Themes** — Frost, Neon, Ember, Void, Ocean
+- **AI Chat** — powered by 13 free providers (Groq, Cerebras, Gemini, DeepSeek, Mistral, and more). Shuffles providers automatically to avoid rate limits. Falls back to Pollinations if all fail.
+- **Study Mode** — 50+ ambient study locations (cities, nature, space) with looping video and optional sound.
+- **Game Hub** — MLBB, Valorant, Clash Royale guides powered by AI.
+- **VOID Pro** — $5/mo or $15/mo subscription unlocking unlimited chats, all study locations, all themes. Built on Stripe (worldwide cards, Apple Pay, Google Pay).
+- **Multi-chat** — create, switch, and delete conversations from the right-side drawer.
+- **Themes** — dark, light, cream, paper, soft gray, and more.
+- **PWA + Android APK** — installable on Android; auto-updates from the web with no reinstall needed.
+- **Multilingual** — AI mirrors the language you write in (Arabic → Arabic, English → English, etc.).
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vanilla JS, HTML5, CSS3 (no framework) |
-| AI Providers | Gemini, Groq, OpenRouter, Together, Mistral, Pollinations.ai |
-| Proxy | Cloudflare Worker (hides backend URL) |
-| Android | Capacitor 5 |
-| CI/CD | GitHub Actions → APK release |
-| PWA | Service Worker, Web App Manifest |
+| Layer | What |
+|---|---|
+| Frontend | Vanilla JS, HTML, CSS — no framework |
+| Hosting | [Render](https://render.com) — auto-deploys from `main` branch |
+| AI Router | Cloudflare Worker (`void-proxy`) — shuffles 13 providers, keys in secrets only |
+| Payments | Stripe — subscriptions, worldwide cards |
+| Plan storage | Cloudflare KV (`PLANS` namespace) |
+| Android | Capacitor — loads live URL, auto-updates when web updates |
 
-## Project Structure
+## Self-Hosting
 
+### 1. Fork & Deploy to Render
+1. Fork this repo
+2. Connect to [Render](https://render.com) → New Static Site → point to your fork
+3. No build command needed — deploys from root
+4. Auto-deploys on every push to `main`
+
+### 2. Cloudflare Worker (AI Router)
+```bash
+cd worker
+npx wrangler deploy
 ```
-void-v2/
-├── index.html          # App shell & all views
-├── app.js              # Core logic — chat, AI, nav, settings
-├── style.css           # All styles + themes
-├── gamehub-data.js     # Hero & item database
-├── sw.js               # Service worker (offline cache)
-├── manifest.json       # PWA manifest
-├── icon-192.png        # App icon
-├── icon-512.png        # App icon (large)
-├── images/
-│   ├── heroes/         # Hero portrait images
-│   └── items/          # Item icon images
-├── worker/
-│   ├── index.js        # Cloudflare Worker proxy script
-│   └── wrangler.toml   # Wrangler deploy config
-├── android/            # Capacitor Android project
-└── .github/
-    └── workflows/
-        └── build-apk.yml  # Auto-build APK on push to main
+Add your AI provider keys as **Secrets** in Cloudflare Dashboard → Workers → void-proxy → Settings → Variables.
+
+Keys: `GROQ_KEY`, `CEREBRAS_KEY`, `SAMBANOVA_KEY`, `DEEPSEEK_KEY`, `OPENROUTER_KEY`, `TOGETHER_KEY`, `FIREWORKS_KEY`, `NVIDIA_KEY`, `HYPERBOLIC_KEY`, `HF_TOKEN`, `MISTRAL_KEY`, `COHERE_KEY`, `GEMINI_KEY`
+
+### 3. Payments (optional)
+See [PAYMENTS_SETUP.md](PAYMENTS_SETUP.md) for full Stripe setup.
+
+Secrets to add to Cloudflare Worker:
+```
+STRIPE_SECRET_KEY       sk_live_…
+STRIPE_WEBHOOK_SECRET   whsec_…
+STRIPE_PRICE_PRO        price_…
+STRIPE_PRICE_MAX        price_…
 ```
 
-## Getting Started
+### 4. Android APK
+The APK points to your live Render URL — it auto-updates whenever the web app updates. No need to reinstall.
 
-### Use as PWA
-
-Open the app in Chrome or any modern browser and tap **Add to Home Screen**. No installation needed.
-
-### Download APK
-
-Grab the latest APK from [Releases](https://github.com/mh1435/void-v2/releases) and install on your Android device.
-
-### Build APK locally
-
+To build:
 ```bash
 npm install
 npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
+Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-APK outputs to `android/app/build/outputs/apk/debug/app-debug.apk`
+## Security
 
-### Auto-build via GitHub Actions
-
-Every push to `main` triggers a build and creates a release with the APK attached. No local setup required.
-
-## AI Provider Setup
-
-VOID ships with a shared AI backend for all users. To use your own keys instead:
-
-1. Open the app → **Settings** (gear icon) → **API Gateways**
-2. Enter your key for any provider (Gemini, Groq, OpenRouter, Together, or Mistral)
-3. Hit **COMMIT CONFIGURATION**
-4. In the chat bar, tap **VOID AI** to pick your active provider
-
-All keys are stored locally on your device — never sent anywhere except directly to the provider's API.
-
-### Cloudflare Worker Proxy
-
-The shared backend is routed through a Cloudflare Worker so the real endpoint URL is never exposed to clients. To deploy your own:
-
-```bash
-cd worker
-npx wrangler deploy
-```
-
-Then set `BACKEND_URL` as a **Secret** in the Cloudflare dashboard (Workers → void-proxy → Settings → Variables).
+All API keys and secrets live **only in Cloudflare Worker secrets** — never in code or this repo. Users can never see them.
 
 ## License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+MIT

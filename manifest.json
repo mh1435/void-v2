@@ -1,14 +1,14 @@
 {
-  "name": "Void",
-  "short_name": "Void",
-  "description": "Void AI Control System — personal assistant",
+  "name": "VOID AI",
+  "short_name": "VOID",
+  "description": "Your personal AI assistant — chat, study, and game hub in one.",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],
   "orientation": "portrait",
-  "background_color": "#0b0c10",
-  "theme_color": "#0b0c10",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
   "icons": [
     {
       "src": "icon-192.png",
@@ -21,6 +21,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "assets/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }
