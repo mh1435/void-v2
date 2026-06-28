@@ -187,6 +187,9 @@ function shuffle(arr) {
    =========================================================================== */
 
 const PLAN_AMOUNT_MYR = { pro: 23, max: 69 }; // ~ $5 / $15
+// Stripe sandbox price IDs (not secret). Override with STRIPE_PRICE_PRO/MAX env
+// vars when you switch to a live account.
+const PRICE_FALLBACK = { pro: 'price_1TnHz3Em0xqepKvLCBfnW5dd', max: 'price_1TnI4oEm0xqepKvLvoGiTO9X' };
 
 async function handlePay(request, env, url) {
   const path = url.pathname.replace(/\/+$/, '');
@@ -211,7 +214,7 @@ async function handlePay(request, env, url) {
     try {
       if (method === 'card') {
         if (!env.STRIPE_SECRET_KEY) return cors(JSON.stringify({ error: 'card payments not configured yet' }), 503);
-        const price = env['STRIPE_PRICE_' + plan.toUpperCase()];
+        const price = env['STRIPE_PRICE_' + plan.toUpperCase()] || PRICE_FALLBACK[plan];
         if (!price) return cors(JSON.stringify({ error: 'stripe price not set' }), 503);
         const form = new URLSearchParams();
         form.set('mode', 'subscription');
