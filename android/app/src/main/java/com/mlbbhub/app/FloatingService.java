@@ -6,6 +6,7 @@ import android.graphics.*;
 import android.graphics.drawable.*;
 import android.os.*;
 import android.util.TypedValue;
+import android.text.InputType;
 import android.view.*;
 import android.view.inputmethod.*;
 import android.widget.*;
