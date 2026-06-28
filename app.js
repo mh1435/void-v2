@@ -2912,7 +2912,7 @@ const VoidFloat = (() => {
     if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) dragging = true;
     if (dragging) {
       floatEl.style.right  = Math.max(0, origLeft  - dx) + 'px';
-      floatEl.style.bottom = Math.max(0, origBottom + dy) + 'px';
+      floatEl.style.bottom = Math.max(0, origBottom - dy) + 'px';
     }
   }
 
