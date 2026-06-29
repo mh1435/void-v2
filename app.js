@@ -110,7 +110,7 @@ async function initLiveContext() {
         } catch(_) {}
         resolve();
       }, () => resolve(),
-      { timeout: 5000, maximumAge: 300000 });
+      { timeout: 1, maximumAge: Infinity }); // cached only — no dialog, no blocking
     });
   }
 
@@ -3068,13 +3068,21 @@ async function setFloatingAssistant(enabled) {
   }
   if (enabled) {
     if (window.Capacitor?.isNativePlatform?.()) {
-      // On APK: use the native overlay only — don't show web widget too
-      VoidFloat.hide();
       try {
         const { FloatingPlugin } = Capacitor.Plugins;
-        if (FloatingPlugin) await FloatingPlugin.startFloating();
+        if (FloatingPlugin) {
+          await FloatingPlugin.startFloating();
+          VoidFloat.hide(); // native working — hide web widget
+        } else {
+          VoidFloat.show(); // no native plugin — fall back
+        }
       } catch (e) {
-        if (e?.message !== 'OVERLAY_PERMISSION_REQUIRED') console.warn('FloatingPlugin:', e);
+        if (e?.message === 'OVERLAY_PERMISSION_REQUIRED') {
+          VoidFloat.hide(); // need overlay permission, nothing to show
+        } else {
+          VoidFloat.show(); // native failed — fall back to web widget
+          console.warn('FloatingPlugin:', e);
+        }
       }
     } else {
       VoidFloat.show();
