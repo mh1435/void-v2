@@ -941,9 +941,23 @@ function setupPreferencesPanel() {
     });
   }
 
-  // Kill any previously-running native FloatingService (we use web VoidFloat now)
+  // Web VoidFloat when in-app, native FloatingService when app is in background
   if (window.Capacitor?.isNativePlatform?.()) {
+    // Stop native on launch so web widget is the only one visible inside the app
     try { Capacitor.Plugins.FloatingPlugin?.stopFloating(); } catch (_) {}
+
+    document.addEventListener('visibilitychange', () => {
+      if (!App.settings.floatingAssistantEnabled) return;
+      const fp = Capacitor.Plugins.FloatingPlugin;
+      if (!fp) return;
+      if (document.hidden) {
+        // App went to background — start native overlay so button persists over other apps
+        try { fp.startFloating(); } catch (_) {}
+      } else {
+        // App came back — kill native, web VoidFloat is already showing
+        try { fp.stopFloating(); } catch (_) {}
+      }
+    });
   }
 
   // Show on boot if previously enabled
