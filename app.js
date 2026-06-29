@@ -91,37 +91,30 @@ function buildSystemPrompt() {
 }
 
 async function initLiveContext() {
-  // Try device GPS first if permission already granted (no prompt if already allowed)
+  // Try GPS silently — if Android already granted permission it succeeds immediately,
+  // if not, error callback fires right away and we fall through to IP-based.
   if (navigator.geolocation) {
-    try {
-      let permState = 'prompt';
-      if (navigator.permissions) {
-        const p = await navigator.permissions.query({ name: 'geolocation' });
-        permState = p.state;
-      }
-      if (permState === 'granted') {
-        await new Promise(resolve => {
-          navigator.geolocation.getCurrentPosition(async pos => {
-            try {
-              const lat = pos.coords.latitude, lon = pos.coords.longitude;
-              App.liveContext.lat = lat;
-              App.liveContext.lon = lon;
-              App.liveContext.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-              const gr = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
-              if (gr.ok) {
-                const gd = await gr.json();
-                App.liveContext.city    = gd.city || gd.locality || gd.principalSubdivision || '';
-                App.liveContext.country = gd.countryName || '';
-              }
-            } catch(_) {}
-            resolve();
-          }, () => resolve(), { timeout: 8000, maximumAge: 300000 });
-        });
-      }
-    } catch(_) {}
+    await new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(async pos => {
+        try {
+          const lat = pos.coords.latitude, lon = pos.coords.longitude;
+          App.liveContext.lat = lat;
+          App.liveContext.lon = lon;
+          App.liveContext.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const gr = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+          if (gr.ok) {
+            const gd = await gr.json();
+            App.liveContext.city    = gd.city || gd.locality || gd.principalSubdivision || '';
+            App.liveContext.country = gd.countryName || '';
+          }
+        } catch(_) {}
+        resolve();
+      }, () => resolve(),
+      { timeout: 5000, maximumAge: 300000 });
+    });
   }
 
-  // Fall back to IP-based location if GPS didn't populate city
+  // Fall back to IP-based if GPS didn't give a city
   if (!App.liveContext.city) {
     try {
       const r = await fetch('https://ip-api.com/json/?fields=city,country,countryCode,lat,lon,timezone');
@@ -146,10 +139,13 @@ async function initLiveContext() {
     App.liveContext.localTime = new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
   } catch(_) {}
 
-  // Weather
+  // Weather — validate response is plain text, not HTML
   try {
     const wr = await fetch(`https://wttr.in/${encodeURIComponent(App.liveContext.city)}?format=%c%t`);
-    if (wr.ok) App.liveContext.weather = (await wr.text()).trim();
+    if (wr.ok) {
+      const w = (await wr.text()).trim();
+      if (w && !w.includes('<') && w.length < 30) App.liveContext.weather = w;
+    }
   } catch(_) {}
 }
 
@@ -2192,7 +2188,8 @@ function openStudyVideo(loc) {
       fetch(`https://wttr.in/${encodeURIComponent(loc.name)}?format=%c%t`)
         .then(r => r.ok ? r.text() : null)
         .then(w => {
-          if (w) cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · ${w.trim()}`;
+          const wt = w?.trim();
+          if (wt && !wt.includes('<') && wt.length < 30) cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · ${wt}`;
         })
         .catch(() => {
           cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''}`;
@@ -3070,16 +3067,17 @@ async function setFloatingAssistant(enabled) {
     return;
   }
   if (enabled) {
-    VoidFloat.show();
-    // Native overlay (when running as APK)
     if (window.Capacitor?.isNativePlatform?.()) {
+      // On APK: use the native overlay only — don't show web widget too
+      VoidFloat.hide();
       try {
         const { FloatingPlugin } = Capacitor.Plugins;
         if (FloatingPlugin) await FloatingPlugin.startFloating();
       } catch (e) {
-        // OVERLAY_PERMISSION_REQUIRED — Android already opened settings, user will toggle back
         if (e?.message !== 'OVERLAY_PERMISSION_REQUIRED') console.warn('FloatingPlugin:', e);
       }
+    } else {
+      VoidFloat.show();
     }
   } else {
     VoidFloat.hide();
