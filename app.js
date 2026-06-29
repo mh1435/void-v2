@@ -941,6 +941,11 @@ function setupPreferencesPanel() {
     });
   }
 
+  // Kill any previously-running native FloatingService (we use web VoidFloat now)
+  if (window.Capacitor?.isNativePlatform?.()) {
+    try { Capacitor.Plugins.FloatingPlugin?.stopFloating(); } catch (_) {}
+  }
+
   // Show on boot if previously enabled
   if (App.settings.floatingAssistantEnabled) setFloatingAssistant(true);
 }
