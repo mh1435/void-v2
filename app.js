@@ -91,26 +91,65 @@ function buildSystemPrompt() {
 }
 
 async function initLiveContext() {
-  try {
-    const r = await fetch('https://ip-api.com/json/?fields=city,country,countryCode,lat,lon,timezone');
-    if (!r.ok) return;
-    const d = await r.json();
-    if (!d.city) return;
-    App.liveContext.city = d.city;
-    App.liveContext.country = d.country;
-    App.liveContext.lat = d.lat;
-    App.liveContext.lon = d.lon;
-    App.liveContext.timezone = d.timezone;
+  // Try device GPS first if permission already granted (no prompt if already allowed)
+  if (navigator.geolocation) {
     try {
-      App.liveContext.localTime = new Date().toLocaleTimeString('en-US', { timeZone: d.timezone, hour: '2-digit', minute: '2-digit' });
-    } catch(_) {}
-    try {
-      const wr = await fetch(`https://wttr.in/${encodeURIComponent(d.city)}?format=%c%t`);
-      if (wr.ok) {
-        const wtext = (await wr.text()).trim();
-        App.liveContext.weather = wtext;
+      let permState = 'prompt';
+      if (navigator.permissions) {
+        const p = await navigator.permissions.query({ name: 'geolocation' });
+        permState = p.state;
+      }
+      if (permState === 'granted') {
+        await new Promise(resolve => {
+          navigator.geolocation.getCurrentPosition(async pos => {
+            try {
+              const lat = pos.coords.latitude, lon = pos.coords.longitude;
+              App.liveContext.lat = lat;
+              App.liveContext.lon = lon;
+              App.liveContext.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const gr = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+              if (gr.ok) {
+                const gd = await gr.json();
+                App.liveContext.city    = gd.city || gd.locality || gd.principalSubdivision || '';
+                App.liveContext.country = gd.countryName || '';
+              }
+            } catch(_) {}
+            resolve();
+          }, () => resolve(), { timeout: 8000, maximumAge: 300000 });
+        });
       }
     } catch(_) {}
+  }
+
+  // Fall back to IP-based location if GPS didn't populate city
+  if (!App.liveContext.city) {
+    try {
+      const r = await fetch('https://ip-api.com/json/?fields=city,country,countryCode,lat,lon,timezone');
+      if (r.ok) {
+        const d = await r.json();
+        if (d.city) {
+          App.liveContext.city     = d.city;
+          App.liveContext.country  = d.country;
+          App.liveContext.lat      = d.lat;
+          App.liveContext.lon      = d.lon;
+          App.liveContext.timezone = d.timezone;
+        }
+      }
+    } catch(_) {}
+  }
+
+  if (!App.liveContext.city) return;
+
+  // Local time
+  try {
+    const tz = App.liveContext.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    App.liveContext.localTime = new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+  } catch(_) {}
+
+  // Weather
+  try {
+    const wr = await fetch(`https://wttr.in/${encodeURIComponent(App.liveContext.city)}?format=%c%t`);
+    if (wr.ok) App.liveContext.weather = (await wr.text()).trim();
   } catch(_) {}
 }
 
