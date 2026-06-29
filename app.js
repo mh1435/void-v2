@@ -2950,8 +2950,9 @@ const VoidFloat = (() => {
     const dy = e.clientY - startY;
     if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) dragging = true;
     if (dragging) {
-      floatEl.style.right  = Math.max(0, origLeft  - dx) + 'px';
-      floatEl.style.bottom = Math.max(0, origBottom - dy) + 'px';
+      const ORB = 50;
+      floatEl.style.right  = Math.min(window.innerWidth  - ORB, Math.max(0, origLeft   - dx)) + 'px';
+      floatEl.style.bottom = Math.min(window.innerHeight - ORB, Math.max(0, origBottom - dy)) + 'px';
     }
   }
 
@@ -2967,6 +2968,17 @@ const VoidFloat = (() => {
 
   function openPanel() {
     panelOpen = true;
+    // Smart positioning: flip panel to whichever side has room
+    const rect = orb.getBoundingClientRect();
+    const W = window.innerWidth, H = window.innerHeight;
+    const PW = 292, PH = 390, ORB = 50, GAP = 8;
+    const goRight = rect.left + PW <= W;
+    const goAbove = rect.top  >= PH + GAP;
+    panel.style.left   = goRight ? '0' : '';
+    panel.style.right  = goRight ? '' : '0';
+    panel.style.top    = goAbove ? '' : (ORB + GAP) + 'px';
+    panel.style.bottom = goAbove ? (ORB + GAP) + 'px' : '';
+    panel.style.transformOrigin = `${goAbove ? 'bottom' : 'top'} ${goRight ? 'left' : 'right'}`;
     panel.classList.add('vf-open');
     panel.setAttribute('aria-hidden', 'false');
     floatEl.setAttribute('aria-hidden', 'false');
