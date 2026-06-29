@@ -3067,26 +3067,7 @@ async function setFloatingAssistant(enabled) {
     return;
   }
   if (enabled) {
-    if (window.Capacitor?.isNativePlatform?.()) {
-      try {
-        const { FloatingPlugin } = Capacitor.Plugins;
-        if (FloatingPlugin) {
-          await FloatingPlugin.startFloating();
-          VoidFloat.hide(); // native working — hide web widget
-        } else {
-          VoidFloat.show(); // no native plugin — fall back
-        }
-      } catch (e) {
-        if (e?.message === 'OVERLAY_PERMISSION_REQUIRED') {
-          VoidFloat.hide(); // need overlay permission, nothing to show
-        } else {
-          VoidFloat.show(); // native failed — fall back to web widget
-          console.warn('FloatingPlugin:', e);
-        }
-      }
-    } else {
-      VoidFloat.show();
-    }
+    VoidFloat.show();
   } else {
     VoidFloat.hide();
     if (window.Capacitor?.isNativePlatform?.()) {
