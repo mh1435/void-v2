@@ -941,25 +941,6 @@ function setupPreferencesPanel() {
     });
   }
 
-  // Web VoidFloat when in-app, native FloatingService when app is in background
-  if (window.Capacitor?.isNativePlatform?.()) {
-    // Stop native on launch so web widget is the only one visible inside the app
-    try { Capacitor.Plugins.FloatingPlugin?.stopFloating(); } catch (_) {}
-
-    document.addEventListener('visibilitychange', () => {
-      if (!App.settings.floatingAssistantEnabled) return;
-      const fp = Capacitor.Plugins.FloatingPlugin;
-      if (!fp) return;
-      if (document.hidden) {
-        // App went to background — start native overlay so button persists over other apps
-        try { fp.startFloating(); } catch (_) {}
-      } else {
-        // App came back — kill native, web VoidFloat is already showing
-        try { fp.stopFloating(); } catch (_) {}
-      }
-    });
-  }
-
   // Show on boot if previously enabled
   if (App.settings.floatingAssistantEnabled) setFloatingAssistant(true);
 }
@@ -3086,7 +3067,16 @@ async function setFloatingAssistant(enabled) {
     return;
   }
   if (enabled) {
-    VoidFloat.show();
+    if (window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const { FloatingPlugin } = Capacitor.Plugins;
+        if (FloatingPlugin) await FloatingPlugin.startFloating();
+      } catch (e) {
+        if (e?.message !== 'OVERLAY_PERMISSION_REQUIRED') console.warn('FloatingPlugin:', e);
+      }
+    } else {
+      VoidFloat.show();
+    }
   } else {
     VoidFloat.hide();
     if (window.Capacitor?.isNativePlatform?.()) {

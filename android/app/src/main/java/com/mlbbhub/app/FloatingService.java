@@ -1,5 +1,7 @@
 package com.mlbbhub.app;
 
+import android.animation.ObjectAnimator;
+import android.animation.AnimatorSet;
 import android.app.*;
 import android.content.*;
 import android.graphics.*;
@@ -8,6 +10,7 @@ import android.os.*;
 import android.util.TypedValue;
 import android.text.InputType;
 import android.view.*;
+import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.*;
 import android.widget.*;
 import androidx.core.app.NotificationCompat;
@@ -28,13 +31,26 @@ public class FloatingService extends Service {
         "Keep all replies very short — 1 to 3 sentences max. " +
         "Be direct and useful. Do not mention MLBB or gaming unless the user asks.";
 
+    // VOID theme colours
+    private static final int COL_BG       = 0xFF0d0d10;  // --bg
+    private static final int COL_SURFACE  = 0xFF16161f;  // --surface
+    private static final int COL_BORDER   = 0x12ffffff;  // subtle white border
+    private static final int COL_PURPLE   = 0xFF7c6fff;  // --accent
+    private static final int COL_PURPLE_L = 0xFF9a87ff;  // lighter purple (text/title)
+    private static final int COL_TEXT     = 0xFFe8e8f0;
+    private static final int COL_MUTED    = 0xFF6b6b80;
+    private static final int COL_USER_BG  = 0xFF2d2d42;
+    private static final int COL_AI_BG    = 0xFF1c1c2e;
+
     private WindowManager   wm;
     private View            floatRoot;
     private LinearLayout    chatLog;
     private ScrollView      chatScroll;
     private EditText        inputField;
     private View            chatPanel;
-    private View            orbView;
+    private FrameLayout     orbView;
+    private View            pulseRing;
+    private Handler         pulseHandler;
 
     private boolean dragging    = false;
     private boolean expanded    = false;
@@ -53,6 +69,7 @@ public class FloatingService extends Service {
         createChannel();
         startForeground(NOTIF_ID, buildNotification());
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        pulseHandler = new Handler(Looper.getMainLooper());
         buildWidget();
     }
 
@@ -67,6 +84,7 @@ public class FloatingService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        pulseHandler.removeCallbacksAndMessages(null);
         if (floatRoot != null && floatRoot.isAttachedToWindow()) wm.removeView(floatRoot);
         executor.shutdown();
     }
@@ -106,10 +124,10 @@ public class FloatingService extends Service {
     private void buildWidget() {
         FrameLayout root = new FrameLayout(this);
 
-        orbView   = buildOrb(root);
         chatPanel = buildPanel(root);
-
         chatPanel.setVisibility(View.GONE);
+
+        orbView = buildOrb(root);
 
         params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -123,36 +141,77 @@ public class FloatingService extends Service {
         );
         params.gravity = Gravity.TOP | Gravity.START;
         params.x = getResources().getDisplayMetrics().widthPixels - dp(68);
-        params.y = dp(220);
+        params.y = dp(200);
 
         floatRoot = root;
         wm.addView(floatRoot, params);
+        startPulse();
     }
 
-    private View buildOrb(FrameLayout parent) {
+    private FrameLayout buildOrb(FrameLayout parent) {
         FrameLayout orb = new FrameLayout(this);
-        orb.setElevation(dp(8));
 
+        // Pulse ring — same purple as VoidFloat's .void-float-pulse
+        pulseRing = new View(this);
+        GradientDrawable ringBg = new GradientDrawable();
+        ringBg.setShape(GradientDrawable.OVAL);
+        ringBg.setStroke(dp(1.5f), 0x59_7c6fff); // rgba(124,111,255,0.35)
+        ringBg.setColor(Color.TRANSPARENT);
+        pulseRing.setBackground(ringBg);
+        FrameLayout.LayoutParams ringLp = new FrameLayout.LayoutParams(dp(60), dp(60));
+        ringLp.gravity = Gravity.CENTER;
+        orb.addView(pulseRing, ringLp);
+
+        // Orb background — dark with subtle purple border
+        FrameLayout orbInner = new FrameLayout(this);
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#DD0a0a12"));
-        bg.setStroke(dp(1.5f), Color.parseColor("#887c6fff"));
-        orb.setBackground(bg);
+        bg.setColor(COL_BG);
+        bg.setStroke(dp(1.5f), 0x59_7c6fff);
+        orbInner.setBackground(bg);
+        orbInner.setElevation(dp(8));
+        FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(dp(50), dp(50));
+        innerLp.gravity = Gravity.CENTER;
+        orb.addView(orbInner, innerLp);
 
+        // V label
         TextView v = new TextView(this);
         v.setText("V");
-        v.setTextColor(Color.parseColor("#b8a4ff"));
+        v.setTextColor(COL_PURPLE_L);
         v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         v.setTypeface(null, Typeface.BOLD);
         v.setGravity(Gravity.CENTER);
-        orb.addView(v, new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams vLp = new FrameLayout.LayoutParams(dp(50), dp(50));
+        vLp.gravity = Gravity.CENTER;
+        orb.addView(v, vLp);
 
         orb.setOnTouchListener(this::onOrbTouch);
 
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(52), dp(52));
-        parent.addView(orb, lp);
+        FrameLayout.LayoutParams orbLp = new FrameLayout.LayoutParams(dp(60), dp(60));
+        parent.addView(orb, orbLp);
+        orbView = orb;
         return orb;
+    }
+
+    private void startPulse() {
+        Runnable pulse = new Runnable() {
+            @Override
+            public void run() {
+                if (pulseRing == null) return;
+                pulseRing.setAlpha(0.7f);
+                pulseRing.setScaleX(1f);
+                pulseRing.setScaleY(1f);
+                pulseRing.animate()
+                    .scaleX(1.65f)
+                    .scaleY(1.65f)
+                    .alpha(0f)
+                    .setDuration(2800)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .withEndAction(() -> pulseHandler.postDelayed(this, 200))
+                    .start();
+            }
+        };
+        pulseHandler.post(pulse);
     }
 
     private View buildPanel(FrameLayout parent) {
@@ -163,8 +222,8 @@ public class FloatingService extends Service {
 
         GradientDrawable pbg = new GradientDrawable();
         pbg.setCornerRadius(dp(18));
-        pbg.setColor(Color.parseColor("#EE0c0c18"));
-        pbg.setStroke(dp(1), Color.parseColor("#447c6fff"));
+        pbg.setColor(0xEA_0d0d10); // --bg with 92% opacity
+        pbg.setStroke(dp(1), 0x2E_7c6fff); // purple border
         panel.setBackground(pbg);
 
         // Header
@@ -175,15 +234,15 @@ public class FloatingService extends Service {
 
         TextView title = new TextView(this);
         title.setText("VOID");
-        title.setTextColor(Color.parseColor("#9a87ff"));
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        title.setTextColor(COL_PURPLE_L);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         title.setTypeface(null, Typeface.BOLD);
-        title.setLetterSpacing(0.15f);
+        title.setLetterSpacing(0.2f);
         hdr.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         Button closeBtn = new Button(this);
         closeBtn.setText("✕");
-        closeBtn.setTextColor(Color.parseColor("#888888"));
+        closeBtn.setTextColor(COL_MUTED);
         closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         closeBtn.setBackground(null);
         closeBtn.setPadding(dp(8), 0, 0, 0);
@@ -193,7 +252,7 @@ public class FloatingService extends Service {
 
         // Divider
         View div = new View(this);
-        div.setBackgroundColor(Color.parseColor("#22ffffff"));
+        div.setBackgroundColor(0x12_ffffff);
         LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
         divLp.setMargins(0, 0, 0, dp(10));
@@ -220,14 +279,14 @@ public class FloatingService extends Service {
 
         GradientDrawable ibg = new GradientDrawable();
         ibg.setCornerRadius(dp(12));
-        ibg.setColor(Color.parseColor("#220d0d1e"));
-        ibg.setStroke(dp(1), Color.parseColor("#337c6fff"));
+        ibg.setColor(COL_SURFACE);
+        ibg.setStroke(dp(1), 0x22_7c6fff);
         inputRow.setBackground(ibg);
 
         inputField = new EditText(this);
-        inputField.setHint("Ask anything...");
-        inputField.setHintTextColor(Color.parseColor("#555566"));
-        inputField.setTextColor(Color.parseColor("#eeeef2"));
+        inputField.setHint("Ask anything…");
+        inputField.setHintTextColor(COL_MUTED);
+        inputField.setTextColor(COL_TEXT);
         inputField.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         inputField.setBackground(null);
         inputField.setImeOptions(EditorInfo.IME_ACTION_SEND);
@@ -241,7 +300,7 @@ public class FloatingService extends Service {
 
         Button sendBtn = new Button(this);
         sendBtn.setText("→");
-        sendBtn.setTextColor(Color.parseColor("#9a87ff"));
+        sendBtn.setTextColor(COL_PURPLE_L);
         sendBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         sendBtn.setBackground(null);
         sendBtn.setPadding(dp(6), 0, dp(2), 0);
@@ -250,10 +309,9 @@ public class FloatingService extends Service {
 
         panel.addView(inputRow, inputRowLp);
 
-        // Position panel above the orb
         FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(dp(285), dp(400));
         panelLp.gravity = Gravity.BOTTOM | Gravity.END;
-        panelLp.setMargins(0, 0, 0, dp(60));
+        panelLp.setMargins(0, 0, 0, dp(64));
         parent.addView(panel, panelLp);
         return panel;
     }
@@ -326,13 +384,13 @@ public class FloatingService extends Service {
         TextView b = new TextView(this);
         b.setText(text);
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        b.setTextColor(Color.parseColor(isUser ? "#e8e8f0" : "#c4b8ff"));
+        b.setTextColor(isUser ? COL_TEXT : COL_PURPLE_L);
         b.setPadding(dp(10), dp(7), dp(10), dp(7));
         b.setLineSpacing(dp(2), 1f);
 
         GradientDrawable bbg = new GradientDrawable();
         bbg.setCornerRadius(dp(11));
-        bbg.setColor(Color.parseColor(isUser ? "#2d2d42" : "#1c1c2e"));
+        bbg.setColor(isUser ? COL_USER_BG : COL_AI_BG);
         b.setBackground(bbg);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -346,7 +404,6 @@ public class FloatingService extends Service {
         try {
             JSONArray msgs = new JSONArray();
             msgs.put(new JSONObject().put("role", "system").put("content", SYS_PROMPT));
-            // last 10 turns max
             List<String[]> slice = history.subList(Math.max(0, history.size() - 10), history.size());
             for (String[] m : slice) msgs.put(new JSONObject().put("role", m[0]).put("content", m[1]));
 
@@ -355,7 +412,7 @@ public class FloatingService extends Service {
             body.put("messages", msgs);
             body.put("max_tokens", 220);
 
-            URL url     = new URL(API_URL + "/v1/chat/completions");
+            URL url = new URL(API_URL + "/v1/chat/completions");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
