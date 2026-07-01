@@ -97,6 +97,17 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   z-index: 10;
   flex-shrink: 0;
 }
+/* Compact variant for back+title sub-page headers (hero/item detail, study
+   grid) — these don't need the same visual weight as the primary nav bar. */
+.hud-header.compact {
+  height: 44px;
+}
+.hud-header.compact .icon-btn.back-btn {
+  width: 34px; height: 34px;
+}
+.hud-header.compact .system-title {
+  font-size: 13px;
+}
 
 .hud-left, .hud-right { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
 .hud-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; }
@@ -233,7 +244,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: none;
   border: none;
   box-shadow: none;
-  padding: 0;
+  padding: 2px 0 8px;
   border-radius: 0;
   color: var(--text);
 }
@@ -982,7 +993,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 
 .hd-tabs {
   display: flex; background: var(--glass-bg); border: 1px solid var(--glass-border);
-  border-radius: 12px; padding: 3px; gap: 3px;
+  border-radius: 12px; padding: 3px; gap: 3px; overflow: hidden;
   backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 .hd-tab {
@@ -1910,15 +1921,6 @@ body.reduced-motion *::after {
   border-color: var(--danger);
 }
 
-/* ===========================================================
-   GEMINI-STYLE AI MESSAGES (no bubble card for AI)
-   =========================================================== */
-.bubble-ai {
-  background: transparent !important;
-  border: none !important;
-  padding: 2px 0 8px !important;
-  color: var(--text);
-}
 
 /* ===========================================================
    FLOATING VOID ASSISTANT
