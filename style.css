@@ -1734,7 +1734,9 @@ body.reduced-motion *::after {
 }
 .study-loc-btn:active { background: rgba(255,255,255,0.15); color: #fff; }
 .study-loc-btn.active {
-  background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.45); color: #fff;
+  background: linear-gradient(135deg, rgba(124,111,255,0.5) 0%, rgba(177,140,255,0.4) 100%);
+  border-color: rgba(124,111,255,0.6); color: #fff;
+  box-shadow: 0 0 16px rgba(124,111,255,0.35);
 }
 .study-loc-flag { font-size: 14px; }
 
@@ -1742,9 +1744,9 @@ body.reduced-motion *::after {
 .study-chat {
   position: absolute; bottom: 80px; right: 14px; z-index: 20;
   width: min(320px, calc(100vw - 28px));
-  border-radius: 16px; overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+  border-radius: 18px; overflow: hidden;
+  border: 1px solid rgba(124,111,255,0.25);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,111,255,0.08);
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   background: rgba(10,10,16,0.5);
   transition: transform 0.2s ease;
@@ -1753,7 +1755,7 @@ body.reduced-motion *::after {
   display: flex; align-items: center; gap: 7px;
   padding: 10px 12px; cursor: pointer; user-select: none;
   background: rgba(255,255,255,0.04);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(124,111,255,0.15);
 }
 .study-chat-void-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
@@ -1792,7 +1794,7 @@ body.reduced-motion *::after {
 }
 .study-msg-user { align-self: flex-end; }
 .study-msg-user span {
-  background: rgba(255,255,255,0.88); color: #111;
+  background: linear-gradient(135deg, #7c6fff 0%, #b18cff 100%); color: #fff;
   border-radius: 10px 4px 10px 10px;
 }
 
@@ -1817,9 +1819,9 @@ body.reduced-motion *::after {
   transition: background 0.15s, color 0.15s;
 }
 .study-icon-btn:active, .study-icon-btn.active {
-  background: rgba(255,255,255,0.22); color: #fff;
+  background: rgba(124,111,255,0.35); color: #fff;
 }
-.study-send-btn { background: rgba(255,255,255,0.14); }
+.study-send-btn { background: linear-gradient(135deg, rgba(124,111,255,0.5) 0%, rgba(177,140,255,0.4) 100%); }
 
 /* Responsive tweaks */
 @media (max-width: 480px) {
