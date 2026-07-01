@@ -18,7 +18,7 @@ const App = {
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
     floatingAssistantEnabled: false,
     haptic: true,
-    accentColor: '',
+    accentColor: '', accentColor2: '',
   },
   tasks: [],
   commands: [],
@@ -532,23 +532,38 @@ function applyTheme(name) {
   document.querySelectorAll('.theme-swatch').forEach(d => {
     d.classList.toggle('active', d.dataset.theme === name);
   });
-  applyAccentColor(App.settings.accentColor);
+  applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
 }
 
-function applyAccentColor(hex) {
+// Lighten a hex color toward white by `amt` (0-1) — used to derive a matching
+// gradient partner for any accent so buttons/toggles never clash with a fixed color.
+function lightenHex(hex, amt) {
+  const n = hex.replace('#', '');
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  const mix = (c) => Math.round(c + (255 - c) * amt);
+  return `#${[mix(r), mix(g), mix(b)].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function applyAccentColor(hex, hex2) {
   const root = document.documentElement;
   if (!hex) {
     root.style.removeProperty('--accent');
     root.style.removeProperty('--accent-soft');
+    root.style.removeProperty('--accent-2');
   } else {
     const n = hex.replace('#', '');
     const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
     root.style.setProperty('--accent', hex);
     root.style.setProperty('--accent-soft', `rgba(${r},${g},${b},0.14)`);
+    // Every accent gets a matching gradient partner — curated for presets (hex2),
+    // auto-derived (lightened) for custom colors — so gradients never clash.
+    root.style.setProperty('--accent-2', hex2 || lightenHex(hex, 0.32));
   }
   document.querySelectorAll('.accent-swatch').forEach(s => {
     s.classList.toggle('active', (s.dataset.accent || '') === (hex || ''));
   });
+  const customColor = document.getElementById('accent-color-custom');
+  if (customColor && hex) customColor.value = hex;
 }
 
 function setupThemePicker() {
@@ -616,11 +631,19 @@ function switchTab(targetId) {
   }
 
   if (targetId === 'tab-gamehub') showWorkspaceLanding();
+  updateExportBtnVisibility(targetId);
 }
 
 function switchTabRaw(targetId) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(targetId).classList.add('active');
+  updateExportBtnVisibility(targetId);
+}
+
+// The export/download button only makes sense while looking at a chat.
+function updateExportBtnVisibility(targetId) {
+  const btn = document.getElementById('export-chat-btn');
+  if (btn) btn.style.display = targetId === 'tab-chat' ? '' : 'none';
 }
 
 /* ============ Settings panel navigation ============ */
@@ -1017,6 +1040,7 @@ function openSettingsPanel(panelId) {
     refreshPermissions();
   } else if (panelId === 'panel-colormode') {
     syncColorModeSeg();
+    applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
   } else if (panelId === 'panel-fontstyle') {
     syncFontSizeSeg();
   } else if (panelId === 'panel-notifications') {
@@ -1063,7 +1087,8 @@ function setupPreferencesPanel() {
   document.querySelectorAll('.accent-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
       App.settings.accentColor = sw.dataset.accent || '';
-      applyAccentColor(App.settings.accentColor);
+      App.settings.accentColor2 = sw.dataset.accent2 || '';
+      applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
       saveSettings();
     });
   });
@@ -1071,6 +1096,7 @@ function setupPreferencesPanel() {
   if (customColor) {
     customColor.addEventListener('input', () => {
       App.settings.accentColor = customColor.value;
+      App.settings.accentColor2 = ''; // auto-derived from the picked color
       applyAccentColor(App.settings.accentColor);
       saveSettings();
     });

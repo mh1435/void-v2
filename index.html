@@ -803,20 +803,6 @@ if (window.caches && caches.keys) {
         </select>
       </div>
 
-      <div class="settings-section-label">APPEARANCE</div>
-      <div class="setting-row stacked">
-        <div class="setting-label"><span>Accent Color</span><span class="setting-sub">Overrides the theme's default accent</span></div>
-        <div class="accent-swatch-row" id="accent-swatch-row">
-          <button class="accent-swatch" data-accent="" style="background:linear-gradient(135deg,#7c6fff,#ff6f9c,#6fd9ff)" aria-label="Theme default"></button>
-          <button class="accent-swatch" data-accent="#7c6fff" style="background:#7c6fff" aria-label="Purple"></button>
-          <button class="accent-swatch" data-accent="#2f8f5b" style="background:#2f8f5b" aria-label="Green"></button>
-          <button class="accent-swatch" data-accent="#2f5fd0" style="background:#2f5fd0" aria-label="Blue"></button>
-          <button class="accent-swatch" data-accent="#d0532f" style="background:#d0532f" aria-label="Orange"></button>
-          <button class="accent-swatch" data-accent="#c22b6e" style="background:#c22b6e" aria-label="Pink"></button>
-          <input type="color" id="accent-color-custom" class="accent-color-custom" aria-label="Custom color" value="#7c6fff">
-        </div>
-      </div>
-
       <div class="settings-section-label">PERFORMANCE</div>
       <div class="setting-row">
         <div class="setting-label"><span>Reduce animations</span><span class="setting-sub">Helps on older or slower devices</span></div>
@@ -1083,6 +1069,20 @@ if (window.caches && caches.keys) {
         <button class="theme-swatch" data-theme="ember"><span class="swatch-color" style="background:#0d0707;border-color:#ff4545;"></span><span class="swatch-name">Ember</span></button>
         <button class="theme-swatch" data-theme="nebula"><span class="swatch-color" style="background:#05020a;border-color:#ca5cff;"></span><span class="swatch-name">Nebula</span></button>
         <button class="theme-swatch" data-theme="amber"><span class="swatch-color" style="background:#0c0802;border-color:#ffb000;"></span><span class="swatch-name">Classic Amber</span></button>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:18px;">ACCENT COLOR</div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Override</span><span class="setting-sub">Tints buttons, toggles &amp; highlights across every theme</span></div>
+        <div class="accent-swatch-row" id="accent-swatch-row">
+          <button class="accent-swatch" data-accent="" data-accent2="" style="background:linear-gradient(135deg,#7c6fff,#ff6f9c,#6fd9ff)" aria-label="Theme default"></button>
+          <button class="accent-swatch" data-accent="#7c6fff" data-accent2="#b18cff" style="background:#7c6fff" aria-label="Purple"></button>
+          <button class="accent-swatch" data-accent="#2f8f5b" data-accent2="#6fd9a8" style="background:#2f8f5b" aria-label="Green"></button>
+          <button class="accent-swatch" data-accent="#2f5fd0" data-accent2="#7c9eff" style="background:#2f5fd0" aria-label="Blue"></button>
+          <button class="accent-swatch" data-accent="#d0532f" data-accent2="#ff9466" style="background:#d0532f" aria-label="Orange"></button>
+          <button class="accent-swatch" data-accent="#c22b6e" data-accent2="#ff6fa8" style="background:#c22b6e" aria-label="Pink"></button>
+          <input type="color" id="accent-color-custom" class="accent-color-custom" aria-label="Custom color" value="#7c6fff">
+        </div>
       </div>
     </div>
   </div>
