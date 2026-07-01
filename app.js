@@ -972,6 +972,11 @@ function setupPreferencesPanel() {
     });
   }
 
+  // Kill any leftover native overlay from an older app version — web VoidFloat is the only floating assistant now
+  if (window.Capacitor?.isNativePlatform?.()) {
+    try { Capacitor.Plugins.FloatingPlugin?.stopFloating(); } catch (_) {}
+  }
+
   // Show on boot if previously enabled
   if (App.settings.floatingAssistantEnabled) setFloatingAssistant(true);
 }
@@ -3099,16 +3104,7 @@ async function setFloatingAssistant(enabled) {
     return;
   }
   if (enabled) {
-    if (window.Capacitor?.isNativePlatform?.()) {
-      try {
-        const { FloatingPlugin } = Capacitor.Plugins;
-        if (FloatingPlugin) await FloatingPlugin.startFloating();
-      } catch (e) {
-        if (e?.message !== 'OVERLAY_PERMISSION_REQUIRED') console.warn('FloatingPlugin:', e);
-      }
-    } else {
-      VoidFloat.show();
-    }
+    VoidFloat.show();
   } else {
     VoidFloat.hide();
     if (window.Capacitor?.isNativePlatform?.()) {
