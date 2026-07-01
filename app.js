@@ -631,19 +631,24 @@ function switchTab(targetId) {
   }
 
   if (targetId === 'tab-gamehub') showWorkspaceLanding();
-  updateExportBtnVisibility(targetId);
+  updateAppChromeForTab(targetId);
 }
 
 function switchTabRaw(targetId) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(targetId).classList.add('active');
-  updateExportBtnVisibility(targetId);
+  updateAppChromeForTab(targetId);
 }
 
-// The export/download button only makes sense while looking at a chat.
-function updateExportBtnVisibility(targetId) {
-  const btn = document.getElementById('export-chat-btn');
-  if (btn) btn.style.display = targetId === 'tab-chat' ? '' : 'none';
+// Sub-pages (drill-downs) bring their own back+title header, so the top-level
+// VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
+const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view'];
+function updateAppChromeForTab(targetId) {
+  const exportBtn = document.getElementById('export-chat-btn');
+  if (exportBtn) exportBtn.style.display = targetId === 'tab-chat' ? '' : 'none';
+
+  const appHeader = document.getElementById('app-hud-header');
+  if (appHeader) appHeader.style.display = SUB_PAGE_TABS.includes(targetId) ? 'none' : '';
 }
 
 /* ============ Settings panel navigation ============ */
