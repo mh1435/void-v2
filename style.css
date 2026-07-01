@@ -213,7 +213,10 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .chat-bubble { display: flex; flex-direction: column; max-width: 85%; animation: bubbleUp 0.2s ease-out; }
 @keyframes bubbleUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .chat-bubble.user { align-self: flex-end; }
-.chat-bubble.assistant { align-self: flex-start; }
+/* Assistant replies flow as plain text across the full width (like Claude's own
+   chat) instead of a constrained bubble — avoids any bubble/backdrop-filter
+   clipping long replies, and reads better for long-form answers. */
+.chat-bubble.assistant { align-self: stretch; max-width: 100%; }
 
 .bubble-meta { font-size: 9px; font-family: var(--hub-mono); color: var(--muted); margin-bottom: 4px; letter-spacing: 0.04em; }
 .chat-bubble.user .bubble-meta { align-self: flex-end; }
@@ -227,12 +230,12 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   box-shadow: 0 4px 16px rgba(124, 111, 255, 0.25);
 }
 .chat-bubble.assistant .bubble-body {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  border: 1px solid var(--glass-border);
-  border-bottom-left-radius: 5px;
-  box-shadow: var(--glass-shadow);
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+  color: var(--text);
 }
 .bubble-body p { margin: 0 0 10px 0; }
 .bubble-body p:last-child { margin: 0; }

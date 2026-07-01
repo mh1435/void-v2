@@ -645,7 +645,13 @@ function switchTabRaw(targetId) {
 const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view'];
 function updateAppChromeForTab(targetId) {
   const exportBtn = document.getElementById('export-chat-btn');
-  if (exportBtn) exportBtn.style.display = targetId === 'tab-chat' ? '' : 'none';
+  if (exportBtn) {
+    // visibility (not display) keeps the button's width reserved in the layout,
+    // so the centered INTELLIGENCE/WORKSPACE pill doesn't shift when it toggles.
+    const show = targetId === 'tab-chat';
+    exportBtn.style.visibility = show ? '' : 'hidden';
+    exportBtn.style.pointerEvents = show ? '' : 'none';
+  }
 
   const appHeader = document.getElementById('app-hud-header');
   if (appHeader) appHeader.style.display = SUB_PAGE_TABS.includes(targetId) ? 'none' : '';
