@@ -18,6 +18,7 @@ const App = {
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
     floatingAssistantEnabled: false,
     haptic: true,
+    accentColor: '',
   },
   tasks: [],
   commands: [],
@@ -40,14 +41,16 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - MLBB Game Hub: hero guides, builds, counters, and meta (only when the user asks about it)
 - Floating assistant overlay: accessible over other apps
 - Custom commands and task lists
-- /define <word> and /price <coin> quick lookup commands
+- Knowledge lookups: "who is X" / "what is X" / "tell me about X" pull a real Wikipedia summary, injected as a KNOWLEDGE LOOKUP block below
+- /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to> quick lookup commands
+- Opening other apps/sites on request ("open spotify", "navigate to X", "play X on youtube")
 
 Rules:
 - NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
 - Match your response length to the question — short question = short answer, complex question = detailed answer
 - If asked what you can do, describe the capabilities above naturally
 - Be direct, useful, and conversational
-- CRITICAL: If a LIVE CONTEXT or WEATHER LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a weather website instead — you DO have real-time weather/location data when it's provided below. Only say data is unavailable if no LIVE CONTEXT/WEATHER LOOKUP block was given for that request.`;
+- CRITICAL: If a LIVE CONTEXT, WEATHER LOOKUP, or KNOWLEDGE LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a website instead — you DO have this data when it's provided below. Only say data is unavailable if no such block was given for that request.`;
 
 const LANG_NAMES = {
   en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
@@ -119,6 +122,27 @@ async function getWeatherLookupCtx(text) {
   const w = await fetchWeatherForCity(city);
   if (!w) return '';
   return `\n\nWEATHER LOOKUP for "${city}": ${w}. This is real current data — use it directly to answer.`;
+}
+
+// "who is X" / "what is X" / "tell me about X" — ground the reply in a real Wikipedia summary
+// instead of letting the model guess from training data.
+function extractKnowledgeQuery(text) {
+  const m = text.match(/^(?:who|what)\s+(?:is|are|was|were)\s+(.+?)\??$|^tell me about\s+(.+?)\??$/i);
+  if (!m) return null;
+  const q = (m[1] || m[2] || '').trim();
+  return q.length >= 2 && q.length <= 80 ? q : null;
+}
+
+async function getKnowledgeLookupCtx(text) {
+  const q = extractKnowledgeQuery(text);
+  if (!q) return '';
+  try {
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q.replace(/\s+/g, '_'))}`);
+    if (!r.ok) return '';
+    const d = await r.json();
+    if (!d.extract) return '';
+    return `\n\nKNOWLEDGE LOOKUP for "${q}" (Wikipedia): ${d.extract}`;
+  } catch(_) { return ''; }
 }
 
 /* ============ Open other apps (like Gemini's app-opening) ============ */
@@ -406,6 +430,7 @@ function bootApp() {
   setupSettingsPanels();
   setupThemePicker();
   setupChat();
+  setupMessageActions();
   setupGameHub();
   setupVoice();
   setupCommandsPanel();
@@ -507,6 +532,23 @@ function applyTheme(name) {
   document.querySelectorAll('.theme-swatch').forEach(d => {
     d.classList.toggle('active', d.dataset.theme === name);
   });
+  applyAccentColor(App.settings.accentColor);
+}
+
+function applyAccentColor(hex) {
+  const root = document.documentElement;
+  if (!hex) {
+    root.style.removeProperty('--accent');
+    root.style.removeProperty('--accent-soft');
+  } else {
+    const n = hex.replace('#', '');
+    const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+    root.style.setProperty('--accent', hex);
+    root.style.setProperty('--accent-soft', `rgba(${r},${g},${b},0.14)`);
+  }
+  document.querySelectorAll('.accent-swatch').forEach(s => {
+    s.classList.toggle('active', (s.dataset.accent || '') === (hex || ''));
+  });
 }
 
 function setupThemePicker() {
@@ -527,6 +569,9 @@ function setupNav() {
 
   const openSettingsBtn = document.getElementById('open-settings-btn');
   if (openSettingsBtn) openSettingsBtn.addEventListener('click', openNavDrawer);
+
+  const exportBtn = document.getElementById('export-chat-btn');
+  if (exportBtn) exportBtn.addEventListener('click', exportCurrentChat);
   document.getElementById('close-settings-btn').addEventListener('click', () => {
     document.getElementById('view-settings').classList.remove('active');
     document.getElementById('view-main').classList.add('active');
@@ -1015,6 +1060,21 @@ function setupPreferencesPanel() {
     langSel.value = App.settings.lang;
     langSel.addEventListener('change', () => { App.settings.lang = langSel.value; saveSettings(); });
   }
+  document.querySelectorAll('.accent-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      App.settings.accentColor = sw.dataset.accent || '';
+      applyAccentColor(App.settings.accentColor);
+      saveSettings();
+    });
+  });
+  const customColor = document.getElementById('accent-color-custom');
+  if (customColor) {
+    customColor.addEventListener('input', () => {
+      App.settings.accentColor = customColor.value;
+      applyAccentColor(App.settings.accentColor);
+      saveSettings();
+    });
+  }
   if (motionToggle) {
     motionToggle.checked = !!App.settings.reducedMotion;
     motionToggle.addEventListener('change', () => {
@@ -1372,6 +1432,49 @@ async function sendMessage() {
     return;
   }
 
+  // /image command — free, no-key image generation via Pollinations
+  if (text.toLowerCase().startsWith('/image ')) {
+    const prompt = text.slice(7).trim();
+    if (prompt) {
+      appendMessage('user', text);
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      const seed = Math.floor(Math.random() * 1e9);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=640&seed=${seed}&nologo=true`;
+      appendImageMessage(url, prompt);
+    }
+    return;
+  }
+
+  // /convert command — "/convert 100 usd to eur"
+  if (text.toLowerCase().startsWith('/convert ')) {
+    const m = text.slice(9).trim().match(/^([\d.,]+)\s*([a-z]{3})\s*(?:to|in)\s*([a-z]{3})$/i);
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    if (!m) {
+      appendMessage('system', 'Usage: /convert 100 usd to eur');
+    } else {
+      const [, amtStr, from, to] = m;
+      const amt = parseFloat(amtStr.replace(/,/g, ''));
+      try {
+        const r = await fetch(`https://open.er-api.com/v6/latest/${from.toUpperCase()}`);
+        if (r.ok) {
+          const d = await r.json();
+          const rate = d.rates?.[to.toUpperCase()];
+          if (rate) {
+            appendMessage('system', `💱 ${amt.toLocaleString()} ${from.toUpperCase()} = ${(amt * rate).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${to.toUpperCase()}`);
+          } else {
+            appendMessage('system', `Unknown currency code "${to.toUpperCase()}".`);
+          }
+        } else {
+          appendMessage('system', `Could not fetch exchange rate for "${from.toUpperCase()}".`);
+        }
+      } catch(e) {
+        appendMessage('system', 'Error fetching exchange rate.');
+      }
+    }
+    return;
+  }
+
   // Natural-language app opening ("open spotify", "navigate to X", "play X on youtube"...)
   const appAction = detectAppAction(text);
   if (appAction) {
@@ -1385,14 +1488,21 @@ async function sendMessage() {
   if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
 
   App.chatHistory.push({ role: 'user', content: text });
-  appendMessage('user', text);
+  appendMessage('user', text, App.chatHistory.length - 1);
   input.value = '';
   input.style.height = 'auto';
   updateSendMicBtn();
 
+  await generateAssistantReply(text);
+}
+
+// Runs the provider fallback chain against the current App.chatHistory and appends the
+// result. Shared by sendMessage() (new user turn) and regenerateMessageAt() (no new turn).
+async function generateAssistantReply(triggerText) {
   const typingId = appendTyping();
-  const weatherCtx = await getWeatherLookupCtx(text);
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx) }, ...App.chatHistory.slice(-20)];
+  const weatherCtx = await getWeatherLookupCtx(triggerText || '');
+  const knowledgeCtx = await getKnowledgeLookupCtx(triggerText || '');
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) }, ...App.chatHistory.slice(-20)];
 
   let reply = null;
   let lastError = null;
@@ -1439,14 +1549,27 @@ async function sendMessage() {
   if (reply) {
     App.chatHistory.push({ role: 'assistant', content: reply });
     saveChatHistory();
-    appendMessage('system', reply);
+    appendMessage('system', reply, App.chatHistory.length - 1);
     if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
   } else {
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
 }
 
-function appendMessage(role, text) {
+// Drops the given assistant reply (and anything after it) from history, then re-asks.
+async function regenerateMessageAt(index) {
+  if (index == null || !App.chatHistory[index] || App.chatHistory[index].role !== 'assistant') return;
+  let triggerText = '';
+  for (let i = index - 1; i >= 0; i--) {
+    if (App.chatHistory[i].role === 'user') { triggerText = App.chatHistory[i].content; break; }
+  }
+  App.chatHistory = App.chatHistory.slice(0, index);
+  saveChats();
+  renderActiveChat();
+  await generateAssistantReply(triggerText);
+}
+
+function appendMessage(role, text, historyIndex = null) {
   const box = document.getElementById('messages-box');
   const welcome = box.querySelector('.matrix-welcome');
   if (welcome) welcome.remove();
@@ -1461,9 +1584,75 @@ function appendMessage(role, text) {
 
   const el = document.createElement('div');
   el.className = `chat-bubble ${bubbleClass}`;
+  if (historyIndex != null) el.dataset.historyIndex = historyIndex;
   el.innerHTML = `
     <div class="bubble-meta">${label} // ${time}</div>
     <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${renderMarkdownLite(text)}</div>
+    <div class="bubble-actions">
+      <button class="bubble-act-btn" data-act="copy" aria-label="Copy message">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>${!isUser && historyIndex != null ? `
+      <button class="bubble-act-btn" data-act="regen" aria-label="Regenerate response">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>` : ''}
+      <button class="bubble-act-btn" data-act="del" aria-label="Delete message">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  `;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setupMessageActions() {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  box.addEventListener('click', (e) => {
+    const btn = e.target.closest('.bubble-act-btn');
+    if (!btn) {
+      // Tap anywhere else on a bubble (touch devices have no hover) to reveal its actions
+      const tapped = e.target.closest('.chat-bubble');
+      document.querySelectorAll('.chat-bubble.actions-visible').forEach(b => { if (b !== tapped) b.classList.remove('actions-visible'); });
+      if (tapped) tapped.classList.toggle('actions-visible');
+      return;
+    }
+    const bubble = btn.closest('.chat-bubble');
+    if (!bubble) return;
+    const act = btn.dataset.act;
+    const idxAttr = bubble.dataset.historyIndex;
+    const index = idxAttr !== undefined ? parseInt(idxAttr, 10) : null;
+    const bodyEl = bubble.querySelector('.bubble-body');
+
+    if (act === 'copy') {
+      navigator.clipboard?.writeText(bodyEl ? bodyEl.textContent : '').catch(() => {});
+    } else if (act === 'del') {
+      if (index != null && App.chatHistory[index]) {
+        App.chatHistory.splice(index, 1);
+        saveChats();
+        renderActiveChat();
+      } else {
+        bubble.remove();
+      }
+    } else if (act === 'regen') {
+      regenerateMessageAt(index);
+    }
+  });
+}
+
+function appendImageMessage(url, prompt) {
+  const box = document.getElementById('messages-box');
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+  App.msgCount++;
+  updateWelcomeStatsLine();
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `
+    <div class="bubble-meta">VOID // ${time}</div>
+    <div class="bubble-body bubble-ai">
+      <img src="${url}" alt="${escapeHTML(prompt)}" loading="lazy" style="max-width:100%;border-radius:10px;display:block;" />
+    </div>
   `;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -1480,7 +1669,7 @@ function appendTyping() {
   const el = document.createElement('div');
   el.className = 'chat-bubble assistant';
   el.id = id;
-  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body">...</div>`;
+  el.innerHTML = `<div class="bubble-meta">VOID::CORE</div><div class="bubble-body"><span class="typing-dots"><span></span><span></span><span></span></span></div>`;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return id;
@@ -1572,6 +1761,25 @@ function titleFromMessages(msgs) {
   return u ? u.content.slice(0, 40).trim() : 'New chat';
 }
 
+function exportCurrentChat() {
+  if (!App.chatHistory.length) return;
+  const chat = getCurrentChat();
+  const title = chat?.title || 'VOID Chat';
+  let md = `# ${title}\n\n`;
+  App.chatHistory.forEach(m => {
+    md += `**${m.role === 'user' ? 'You' : 'VOID'}:**\n${m.content}\n\n`;
+  });
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${title.replace(/[^a-z0-9]+/gi, '-').slice(0, 40) || 'void-chat'}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Re-render the message area for the active chat.
 function renderActiveChat() {
   const box = document.getElementById('messages-box');
@@ -1579,7 +1787,7 @@ function renderActiveChat() {
   box.innerHTML = '';
   App.msgCount = 0;
   if (App.chatHistory.length) {
-    App.chatHistory.forEach(msg => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content));
+    App.chatHistory.forEach((msg, i) => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content, i));
   } else {
     box.innerHTML = `<div class="matrix-welcome"><div class="welcome-logo">VOID</div>
       <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
@@ -1685,6 +1893,16 @@ function setupNavDrawer() {
     closeNavDrawer();
     document.getElementById('view-main').classList.remove('active');
     document.getElementById('view-settings').classList.add('active');
+  });
+  const search = document.getElementById('nav-chat-search');
+  if (search) search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    document.querySelectorAll('#chat-list .nav-chat-item').forEach(item => {
+      if (!q) { item.classList.remove('search-hidden'); return; }
+      const chat = App.chats.find(c => c.id === item.dataset.chatId);
+      const hay = ((chat?.title || '') + ' ' + (chat?.messages || []).map(m => m.content).join(' ')).toLowerCase();
+      item.classList.toggle('search-hidden', !hay.includes(q));
+    });
   });
 }
 
@@ -3168,8 +3386,9 @@ const VoidFloat = (() => {
 
     (async () => {
       const weatherCtx = await getWeatherLookupCtx(text);
+      const knowledgeCtx = await getKnowledgeLookupCtx(text);
       const msgs = [
-        { role: 'system', content: buildSystemPrompt(weatherCtx) + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
+        { role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
         ...history.slice(-10)
       ];
       let reply = null;

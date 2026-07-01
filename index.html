@@ -48,6 +48,9 @@ if (window.caches && caches.keys) {
       </div>
     </div>
     <div class="hud-right">
+      <button class="nav-menu-btn" id="export-chat-btn" aria-label="Export chat">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
       <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
@@ -72,6 +75,9 @@ if (window.caches && caches.keys) {
       </div>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    <div class="nav-chat-search-wrap">
+      <input type="text" id="nav-chat-search" class="nav-chat-search" placeholder="Search chats..." autocomplete="off">
+    </div>
     <div class="nav-section-label">RECENT</div>
     <div class="nav-chat-list" id="chat-list"></div>
   </aside>
@@ -796,7 +802,21 @@ if (window.caches && caches.keys) {
           <option value="de">German — Deutsch</option>
         </select>
       </div>
-      
+
+      <div class="settings-section-label">APPEARANCE</div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Accent Color</span><span class="setting-sub">Overrides the theme's default accent</span></div>
+        <div class="accent-swatch-row" id="accent-swatch-row">
+          <button class="accent-swatch" data-accent="" style="background:linear-gradient(135deg,#7c6fff,#ff6f9c,#6fd9ff)" aria-label="Theme default"></button>
+          <button class="accent-swatch" data-accent="#7c6fff" style="background:#7c6fff" aria-label="Purple"></button>
+          <button class="accent-swatch" data-accent="#2f8f5b" style="background:#2f8f5b" aria-label="Green"></button>
+          <button class="accent-swatch" data-accent="#2f5fd0" style="background:#2f5fd0" aria-label="Blue"></button>
+          <button class="accent-swatch" data-accent="#d0532f" style="background:#d0532f" aria-label="Orange"></button>
+          <button class="accent-swatch" data-accent="#c22b6e" style="background:#c22b6e" aria-label="Pink"></button>
+          <input type="color" id="accent-color-custom" class="accent-color-custom" aria-label="Custom color" value="#7c6fff">
+        </div>
+      </div>
+
       <div class="settings-section-label">PERFORMANCE</div>
       <div class="setting-row">
         <div class="setting-label"><span>Reduce animations</span><span class="setting-sub">Helps on older or slower devices</span></div>
