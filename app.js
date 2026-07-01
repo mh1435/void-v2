@@ -121,6 +121,52 @@ async function getWeatherLookupCtx(text) {
   return `\n\nWEATHER LOOKUP for "${city}": ${w}. This is real current data — use it directly to answer.`;
 }
 
+/* ============ Open other apps (like Gemini's app-opening) ============ */
+// Named apps VOID can hand off to — resolves via https:// deep links (Android routes
+// installed apps' verified App Links automatically) or custom URI schemes.
+const APP_LAUNCH_MAP = [
+  { keys: ['whatsapp'],                     url: 'https://wa.me/',                    label: 'WhatsApp' },
+  { keys: ['youtube'],                      url: 'https://youtube.com',               label: 'YouTube' },
+  { keys: ['instagram'],                    url: 'https://instagram.com',             label: 'Instagram' },
+  { keys: ['twitter', 'x app'],             url: 'https://twitter.com',               label: 'X (Twitter)' },
+  { keys: ['facebook'],                     url: 'https://facebook.com',              label: 'Facebook' },
+  { keys: ['tiktok'],                       url: 'https://www.tiktok.com',            label: 'TikTok' },
+  { keys: ['spotify'],                      url: 'https://open.spotify.com',          label: 'Spotify' },
+  { keys: ['maps', 'google maps'],          url: 'https://maps.google.com',           label: 'Maps' },
+  { keys: ['gmail', 'email'],               url: 'https://mail.google.com',           label: 'Gmail' },
+  { keys: ['play store', 'google play'],    url: 'https://play.google.com/store',     label: 'Play Store' },
+  { keys: ['telegram'],                     url: 'https://t.me',                      label: 'Telegram' },
+  { keys: ['discord'],                      url: 'https://discord.com/app',           label: 'Discord' },
+  { keys: ['reddit'],                       url: 'https://reddit.com',                label: 'Reddit' },
+  { keys: ['netflix'],                      url: 'https://netflix.com',               label: 'Netflix' },
+  { keys: ['amazon'],                       url: 'https://amazon.com',                label: 'Amazon' },
+];
+
+function detectAppAction(text) {
+  const t = text.trim();
+  let m;
+
+  if ((m = t.match(/\b(?:play|search)\s+(.+?)\s+on\s+youtube\b/i))) {
+    return { label: `YouTube search: ${m[1]}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}` };
+  }
+  if ((m = t.match(/\b(?:navigate|directions?)\s+to\s+(.+)/i))) {
+    return { label: `Directions to ${m[1]}`, url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m[1])}` };
+  }
+  if ((m = t.match(/\bfind\s+(.+?)\s+near me\b/i))) {
+    return { label: `${m[1]} near you`, url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m[1] + ' near me')}` };
+  }
+  if ((m = t.match(/^google\s+(.{2,80})$/i))) {
+    return { label: `Google search: ${m[1]}`, url: `https://www.google.com/search?q=${encodeURIComponent(m[1])}` };
+  }
+  if ((m = t.match(/\b(?:open|launch|start)\s+(?:the\s+)?([a-z0-9 .]{2,30}?)(?:\s+app)?[.?!]?$/i))) {
+    const q = m[1].trim().toLowerCase();
+    for (const entry of APP_LAUNCH_MAP) {
+      if (entry.keys.some(k => q.includes(k))) return { label: `Opening ${entry.label}`, url: entry.url };
+    }
+  }
+  return null;
+}
+
 async function initLiveContext() {
   // Try GPS silently — if Android already granted permission it succeeds immediately,
   // if not, error callback fires right away and we fall through to IP-based.
@@ -1326,6 +1372,16 @@ async function sendMessage() {
     return;
   }
 
+  // Natural-language app opening ("open spotify", "navigate to X", "play X on youtube"...)
+  const appAction = detectAppAction(text);
+  if (appAction) {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    appendMessage('system', `🚀 ${appAction.label}`);
+    window.open(appAction.url, '_blank');
+    return;
+  }
+
   if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
 
   App.chatHistory.push({ role: 'user', content: text });
@@ -1407,7 +1463,7 @@ function appendMessage(role, text) {
   el.className = `chat-bubble ${bubbleClass}`;
   el.innerHTML = `
     <div class="bubble-meta">${label} // ${time}</div>
-    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${escapeHTML(text)}</div>
+    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${renderMarkdownLite(text)}</div>
   `;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -1439,6 +1495,27 @@ function escapeHTML(str) {
   return str.replace(/[&<>'"]/g,
     tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
   );
+}
+
+// Lightweight markdown → HTML for chat bubbles. Escapes first, so all output is safe.
+function renderMarkdownLite(text) {
+  const blocks = [];
+  let src = String(text).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    blocks.push(`<pre><code>${escapeHTML(code.replace(/\n$/, ''))}</code></pre>`);
+    return `${blocks.length - 1}`;
+  });
+
+  src = escapeHTML(src);
+  src = src.replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`);
+  src = src.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  src = src.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  src = src.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g, (m, linkText, linkUrl, bareUrl) => {
+    const href = linkUrl || bareUrl;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${linkText || bareUrl}</a>`;
+  });
+  src = src.replace(/\n/g, '<br>');
+  src = src.replace(/(\d+)/g, (_, i) => blocks[i]);
+  return src;
 }
 
 /* ============ Multi-Chat (Gemini-style sessions) ============ */
