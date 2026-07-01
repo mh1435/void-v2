@@ -1569,6 +1569,23 @@ async function regenerateMessageAt(index) {
   await generateAssistantReply(triggerText);
 }
 
+// Puts a past user message back into the input box and forks the conversation from
+// that point (like ChatGPT/Gemini's edit) — everything after it is dropped.
+function editMessageAt(index) {
+  if (index == null || !App.chatHistory[index] || App.chatHistory[index].role !== 'user') return;
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  const text = App.chatHistory[index].content;
+  App.chatHistory = App.chatHistory.slice(0, index);
+  saveChats();
+  renderActiveChat();
+  input.value = text;
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
+  updateSendMicBtn();
+  input.focus();
+}
+
 function appendMessage(role, text, historyIndex = null) {
   const box = document.getElementById('messages-box');
   const welcome = box.querySelector('.matrix-welcome');
@@ -1591,7 +1608,10 @@ function appendMessage(role, text, historyIndex = null) {
     <div class="bubble-actions">
       <button class="bubble-act-btn" data-act="copy" aria-label="Copy message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      </button>${!isUser && historyIndex != null ? `
+      </button>${isUser && historyIndex != null ? `
+      <button class="bubble-act-btn" data-act="edit" aria-label="Edit message">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+      </button>` : ''}${!isUser && historyIndex != null ? `
       <button class="bubble-act-btn" data-act="regen" aria-label="Regenerate response">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </button>` : ''}
@@ -1622,9 +1642,12 @@ function setupMessageActions() {
     const idxAttr = bubble.dataset.historyIndex;
     const index = idxAttr !== undefined ? parseInt(idxAttr, 10) : null;
     const bodyEl = bubble.querySelector('.bubble-body');
+    const rawText = (index != null && App.chatHistory[index]) ? App.chatHistory[index].content : (bodyEl ? bodyEl.textContent : '');
 
     if (act === 'copy') {
-      navigator.clipboard?.writeText(bodyEl ? bodyEl.textContent : '').catch(() => {});
+      navigator.clipboard?.writeText(rawText).catch(() => {});
+    } else if (act === 'edit') {
+      editMessageAt(index);
     } else if (act === 'del') {
       if (index != null && App.chatHistory[index]) {
         App.chatHistory.splice(index, 1);
@@ -2134,14 +2157,20 @@ function renderCommands() {
 
 function setupTasksPanel() {
   const taskInput = document.getElementById('task-input');
+  const dueInput = document.getElementById('task-due-input');
   const addBtn = document.getElementById('add-task-btn');
 
   if (addBtn) {
     addBtn.addEventListener('click', () => {
       const text = taskInput.value.trim();
       if (!text) return;
-      App.tasks.push({ text, done: false });
+      const due = dueInput?.value ? new Date(dueInput.value).getTime() : null;
+      if (due && window.Notification && Notification.permission === 'default') {
+        try { Notification.requestPermission(); } catch(_) {}
+      }
+      App.tasks.push({ text, done: false, due, notified: false });
       taskInput.value = '';
+      if (dueInput) dueInput.value = '';
       renderTasks();
       saveTasks();
     });
@@ -2151,6 +2180,45 @@ function setupTasksPanel() {
       if (e.key === 'Enter') addBtn.click();
     });
   }
+  startReminderChecker();
+}
+
+// Reminders — checks while the app is open and surfaces an in-app banner (+ a
+// browser Notification if permission was granted). This can't wake the app from
+// fully closed on Android without a native alarm plugin, so it's a best-effort
+// reminder for tasks with a due time, not a guaranteed background alarm.
+let reminderCheckerStarted = false;
+function startReminderChecker() {
+  if (reminderCheckerStarted) return;
+  reminderCheckerStarted = true;
+  setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    App.tasks.forEach(task => {
+      if (task.due && !task.notified && !task.done && task.due <= now) {
+        task.notified = true;
+        changed = true;
+        fireReminder(task.text);
+      }
+    });
+    if (changed) saveTasks();
+  }, 30000);
+}
+
+function fireReminder(text) {
+  if (window.Notification && Notification.permission === 'granted') {
+    try { new Notification('VOID reminder', { body: text }); } catch(_) {}
+  }
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;left:10px;right:10px;top:calc(var(--safe-top,0px) + 8px);z-index:9999;'
+    + 'background:#16161f;border:1px solid rgba(124,111,255,0.35);border-radius:12px;padding:10px 12px;'
+    + 'display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+  bar.innerHTML = `<span style="flex:1;font-size:12.5px;color:#e8e8f0;line-height:1.4;">⏰ ${escapeHTML(text)}</span>
+    <button style="background:transparent;border:none;color:#6b6b80;font-size:16px;padding:2px 4px;cursor:pointer;">✕</button>`;
+  bar.querySelector('button').addEventListener('click', () => bar.remove());
+  document.body.appendChild(bar);
+  setTimeout(() => bar.remove(), 10000);
+  if (App.settings.voiceEnabled) speak(`Reminder: ${text}`);
 }
 
 function loadTasks() {
@@ -2186,7 +2254,7 @@ function renderTasks() {
         <input type="checkbox" ${task.done ? 'checked' : ''} data-index="${i}" class="task-check">
         <span class="switch-track"><span class="switch-thumb"></span></span>
       </label>
-      <span class="item-meta task-text">${escapeHTML(task.text)}</span>
+      <span class="item-meta task-text">${escapeHTML(task.text)}${task.due ? ` <span class="task-due">⏰ ${new Date(task.due).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</span>
       <button class="small-action-btn task-delete" data-index="${i}" aria-label="Delete">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>

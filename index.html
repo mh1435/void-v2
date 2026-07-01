@@ -902,7 +902,10 @@ if (window.caches && caches.keys) {
         <input type="text" class="text-input" id="task-input" placeholder="What needs to be done?">
         <button class="primary-btn" id="add-task-btn">Add</button>
       </div>
-      
+      <div class="setting-row input-group">
+        <input type="datetime-local" class="text-input" id="task-due-input" aria-label="Reminder time (optional)">
+      </div>
+
       <div class="settings-section-label">TASK ITEMS</div>
       <div class="tasks-list" id="tasks-list">
         <p class="muted small" id="tasks-empty">Your task list is clean!</p>

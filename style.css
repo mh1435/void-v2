@@ -484,6 +484,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .small-action-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px; display: flex; align-items: center; }
 .small-action-btn:hover { color: var(--danger); }
 .task-item.completed .task-text { text-decoration: line-through; color: var(--muted); }
+.task-due { font-size: 11px; color: var(--accent); white-space: nowrap; }
 
 .theme-select-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
 .theme-swatch {
