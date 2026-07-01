@@ -33,18 +33,21 @@ const App = {
 
 const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VOID app. You have access to the following capabilities:
 - Multi-provider AI chat (Gemini, Groq, OpenRouter, Together, Mistral, Pollinations)
+- Real-time weather: the user's current location's weather is auto-injected as LIVE CONTEXT below (when available), and if they ask about weather in a different city, real data for that city is injected as a WEATHER LOOKUP block below
+- Location & time awareness: the user's approximate city, country, local time, and today's date are auto-detected and injected as LIVE CONTEXT below (when available)
 - Study Mode: immersive ambient video environments for focus and deep work
-- GPS location access (if the user grants permission)
 - Voice output: read responses aloud via text-to-speech
 - MLBB Game Hub: hero guides, builds, counters, and meta (only when the user asks about it)
 - Floating assistant overlay: accessible over other apps
 - Custom commands and task lists
+- /define <word> and /price <coin> quick lookup commands
 
 Rules:
 - NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
 - Match your response length to the question — short question = short answer, complex question = detailed answer
 - If asked what you can do, describe the capabilities above naturally
-- Be direct, useful, and conversational`;
+- Be direct, useful, and conversational
+- CRITICAL: If a LIVE CONTEXT or WEATHER LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a weather website instead — you DO have real-time weather/location data when it's provided below. Only say data is unavailable if no LIVE CONTEXT/WEATHER LOOKUP block was given for that request.`;
 
 const LANG_NAMES = {
   en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
@@ -70,7 +73,7 @@ function getActiveLang() {
   return s;
 }
 
-function buildSystemPrompt() {
+function buildSystemPrompt(extraCtx) {
   const s = App.settings.lang;
   let inject;
   if (s && s !== 'auto' && s !== 'en') {
@@ -87,7 +90,35 @@ function buildSystemPrompt() {
     const dateStr = `${DAYS_FULL[now.getDay()]}, ${MONTHS_FULL[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
     liveCtx = `\n\nLIVE CONTEXT (auto-detected, may not be 100% accurate):\n- User location: ${App.liveContext.city}, ${App.liveContext.country}\n- Local time: ${App.liveContext.localTime || ''}\n- Current weather: ${App.liveContext.weather || 'unavailable'}\n- Today's date: ${dateStr}`;
   }
-  return VOID_SYSTEM + inject + liveCtx;
+  return VOID_SYSTEM + inject + liveCtx + (extraCtx || '');
+}
+
+// Detect "weather in <city>" style questions so we can fetch real data for ANY city, not just the user's own.
+function extractWeatherCity(text) {
+  const m = text.match(/\b(?:weather|temperature|temp|forecast|how (?:hot|cold|warm)(?: is it)?)\b[\s\S]*?\b(?:in|for|at)\s+([a-zA-ZÀ-ɏ؀-ۿ'\- ]{2,40})/i);
+  if (!m) return null;
+  let city = m[1].trim().replace(/\b(today|now|right now|currently|tomorrow|tonight|this week|please)\b/gi, '').trim();
+  city = city.replace(/[?.!,]+$/, '').trim();
+  return city.length >= 2 ? city : null;
+}
+
+async function fetchWeatherForCity(city) {
+  try {
+    const wr = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%C+%t+(feels+%f)`);
+    if (wr.ok) {
+      const w = (await wr.text()).trim();
+      if (w && !w.includes('<') && w.length < 60 && !/unknown location/i.test(w)) return w;
+    }
+  } catch(_) {}
+  return null;
+}
+
+async function getWeatherLookupCtx(text) {
+  const city = extractWeatherCity(text);
+  if (!city) return '';
+  const w = await fetchWeatherForCity(city);
+  if (!w) return '';
+  return `\n\nWEATHER LOOKUP for "${city}": ${w}. This is real current data — use it directly to answer.`;
 }
 
 async function initLiveContext() {
@@ -1246,7 +1277,8 @@ async function sendMessage() {
   updateSendMicBtn();
 
   const typingId = appendTyping();
-  const messages = [{ role: 'system', content: buildSystemPrompt() }, ...App.chatHistory.slice(-20)];
+  const weatherCtx = await getWeatherLookupCtx(text);
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx) }, ...App.chatHistory.slice(-20)];
 
   let reply = null;
   let lastError = null;
@@ -2999,12 +3031,12 @@ const VoidFloat = (() => {
 
     const typingId = addBubble('…', 'vf-typing');
 
-    const msgs = [
-      { role: 'system', content: VOID_SYSTEM + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
-      ...history.slice(-10)
-    ];
-
     (async () => {
+      const weatherCtx = await getWeatherLookupCtx(text);
+      const msgs = [
+        { role: 'system', content: buildSystemPrompt(weatherCtx) + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
+        ...history.slice(-10)
+      ];
       let reply = null;
       try {
         if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs);
