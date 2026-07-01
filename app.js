@@ -379,6 +379,47 @@ function bootApp() {
   updateUserDisplay();
   initLiveContext();
   initQuoteWidget();
+  checkForAppUpdate();
+}
+
+// Web (JS/CSS/HTML) changes apply instantly on next launch — no APK needed.
+// Native changes (Java, icons, permissions) are baked into the APK and can't
+// hot-update; this checks GitHub's auto-published "latest" release so the
+// user knows when a fresh APK install is actually needed.
+async function checkForAppUpdate() {
+  if (!window.Capacitor?.isNativePlatform?.()) return;
+  try {
+    const r = await fetch('https://api.github.com/repos/mh1435/void-v2/releases/tags/latest');
+    if (!r.ok) return;
+    const d = await r.json();
+    const published = d.published_at;
+    const asset = (d.assets || []).find(a => a.name === 'VOID-latest.apk');
+    if (!published || !asset) return;
+    const seen = localStorage.getItem('void_apk_seen_release');
+    if (seen === null) { localStorage.setItem('void_apk_seen_release', published); return; } // fresh install — already current
+    if (seen === published) return;
+    showUpdateBanner(asset.browser_download_url, published);
+  } catch (_) {}
+}
+
+function showUpdateBanner(url, published) {
+  if (document.getElementById('void-update-banner')) return;
+  const bar = document.createElement('div');
+  bar.id = 'void-update-banner';
+  bar.style.cssText = 'position:fixed;left:10px;right:10px;top:calc(var(--safe-top,0px) + 8px);z-index:9999;'
+    + 'background:#16161f;border:1px solid rgba(124,111,255,0.35);border-radius:12px;padding:10px 12px;'
+    + 'display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+  bar.innerHTML = `
+    <span style="flex:1;font-size:12.5px;color:#e8e8f0;line-height:1.4;">A new VOID app build is available.</span>
+    <button id="void-update-get" style="background:#7c6fff;color:#0d0d10;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;">Get it</button>
+    <button id="void-update-dismiss" style="background:transparent;border:none;color:#6b6b80;font-size:16px;padding:2px 4px;cursor:pointer;">✕</button>
+  `;
+  document.body.appendChild(bar);
+  document.getElementById('void-update-get').addEventListener('click', () => window.open(url, '_blank'));
+  document.getElementById('void-update-dismiss').addEventListener('click', () => {
+    localStorage.setItem('void_apk_seen_release', published);
+    bar.remove();
+  });
 }
 
 /* ============ Settings persistence (localStorage) ============ */
@@ -972,9 +1013,21 @@ function setupPreferencesPanel() {
     });
   }
 
-  // Kill any leftover native overlay from an older app version — web VoidFloat is the only floating assistant now
+  // Web VoidFloat while VOID is open, native overlay (same VOID theme + pulse) while backgrounded
   if (window.Capacitor?.isNativePlatform?.()) {
     try { Capacitor.Plugins.FloatingPlugin?.stopFloating(); } catch (_) {}
+    document.addEventListener('visibilitychange', () => {
+      if (!App.settings.floatingAssistantEnabled) return;
+      const fp = Capacitor.Plugins.FloatingPlugin;
+      if (!fp) return;
+      if (document.hidden) {
+        VoidFloat.hide();
+        try { fp.startFloating(); } catch (_) {}
+      } else {
+        try { fp.stopFloating(); } catch (_) {}
+        VoidFloat.show();
+      }
+    });
   }
 
   // Show on boot if previously enabled
