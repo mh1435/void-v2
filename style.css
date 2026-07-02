@@ -325,6 +325,21 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* Attached-image preview chip inside the composer */
+.attach-preview {
+  position: relative; align-self: flex-start; margin-bottom: 8px;
+}
+.attach-preview img {
+  max-width: 92px; max-height: 92px; border-radius: 10px; display: block;
+  border: 1px solid var(--glass-border);
+}
+.attach-preview button {
+  position: absolute; top: -7px; right: -7px;
+  width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: var(--danger); color: #fff; font-size: 11px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+
 /* Persona picker rows (inside the provider-picker popup shell) */
 .persona-item {
   display: flex; align-items: center; gap: 10px;

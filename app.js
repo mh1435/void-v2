@@ -1358,8 +1358,45 @@ function setupChat() {
     }
   });
 
+  // Image attach — downscaled client-side so vision requests stay small
+  const attachBtn = document.getElementById('attach-btn');
+  const attachInput = document.getElementById('attach-input');
+  const preview = document.getElementById('attach-preview');
+  const previewImg = document.getElementById('attach-preview-img');
+  if (attachBtn && attachInput) {
+    attachBtn.addEventListener('click', () => attachInput.click());
+    attachInput.addEventListener('change', () => {
+      const file = attachInput.files?.[0];
+      attachInput.value = '';
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        App.pendingImage = canvas.toDataURL('image/jpeg', 0.85);
+        URL.revokeObjectURL(img.src);
+        if (previewImg) previewImg.src = App.pendingImage;
+        if (preview) preview.style.display = '';
+        attachBtn.classList.add('active');
+      };
+      img.src = URL.createObjectURL(file);
+    });
+    document.getElementById('attach-remove-btn')?.addEventListener('click', clearPendingImage);
+  }
+
   updateSendMicBtn();
   updateModelIndicator();
+}
+
+function clearPendingImage() {
+  App.pendingImage = null;
+  const preview = document.getElementById('attach-preview');
+  if (preview) preview.style.display = 'none';
+  document.getElementById('attach-btn')?.classList.remove('active');
 }
 
 function updateSendMicBtn() {
@@ -1407,10 +1444,15 @@ async function callGemini(messages) {
   const key = App.settings.geminiKey;
   const model = App.settings.geminiModel || 'gemini-2.5-flash';
   const system = messages.find(m => m.role === 'system');
-  const contents = messages.filter(m => m.role !== 'system').map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }]
-  }));
+  const contents = messages.filter(m => m.role !== 'system').map(m => {
+    // Content-part arrays (vision) → Gemini's native text + inlineData parts
+    const parts = Array.isArray(m.content)
+      ? m.content.map(p => p.type === 'image_url'
+          ? { inlineData: { mimeType: 'image/jpeg', data: (p.image_url?.url || '').split(',')[1] || '' } }
+          : { text: p.text || '' })
+      : [{ text: m.content }];
+    return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+  });
   const body = { contents };
   if (system) body.systemInstruction = { parts: [{ text: system.content }] };
   const res = await fetch(
@@ -1599,8 +1641,14 @@ async function sendMessage() {
 
   if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
 
-  App.chatHistory.push({ role: 'user', content: text });
-  appendMessage('user', text, App.chatHistory.length - 1);
+  // Attach pending image as OpenAI-style content parts (vision)
+  const content = App.pendingImage
+    ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: App.pendingImage } }]
+    : text;
+  clearPendingImage();
+
+  App.chatHistory.push({ role: 'user', content });
+  appendMessage('user', content, App.chatHistory.length - 1);
   input.value = '';
   input.style.height = 'auto';
   updateSendMicBtn();
@@ -1614,7 +1662,13 @@ async function generateAssistantReply(triggerText) {
   const typingId = appendTyping();
   const weatherCtx = await getWeatherLookupCtx(triggerText || '');
   const knowledgeCtx = await getKnowledgeLookupCtx(triggerText || '');
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) }, ...App.chatHistory.slice(-20)];
+  // Keep image payloads only on the newest message — older base64 images
+  // would balloon every request if re-sent each turn.
+  const recent = App.chatHistory.slice(-20).map((m, i, arr) =>
+    (i < arr.length - 1 && Array.isArray(m.content))
+      ? { role: m.role, content: msgText(m.content) + ' [attached an image earlier]' }
+      : m);
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) }, ...recent];
 
   let reply = null;
   let lastError = null;
@@ -1713,7 +1767,7 @@ function editMessageAt(index) {
   if (index == null || !App.chatHistory[index] || App.chatHistory[index].role !== 'user') return;
   const input = document.getElementById('chat-input');
   if (!input) return;
-  const text = App.chatHistory[index].content;
+  const text = msgText(App.chatHistory[index].content);
   App.chatHistory = App.chatHistory.slice(0, index);
   saveChats();
   renderActiveChat();
@@ -1724,13 +1778,17 @@ function editMessageAt(index) {
   input.focus();
 }
 
-function appendMessage(role, text, historyIndex = null) {
+function appendMessage(role, content, historyIndex = null) {
   const box = document.getElementById('messages-box');
   const welcome = box.querySelector('.matrix-welcome');
   if (welcome) welcome.remove();
 
   App.msgCount++;
   updateWelcomeStatsLine();
+
+  const text = msgText(content);
+  const images = msgImages(content);
+  const imgHTML = images.map(u => `<img src="${u}" alt="attachment" style="max-width:200px;max-height:200px;border-radius:12px;display:block;margin-bottom:6px;">`).join('');
 
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   const isUser = role === 'user';
@@ -1742,7 +1800,7 @@ function appendMessage(role, text, historyIndex = null) {
   if (historyIndex != null) el.dataset.historyIndex = historyIndex;
   el.innerHTML = `
     <div class="bubble-meta">${label} // ${time}</div>
-    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${renderMarkdownLite(text)}</div>
+    <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${imgHTML}${renderMarkdownLite(text)}</div>
     <div class="bubble-actions">
       <button class="bubble-act-btn" data-act="copy" aria-label="Copy message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -1780,7 +1838,7 @@ function setupMessageActions() {
     const idxAttr = bubble.dataset.historyIndex;
     const index = idxAttr !== undefined ? parseInt(idxAttr, 10) : null;
     const bodyEl = bubble.querySelector('.bubble-body');
-    const rawText = (index != null && App.chatHistory[index]) ? App.chatHistory[index].content : (bodyEl ? bodyEl.textContent : '');
+    const rawText = (index != null && App.chatHistory[index]) ? msgText(App.chatHistory[index].content) : (bodyEl ? bodyEl.textContent : '');
 
     if (act === 'copy') {
       navigator.clipboard?.writeText(rawText).catch(() => {});
@@ -1888,7 +1946,7 @@ function saveChatHistory() {
   const cur = getCurrentChat();
   if (cur && (!cur.title || cur.title === 'New chat')) {
     const firstUser = App.chatHistory.find(m => m.role === 'user');
-    if (firstUser) cur.title = firstUser.content.slice(0, 40).trim() || 'New chat';
+    if (firstUser) cur.title = msgText(firstUser.content).slice(0, 40).trim() || 'New chat';
   }
   saveChats();
   renderChatList();
@@ -1917,9 +1975,21 @@ function loadChats() {
   renderChatList();
 }
 
+// Message content can be a plain string or an OpenAI-style parts array
+// (text + image_url) when an image is attached. This extracts just the text.
+function msgText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter(p => p.type === 'text').map(p => p.text).join(' ');
+  return '';
+}
+function msgImages(content) {
+  if (!Array.isArray(content)) return [];
+  return content.filter(p => p.type === 'image_url').map(p => p.image_url?.url).filter(Boolean);
+}
+
 function titleFromMessages(msgs) {
   const u = (msgs || []).find(m => m.role === 'user');
-  return u ? u.content.slice(0, 40).trim() : 'New chat';
+  return u ? msgText(u.content).slice(0, 40).trim() || 'New chat' : 'New chat';
 }
 
 function exportCurrentChat() {
@@ -1928,7 +1998,7 @@ function exportCurrentChat() {
   const title = chat?.title || 'VOID Chat';
   let md = `# ${title}\n\n`;
   App.chatHistory.forEach(m => {
-    md += `**${m.role === 'user' ? 'You' : 'VOID'}:**\n${m.content}\n\n`;
+    md += `**${m.role === 'user' ? 'You' : 'VOID'}:**\n${msgText(m.content)}\n\n`;
   });
   const blob = new Blob([md], { type: 'text/markdown' });
   const url = URL.createObjectURL(blob);
@@ -2072,7 +2142,7 @@ function setupNavDrawer() {
     document.querySelectorAll('#chat-list .nav-chat-item').forEach(item => {
       if (!q) { item.classList.remove('search-hidden'); return; }
       const chat = App.chats.find(c => c.id === item.dataset.chatId);
-      const hay = ((chat?.title || '') + ' ' + (chat?.messages || []).map(m => m.content).join(' ')).toLowerCase();
+      const hay = ((chat?.title || '') + ' ' + (chat?.messages || []).map(m => msgText(m.content)).join(' ')).toLowerCase();
       item.classList.toggle('search-hidden', !hay.includes(q));
     });
   });

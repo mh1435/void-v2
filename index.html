@@ -105,8 +105,14 @@ if (window.caches && caches.keys) {
             <div id="persona-list"></div>
           </div>
           <div class="chat-box">
+            <div class="attach-preview" id="attach-preview" style="display:none">
+              <img id="attach-preview-img" alt="attachment preview">
+              <button id="attach-remove-btn" aria-label="Remove attachment">✕</button>
+            </div>
             <textarea id="chat-input" rows="1" placeholder="Ask Void anything..."></textarea>
             <div class="chat-box-bar">
+              <input type="file" id="attach-input" accept="image/*" style="display:none">
+              <button class="util-badge" id="attach-btn" aria-label="Attach image">📎</button>
               <button class="util-badge provider-btn" id="provider-pick-btn">VOID AI &#9662;</button>
               <button class="util-badge" id="persona-pick-btn">🌀 MODE &#9662;</button>
               <button class="util-badge" id="voice-convo-btn">🎙 LIVE</button>
