@@ -20,9 +20,13 @@ const App = {
     haptic: true,
     accentColor: '', accentColor2: '',
     persona: '',
+    autoMemory: true,
+    briefEnabled: false, briefTime: '08:00', briefFiredDate: '',
   },
   tasks: [],
   commands: [],
+  memoryFacts: [],   // auto-extracted facts about the user, persisted per account
+  bookmarks: [],     // starred assistant messages
   chatHistory: [],   // messages of the ACTIVE chat (reference into chats[].messages)
   chats: [],         // [{ id, title, messages:[], updatedAt }]
   currentChatId: null,
@@ -122,7 +126,7 @@ function buildSystemPrompt(extraCtx) {
   }
   const persona = PERSONAS.find(p => p.id === App.settings.persona);
   const personaCtx = persona && persona.prompt ? `\n\n${persona.prompt}` : '';
-  return VOID_SYSTEM + personaCtx + inject + liveCtx + (extraCtx || '');
+  return VOID_SYSTEM + personaCtx + inject + liveCtx + memoryContext() + (extraCtx || '');
 }
 
 // Detect "weather in <city>" style questions so we can fetch real data for ANY city, not just the user's own.
@@ -172,6 +176,29 @@ async function getKnowledgeLookupCtx(text) {
     if (!d.extract) return '';
     return `\n\nKNOWLEDGE LOOKUP for "${q}" (Wikipedia): ${d.extract}`;
   } catch(_) { return ''; }
+}
+
+// Web-search grounding for current-events style questions ("news about X",
+// "latest on X", "what's happening with X today"). Uses DuckDuckGo's free
+// Instant Answer API — no key. Best-effort: many queries return nothing,
+// in which case this contributes no context and the model answers normally.
+function extractWebSearchQuery(text) {
+  const m = text.match(/\b(?:news (?:about|on)|latest (?:on|news about)|what'?s happening (?:with|in)|current(?:ly)? .* (?:with|on))\s+(.+?)\??$/i);
+  if (!m) return null;
+  const q = m[1].trim().replace(/[?.!,]+$/, '').trim();
+  return q.length >= 2 && q.length <= 80 ? q : null;
+}
+async function getWebSearchCtx(text) {
+  const q = extractWebSearchQuery(text);
+  if (!q) return '';
+  try {
+    const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`);
+    if (!r.ok) return '';
+    const d = await r.json();
+    const summary = d.AbstractText || d.Answer || (d.RelatedTopics || []).map(t => t.Text).filter(Boolean).slice(0, 3).join(' | ');
+    if (!summary) return '';
+    return `\n\nWEB LOOKUP for "${q}": ${summary.slice(0, 600)}${d.AbstractURL ? ` (source: ${d.AbstractURL})` : ''}`;
+  } catch (_) { return ''; }
 }
 
 /* ============ Open other apps (like Gemini's app-opening) ============ */
@@ -480,11 +507,71 @@ function bootApp() {
   loadTasks();
   loadCommands();
   loadChats();
+  loadMemoryFacts();
+  loadBookmarks();
   updateUserDisplay();
   initLiveContext();
   initQuoteWidget();
   checkForAppUpdate();
   applyPendingShare();
+  maybeStartTour();
+}
+
+/* ============ First-run feature tour ============ */
+
+const TOUR_STEPS = [
+  { sel: '#plus-btn', title: 'Quick actions', body: 'Tap + to attach an image, switch chat modes, go hands-free with Live voice, or change AI providers.' },
+  { sel: '#chat-menu-btn', title: 'Chat options', body: 'Share, export, rename, or delete the current chat from here.' },
+  { sel: '.tab-pill[data-target="tab-gamehub"]', title: 'Workspace', body: 'MLBB hero guides and Study Mode — with a Pomodoro timer and focus stats — live here.' },
+];
+
+function maybeStartTour() {
+  if (!App.currentUser) return;
+  const key = userKey('tourDone');
+  if (localStorage.getItem(key)) return;
+  setTimeout(() => startFeatureTour(key), 900);
+}
+
+function startFeatureTour(doneKey) {
+  let i = 0;
+  const scrim = document.createElement('div');
+  scrim.className = 'tour-scrim';
+  const card = document.createElement('div');
+  card.className = 'tour-card';
+  document.body.appendChild(scrim);
+  document.body.appendChild(card);
+  scrim.addEventListener('click', () => finish());
+
+  function finish() {
+    scrim.remove(); card.remove();
+    try { localStorage.setItem(doneKey, '1'); } catch (_) {}
+  }
+
+  function show() {
+    const step = TOUR_STEPS[i];
+    const el = step && document.querySelector(step.sel);
+    if (!step) { finish(); return; }
+    if (!el) { i++; show(); return; }
+    const r = el.getBoundingClientRect();
+    scrim.style.setProperty('--hx', (r.left + r.width / 2) + 'px');
+    scrim.style.setProperty('--hy', (r.top + r.height / 2) + 'px');
+    scrim.style.setProperty('--hr', (Math.max(r.width, r.height) / 2 + 14) + 'px');
+    const below = r.top < window.innerHeight * 0.5;
+    card.style.top = below ? (r.bottom + 12) + 'px' : '';
+    card.style.bottom = below ? '' : (window.innerHeight - r.top + 12) + 'px';
+    card.style.left = Math.max(12, Math.min(window.innerWidth - 244, r.left)) + 'px';
+    card.innerHTML = `
+      <div class="tour-title">${escapeHTML(step.title)}</div>
+      <div class="tour-body">${escapeHTML(step.body)}</div>
+      <div class="tour-actions">
+        <button class="tour-skip" type="button">Skip</button>
+        <span class="tour-progress">${i + 1}/${TOUR_STEPS.length}</span>
+        <button class="tour-next" type="button">${i === TOUR_STEPS.length - 1 ? 'Done' : 'Next'}</button>
+      </div>`;
+    card.querySelector('.tour-skip').addEventListener('click', finish);
+    card.querySelector('.tour-next').addEventListener('click', () => { i++; show(); });
+  }
+  show();
 }
 
 // Web (JS/CSS/HTML) changes apply instantly on next launch — no APK needed.
@@ -677,13 +764,17 @@ function switchTabRaw(targetId) {
 const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view'];
 function updateAppChromeForTab(targetId) {
   const chatMenuBtn = document.getElementById('chat-menu-btn');
+  const wordmark = document.getElementById('workspace-wordmark');
+  const isChat = targetId === 'tab-chat';
   if (chatMenuBtn) {
     // visibility (not display) keeps the button's width reserved in the layout,
     // so the centered INTELLIGENCE/WORKSPACE pill doesn't shift when it toggles.
-    const show = targetId === 'tab-chat';
-    chatMenuBtn.style.visibility = show ? '' : 'hidden';
-    chatMenuBtn.style.pointerEvents = show ? '' : 'none';
+    chatMenuBtn.style.visibility = isChat ? '' : 'hidden';
+    chatMenuBtn.style.pointerEvents = isChat ? '' : 'none';
   }
+  // The VOID wordmark fills that same left slot on Workspace (where the
+  // chat-options menu doesn't apply) — never both at once.
+  if (wordmark) wordmark.style.display = (!isChat && targetId === 'tab-gamehub') ? '' : 'none';
   document.getElementById('chat-menu')?.classList.remove('open');
 
   const appHeader = document.getElementById('app-hud-header');
@@ -1071,6 +1162,9 @@ function openSettingsPanel(panelId) {
     setVal('input-mistral-model', App.settings.mistralModel);
   } else if (panelId === 'panel-memory') {
     renderMemoryInfo();
+    renderMemoryFacts();
+  } else if (panelId === 'panel-saved') {
+    renderBookmarks();
   } else if (panelId === 'panel-billing') {
     hydrateBilling();
   } else if (panelId === 'panel-profile') {
@@ -1255,15 +1349,41 @@ function setupVoice() {
     if (!voices.length) return;
     nameSelect.innerHTML = voices.map(v => `<option value="${v.name}">${v.name}</option>`).join('');
     if (App.settings.voiceName) nameSelect.value = App.settings.voiceName;
-    nameSelect.addEventListener('change', () => {
-      App.settings.voiceName = nameSelect.value;
-      saveSettings();
-    });
   }
   if (window.speechSynthesis) {
     populateVoices();
     window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
   }
+  // Attached once (not inside populateVoices, which can re-run several times
+  // as voices load in) so picking a voice never double-fires.
+  if (nameSelect) {
+    nameSelect.addEventListener('change', () => {
+      App.settings.voiceName = nameSelect.value;
+      saveSettings();
+      speak('This is what I sound like.'); // instant preview of the picked voice
+    });
+  }
+
+  // Speed presets — Slow/Normal/Fast, kept in sync with the slider both ways
+  const speedPresets = document.getElementById('voice-speed-presets');
+  function syncSpeedPresets() {
+    if (!speedPresets) return;
+    speedPresets.querySelectorAll('.seg-btn').forEach(b =>
+      b.classList.toggle('active', Math.abs(parseFloat(b.dataset.rate) - App.settings.voiceRate) < 0.05));
+  }
+  if (speedPresets) {
+    speedPresets.querySelectorAll('.seg-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        App.settings.voiceRate = parseFloat(b.dataset.rate);
+        if (rateRange) rateRange.value = App.settings.voiceRate;
+        if (rateValue) rateValue.textContent = App.settings.voiceRate.toFixed(1) + 'x';
+        syncSpeedPresets();
+        saveSettings();
+      });
+    });
+    syncSpeedPresets();
+  }
+  if (rateRange) rateRange.addEventListener('input', syncSpeedPresets);
 
   if (testBtn) {
     testBtn.addEventListener('click', () => speak('Void core voice configuration confirmed.'));
@@ -1682,24 +1802,8 @@ async function sendMessage() {
     appendMessage('user', text);
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     const typingId = appendTyping();
-    if (!App.liveContext.city) { try { await initLiveContext(); } catch(_) {} }
+    const out = await buildDailyBriefingText();
     removeTyping(typingId);
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const dayEnd = dayStart + 86400000;
-    const dueToday = App.tasks.filter(t => !t.done && t.due && t.due >= dayStart && t.due < dayEnd);
-    const openTasks = App.tasks.filter(t => !t.done);
-    let out = `📋 **Daily Briefing** — ${dateStr}\n`;
-    if (App.liveContext.city) out += `\n📍 ${App.liveContext.city}${App.liveContext.country ? ', ' + App.liveContext.country : ''}`;
-    if (App.liveContext.localTime) out += `\n🕒 ${App.liveContext.localTime}`;
-    if (App.liveContext.weather) out += `\n⛅ ${App.liveContext.weather}`;
-    out += dueToday.length
-      ? `\n\n⏰ Due today:\n${dueToday.map(t => `• ${t.text} (${new Date(t.due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n')}`
-      : '\n\n⏰ Nothing due today.';
-    if (openTasks.length) out += `\n📌 ${openTasks.length} open task${openTasks.length > 1 ? 's' : ''} total`;
-    const quote = document.getElementById('void-quote-line')?.textContent?.trim();
-    if (quote) out += `\n\n💭 ${quote}`;
     appendMessage('system', out);
     return;
   }
@@ -1828,13 +1932,14 @@ async function generateAssistantReply(triggerText) {
   const typingId = appendTyping();
   const weatherCtx = await getWeatherLookupCtx(triggerText || '');
   const knowledgeCtx = await getKnowledgeLookupCtx(triggerText || '');
+  const webCtx = await getWebSearchCtx(triggerText || '');
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
   const recent = App.chatHistory.slice(-20).map((m, i, arr) =>
     (i < arr.length - 1 && Array.isArray(m.content))
       ? { role: m.role, content: msgText(m.content) + ' [attached an image earlier]' }
       : m);
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) }, ...recent];
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx + webCtx) }, ...recent];
 
   let reply = null;
   let lastError = null;
@@ -1887,6 +1992,7 @@ async function generateAssistantReply(triggerText) {
       if (App.settings.voiceEnabled) speak(reply);           // speak() resumes listening when done
       else setTimeout(() => App.startListening?.(), 400);    // voice off — jump straight back to mic
     } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
+    if (triggerText) maybeExtractMemory(triggerText); // fire-and-forget, doesn't block the reply
   } else {
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
@@ -1984,6 +2090,9 @@ function appendMessage(role, content, historyIndex = null) {
       </button>` : ''}${!isUser && historyIndex != null ? `
       <button class="bubble-act-btn" data-act="regen" aria-label="Regenerate response">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>` : ''}${!isUser ? `
+      <button class="bubble-act-btn${App.bookmarks.some(b => b.text === text) ? ' starred' : ''}" data-act="star" aria-label="Save message">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="${App.bookmarks.some(b => b.text === text) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
       </button>` : ''}
       <button class="bubble-act-btn" data-act="del" aria-label="Delete message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2028,6 +2137,10 @@ function setupMessageActions() {
       }
     } else if (act === 'regen') {
       regenerateMessageAt(index);
+    } else if (act === 'star') {
+      const justSaved = toggleBookmark(rawText);
+      btn.classList.toggle('starred', justSaved);
+      btn.querySelector('svg').setAttribute('fill', justSaved ? 'currentColor' : 'none');
     }
   });
 }
@@ -2637,6 +2750,19 @@ function renderProviderPicker() {
 /* ============ Memory Panel ============ */
 
 function setupMemoryPanel() {
+  const autoToggle = document.getElementById('toggle-auto-memory');
+  if (autoToggle) {
+    autoToggle.checked = App.settings.autoMemory !== false;
+    autoToggle.addEventListener('change', () => { App.settings.autoMemory = autoToggle.checked; saveSettings(); });
+  }
+  const clearFactsBtn = document.getElementById('clear-facts-btn');
+  if (clearFactsBtn) {
+    clearFactsBtn.addEventListener('click', () => {
+      App.memoryFacts = [];
+      saveMemoryFacts();
+      renderMemoryFacts();
+    });
+  }
   const clearBtn = document.getElementById('clear-memory-btn');
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
@@ -2797,6 +2923,31 @@ function setupTasksPanel() {
       if (e.key === 'Enter') addBtn.click();
     });
   }
+
+  const briefToggle = document.getElementById('toggle-daily-brief');
+  const briefTimeInput = document.getElementById('daily-brief-time');
+  const briefTimeRow = document.getElementById('daily-brief-time-row');
+  if (briefToggle) {
+    briefToggle.checked = !!App.settings.briefEnabled;
+    if (briefTimeRow) briefTimeRow.style.display = briefToggle.checked ? '' : 'none';
+    briefToggle.addEventListener('change', () => {
+      App.settings.briefEnabled = briefToggle.checked;
+      if (briefToggle.checked && window.Notification && Notification.permission === 'default') {
+        try { Notification.requestPermission(); } catch (_) {}
+      }
+      if (briefTimeRow) briefTimeRow.style.display = briefToggle.checked ? '' : 'none';
+      saveSettings();
+    });
+  }
+  if (briefTimeInput) {
+    briefTimeInput.value = App.settings.briefTime || '08:00';
+    briefTimeInput.addEventListener('change', () => {
+      App.settings.briefTime = briefTimeInput.value || '08:00';
+      App.settings.briefFiredDate = ''; // allow it to fire today at the new time
+      saveSettings();
+    });
+  }
+
   startReminderChecker();
 }
 
@@ -2819,7 +2970,52 @@ function startReminderChecker() {
       }
     });
     if (changed) saveTasks();
+    checkScheduledBriefing();
   }, 30000);
+}
+
+// Scheduled daily briefing — fires once per day at the chosen HH:MM while
+// the app happens to be open (same best-effort caveat as task reminders).
+async function buildDailyBriefingText() {
+  if (!App.liveContext.city) { try { await initLiveContext(); } catch(_) {} }
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayEnd = dayStart + 86400000;
+  const dueToday = App.tasks.filter(t => !t.done && t.due && t.due >= dayStart && t.due < dayEnd);
+  const openTasks = App.tasks.filter(t => !t.done);
+  let out = `📋 **Daily Briefing** — ${dateStr}\n`;
+  if (App.liveContext.city) out += `\n📍 ${App.liveContext.city}${App.liveContext.country ? ', ' + App.liveContext.country : ''}`;
+  if (App.liveContext.localTime) out += `\n🕒 ${App.liveContext.localTime}`;
+  if (App.liveContext.weather) out += `\n⛅ ${App.liveContext.weather}`;
+  out += dueToday.length
+    ? `\n\n⏰ Due today:\n${dueToday.map(t => `• ${t.text} (${new Date(t.due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n')}`
+    : '\n\n⏰ Nothing due today.';
+  if (openTasks.length) out += `\n📌 ${openTasks.length} open task${openTasks.length > 1 ? 's' : ''} total`;
+  const quote = document.getElementById('void-quote-line')?.textContent?.trim();
+  if (quote) out += `\n\n💭 ${quote}`;
+  return out;
+}
+
+async function runDailyBriefing() {
+  const text = await buildDailyBriefingText();
+  appendMessage('system', text);
+  if (window.Notification && Notification.permission === 'granted') {
+    try { new Notification('VOID — Daily Briefing', { body: text.replace(/[*#📋📍🕒⛅⏰📌💭]/g, '').trim().slice(0, 180) }); } catch (_) {}
+  }
+  if (App.settings.voiceEnabled) speak('Here is your daily briefing.');
+}
+
+function checkScheduledBriefing() {
+  if (!App.settings.briefEnabled) return;
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const today = now.toISOString().slice(0, 10);
+  if (App.settings.briefFiredDate === today) return;
+  if (hhmm < App.settings.briefTime) return;
+  App.settings.briefFiredDate = today;
+  saveSettings();
+  runDailyBriefing();
 }
 
 function fireReminder(text) {
@@ -2836,6 +3032,96 @@ function fireReminder(text) {
   document.body.appendChild(bar);
   setTimeout(() => bar.remove(), 10000);
   if (App.settings.voiceEnabled) speak(`Reminder: ${text}`);
+}
+
+/* ============ Auto-memory ============ */
+
+function loadMemoryFacts() {
+  try { App.memoryFacts = JSON.parse(localStorage.getItem(userKey('memoryFacts'))) || []; } catch (_) { App.memoryFacts = []; }
+}
+function saveMemoryFacts() {
+  try { localStorage.setItem(userKey('memoryFacts'), JSON.stringify(App.memoryFacts.slice(-40))); } catch (_) {}
+}
+function memoryContext() {
+  if (!App.memoryFacts.length) return '';
+  return `\n\nREMEMBERED ABOUT THIS USER (from past conversations — use naturally, don't recite the list):\n${App.memoryFacts.map(f => `- ${f}`).join('\n')}`;
+}
+
+// Fire-and-forget: after a reply, ask the AI for at most one short durable
+// fact worth remembering. Cheap (tiny prompt), never blocks the visible
+// reply, silently no-ops on failure or when there's nothing worth keeping.
+let memoryExtractInFlight = false;
+async function maybeExtractMemory(userText) {
+  if (!App.settings.autoMemory || memoryExtractInFlight || !userText || userText.length < 8) return;
+  memoryExtractInFlight = true;
+  try {
+    const reply = await quickAI(
+      'Extract ONE short durable fact about the USER worth remembering long-term (name, location, job, preference, ongoing project, relationship, goal). ' +
+      'Ignore one-off questions, greetings, or anything already obvious. Reply with ONLY the fact as a short third-person sentence (e.g. "Lives in Cairo." or "Learning Python."). ' +
+      'If nothing is worth remembering, reply with exactly: NONE',
+      userText);
+    const fact = (reply || '').trim().replace(/^["'-]\s*/, '');
+    if (fact && fact.toUpperCase() !== 'NONE' && fact.length < 140) {
+      const dupe = App.memoryFacts.some(f => f.toLowerCase() === fact.toLowerCase());
+      if (!dupe) { App.memoryFacts.push(fact); saveMemoryFacts(); renderMemoryFacts(); }
+    }
+  } catch (_) {} finally { memoryExtractInFlight = false; }
+}
+
+function renderMemoryFacts() {
+  const list = document.getElementById('memory-facts-list');
+  const empty = document.getElementById('memory-facts-empty');
+  if (!list) return;
+  if (empty) empty.style.display = App.memoryFacts.length ? 'none' : '';
+  list.innerHTML = App.memoryFacts.map((f, i) => `
+    <div class="memory-fact-row">
+      <span class="memory-fact-text">${escapeHTML(f)}</span>
+      <button class="memory-fact-del" data-fact-index="${i}" aria-label="Forget this">✕</button>
+    </div>`).join('');
+  list.querySelectorAll('.memory-fact-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      App.memoryFacts.splice(parseInt(btn.dataset.factIndex, 10), 1);
+      saveMemoryFacts();
+      renderMemoryFacts();
+    });
+  });
+}
+
+/* ============ Bookmarked messages ============ */
+
+function loadBookmarks() {
+  try { App.bookmarks = JSON.parse(localStorage.getItem(userKey('bookmarks'))) || []; } catch (_) { App.bookmarks = []; }
+}
+function saveBookmarks() {
+  try { localStorage.setItem(userKey('bookmarks'), JSON.stringify(App.bookmarks.slice(-100))); } catch (_) {}
+}
+function toggleBookmark(text) {
+  const idx = App.bookmarks.findIndex(b => b.text === text);
+  if (idx >= 0) App.bookmarks.splice(idx, 1);
+  else App.bookmarks.unshift({ text, chatTitle: getCurrentChat()?.title || 'Chat', savedAt: Date.now() });
+  saveBookmarks();
+  buzz();
+  return idx < 0; // true if just saved
+}
+function renderBookmarks() {
+  const list = document.getElementById('saved-list');
+  const empty = document.getElementById('saved-empty');
+  if (!list) return;
+  if (empty) empty.style.display = App.bookmarks.length ? 'none' : '';
+  list.innerHTML = App.bookmarks.map((b, i) => `
+    <div class="saved-item" data-saved-index="${i}">
+      <div class="saved-item-chat">${escapeHTML(b.chatTitle)}</div>
+      <div class="saved-item-text">${escapeHTML(b.text.slice(0, 160))}${b.text.length > 160 ? '…' : ''}</div>
+      <button class="saved-item-del" data-saved-del="${i}" aria-label="Remove">✕</button>
+    </div>`).join('');
+  list.querySelectorAll('.saved-item-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      App.bookmarks.splice(parseInt(btn.dataset.savedDel, 10), 1);
+      saveBookmarks();
+      renderBookmarks();
+    });
+  });
 }
 
 function loadTasks() {

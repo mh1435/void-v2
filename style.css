@@ -384,6 +384,66 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .header-menu.open { display: block; }
 .persona-item.danger .persona-name { color: var(--danger); }
 
+/* Bookmark/star action button */
+.bubble-act-btn.starred { color: #ffb800; }
+
+/* Memory facts list */
+.memory-fact-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 6px;
+}
+.memory-fact-text { flex: 1; font-size: 13px; color: var(--text); }
+.memory-fact-del {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 13px; padding: 2px 4px; flex-shrink: 0;
+}
+.memory-fact-del:active { color: var(--danger); }
+#memory-facts-empty { margin-top: 4px; }
+
+/* Saved (bookmarked) messages */
+.saved-item {
+  position: relative;
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px;
+  padding: 11px 34px 11px 13px; margin-bottom: 8px; cursor: default;
+}
+.saved-item-chat {
+  font-family: var(--hub-mono); font-size: 10px; color: var(--accent);
+  letter-spacing: 0.05em; margin-bottom: 4px; text-transform: uppercase;
+}
+.saved-item-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+.saved-item-del {
+  position: absolute; top: 9px; right: 9px;
+  background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px;
+}
+.saved-item-del:active { color: var(--danger); }
+
+/* First-run feature tour */
+.tour-scrim { position: fixed; inset: 0; z-index: 500; }
+.tour-scrim::before {
+  content: ''; position: fixed; inset: 0; background: rgba(0,0,0,0.68);
+  -webkit-mask: radial-gradient(circle var(--hr, 0px) at var(--hx, 50%) var(--hy, 50%), transparent 98%, black 100%);
+  mask: radial-gradient(circle var(--hr, 0px) at var(--hx, 50%) var(--hy, 50%), transparent 98%, black 100%);
+  transition: -webkit-mask-position 0.2s, mask-position 0.2s;
+}
+.tour-card {
+  position: fixed; z-index: 501; width: 232px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid rgba(124,111,255,0.35); border-radius: 14px; padding: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.tour-title { font-family: var(--hub-display); font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 6px; }
+.tour-body { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+.tour-actions { display: flex; align-items: center; gap: 10px; }
+.tour-skip { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 4px 0; }
+.tour-progress { flex: 1; text-align: center; font-family: var(--hub-mono); font-size: 11px; color: var(--muted); }
+.tour-next {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text);
+  border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
 /* Welcome suggestion chips */
 .welcome-chips {
   display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 14px 0;

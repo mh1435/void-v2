@@ -39,6 +39,7 @@ if ('serviceWorker' in navigator) {
       <button class="nav-menu-btn" id="chat-menu-btn" aria-label="Chat options">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
       </button>
+      <div class="system-title" id="workspace-wordmark" style="display:none">VOID <span class="blink">●</span></div>
     </div>
     <div class="hud-center">
       <div class="tab-pill-box">
@@ -702,6 +703,10 @@ if ('serviceWorker' in navigator) {
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="10" x2="4" y2="14"></line><line x1="8" y1="6" x2="8" y2="18"></line><line x1="12" y1="9" x2="12" y2="15"></line><line x1="16" y1="5" x2="16" y2="19"></line><line x1="20" y1="10" x2="20" y2="14"></line></svg></div>
           <div class="menu-label"><span>Voice</span></div>
         </div>
+        <div class="menu-item" data-open-panel="panel-saved">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
+          <div class="menu-label"><span>Saved</span></div>
+        </div>
       </div>
 
       <!-- Device -->
@@ -883,6 +888,11 @@ if ('serviceWorker' in navigator) {
       <div class="settings-section-label">SPEECH METRICS</div>
       <div class="setting-row stacked">
         <div class="setting-label"><span>Speed Rate (<span id="voice-rate-value">1.0×</span>)</span></div>
+        <div class="segmented" id="voice-speed-presets">
+          <button class="seg-btn" data-rate="0.75">Slow</button>
+          <button class="seg-btn" data-rate="1.0">Normal</button>
+          <button class="seg-btn" data-rate="1.5">Fast</button>
+        </div>
         <input type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="range-input" id="voice-rate-range">
       </div>
       <div class="setting-row stacked">
@@ -936,6 +946,15 @@ if ('serviceWorker' in navigator) {
         <input type="datetime-local" class="text-input" id="task-due-input" aria-label="Reminder time (optional)">
       </div>
 
+      <div class="settings-section-label">DAILY BRIEFING</div>
+      <div class="setting-row">
+        <div class="setting-label"><span>Brief me every morning</span><span class="setting-sub">Weather, tasks due, and a quote — posted right in chat</span></div>
+        <label class="switch"><input type="checkbox" id="toggle-daily-brief"><span class="switch-track"><span class="switch-thumb"></span></span></label>
+      </div>
+      <div class="setting-row input-group" id="daily-brief-time-row">
+        <input type="time" class="text-input" id="daily-brief-time">
+      </div>
+
       <div class="settings-section-label">TASK ITEMS</div>
       <div class="tasks-list" id="tasks-list">
         <p class="muted small" id="tasks-empty">Your task list is clean!</p>
@@ -983,10 +1002,35 @@ if ('serviceWorker' in navigator) {
     <div class="panel-content">
       <div class="settings-section-label">SESSION INFO</div>
       <div id="memory-info"></div>
+
+      <div class="settings-section-label" style="margin-top:18px;">REMEMBERED FACTS</div>
+      <div class="setting-row">
+        <div class="setting-label"><span>Auto-remember</span><span class="setting-sub">VOID quietly picks up durable facts (name, location, goals) as you chat</span></div>
+        <label class="switch"><input type="checkbox" id="toggle-auto-memory" checked><span class="switch-track"><span class="switch-thumb"></span></span></label>
+      </div>
+      <div id="memory-facts-list"></div>
+      <p class="muted small" id="memory-facts-empty">Nothing remembered yet — it builds up as you chat.</p>
+      <button class="ghost-btn full" id="clear-facts-btn" style="margin-top:8px;">Forget everything</button>
+
       <div class="sheet-divider"></div>
       <div class="settings-section-label">ACTIONS</div>
       <button class="ghost-btn full" id="clear-memory-btn">CLEAR ALL MEMORY</button>
       <p class="muted small panel-desc" style="margin-top:12px;">Clearing memory removes all stored chat history for your account. This cannot be undone.</p>
+    </div>
+  </div>
+
+  <!-- SAVED MESSAGES -->
+  <div class="settings-panel" id="panel-saved">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <span>Saved</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">STARRED MESSAGES</div>
+      <div id="saved-list"></div>
+      <p class="muted small" id="saved-empty">Tap the star on any VOID reply to save it here.</p>
     </div>
   </div>
 
