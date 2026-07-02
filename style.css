@@ -340,6 +340,13 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 
+.sync-code-box {
+  font-family: var(--hub-mono); font-size: 14px; font-weight: 700; letter-spacing: 0.15em;
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 10px; padding: 10px 14px; margin-top: 4px; user-select: all;
+}
+
 /* Persona picker rows (inside the provider-picker popup shell) */
 .persona-item {
   display: flex; align-items: center; gap: 10px;

@@ -451,6 +451,7 @@ function bootApp() {
   setupPreferencesPanel();
   setupProviderPicker();
   setupPersonaPicker();
+  setupSyncPanel();
   setupMemoryPanel();
   setupStudyMode();
   setupNavDrawer();
@@ -1068,6 +1069,10 @@ function openSettingsPanel(panelId) {
     syncFontSizeSeg();
   } else if (panelId === 'panel-notifications') {
     refreshNotifStatus();
+  } else if (panelId === 'panel-sync') {
+    showSyncCode();
+    const st = document.getElementById('sync-status');
+    if (st) st.textContent = '';
   }
 }
 
@@ -1990,6 +1995,73 @@ function msgImages(content) {
 function titleFromMessages(msgs) {
   const u = (msgs || []).find(m => m.role === 'user');
   return u ? msgText(u.content).slice(0, 40).trim() || 'New chat' : 'New chat';
+}
+
+/* ============ Sync & Backup (cross-device, via Worker + KV) ============ */
+
+function syncToken() { return localStorage.getItem(userKey('syncToken')) || ''; }
+
+function showSyncCode() {
+  const codeBox = document.getElementById('sync-code-box');
+  const token = syncToken();
+  if (codeBox) {
+    codeBox.style.display = token ? '' : 'none';
+    codeBox.textContent = token ? `SYNC CODE · ${token}` : '';
+  }
+}
+
+function setupSyncPanel() {
+  const pushBtn = document.getElementById('sync-push-btn');
+  const pullBtn = document.getElementById('sync-pull-btn');
+  const codeInput = document.getElementById('sync-code-input');
+  const status = document.getElementById('sync-status');
+  const setStatus = (t) => { if (status) status.textContent = t; };
+
+  if (pushBtn) pushBtn.addEventListener('click', async () => {
+    if (!App.currentUser) { setStatus('Sign in first.'); return; }
+    let token = syncToken();
+    if (!token) {
+      token = Math.random().toString(36).slice(2, 10).toUpperCase();
+      localStorage.setItem(userKey('syncToken'), token);
+    }
+    setStatus('Backing up…');
+    try {
+      const r = await fetch(`${VOID_CORE_API.url}/sync/put`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: App.currentUser, token,
+          data: { settings: App.settings, chats: App.chats, tasks: App.tasks, commands: App.commands },
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) { showSyncCode(); setStatus('Backed up ✓ — save the sync code above, you need it to restore.'); }
+      else setStatus(d.error || 'Backup failed — the Worker may need redeploying.');
+    } catch (_) { setStatus('Network error.'); }
+  });
+
+  if (pullBtn) pullBtn.addEventListener('click', async () => {
+    if (!App.currentUser) { setStatus('Sign in first.'); return; }
+    const token = (codeInput?.value || '').trim().toUpperCase();
+    if (token.length < 6) { setStatus('Enter your sync code first.'); return; }
+    setStatus('Restoring…');
+    try {
+      const r = await fetch(`${VOID_CORE_API.url}/sync/get?email=${encodeURIComponent(App.currentUser)}&token=${encodeURIComponent(token)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setStatus(d.error || 'Restore failed.'); return; }
+      if (!d.data) { setStatus('No backup found for this account.'); return; }
+      localStorage.setItem(userKey('syncToken'), token);
+      if (d.data.settings) { App.settings = { ...App.settings, ...d.data.settings }; saveSettings(); }
+      if (Array.isArray(d.data.chats)) {
+        localStorage.setItem(userKey('chats'), JSON.stringify(d.data.chats.slice(-50)));
+        const last = d.data.chats[d.data.chats.length - 1];
+        if (last) localStorage.setItem(userKey('currentChatId'), last.id);
+      }
+      if (Array.isArray(d.data.tasks)) { App.tasks = d.data.tasks; saveTasks(); }
+      if (Array.isArray(d.data.commands)) { App.commands = d.data.commands; saveCommands(); }
+      setStatus('Restored ✓ — reloading…');
+      setTimeout(() => location.reload(), 700);
+    } catch (_) { setStatus('Network error.'); }
+  });
 }
 
 function exportCurrentChat() {

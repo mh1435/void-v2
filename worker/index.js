@@ -19,6 +19,7 @@ export default {
     if (request.method === 'OPTIONS') return cors(null, 204);
     const url = new URL(request.url);
     if (url.pathname.startsWith('/pay')) return handlePay(request, env, url);
+    if (url.pathname.startsWith('/sync')) return handleSync(request, env, url);
     if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
     let body;
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
@@ -49,6 +50,40 @@ function shuffle(arr) {
 }
 
 const PRICE_FALLBACK = { pro: 'price_1TnHz3Em0xqepKvLCBfnW5dd', max: 'price_1TnI4oEm0xqepKvLvoGiTO9X' };
+
+/* ── Cross-device sync ─────────────────────────────────────────────
+   Backups live in the PLANS KV namespace, guarded by a per-account sync
+   code: the first push registers the code, every later push/pull must
+   present the same one. No code, no data. */
+async function handleSync(request, env, url) {
+  if (!env.PLANS) return cors(JSON.stringify({ error: 'sync not configured' }), 503);
+  const path = url.pathname.replace(/\/+$/, '');
+
+  if (path === '/sync/put' && request.method === 'POST') {
+    let b; try { b = await request.json(); } catch { return cors(JSON.stringify({ error: 'bad json' }), 400); }
+    const email = (b.email || '').toLowerCase().trim();
+    const token = (b.token || '').trim();
+    if (!email || token.length < 6 || typeof b.data !== 'object' || !b.data) {
+      return cors(JSON.stringify({ error: 'email, sync code (6+ chars) and data required' }), 400);
+    }
+    const stored = await env.PLANS.get('synctok:' + email);
+    if (stored && stored !== token) return cors(JSON.stringify({ error: 'wrong sync code' }), 403);
+    if (!stored) await env.PLANS.put('synctok:' + email, token);
+    await env.PLANS.put('syncdata:' + email, JSON.stringify({ at: Date.now(), data: b.data }));
+    return cors(JSON.stringify({ ok: true, at: Date.now() }));
+  }
+
+  if (path === '/sync/get' && request.method === 'GET') {
+    const email = (url.searchParams.get('email') || '').toLowerCase().trim();
+    const token = (url.searchParams.get('token') || '').trim();
+    const stored = await env.PLANS.get('synctok:' + email);
+    if (!stored || stored !== token) return cors(JSON.stringify({ error: 'wrong sync code' }), 403);
+    const raw = await env.PLANS.get('syncdata:' + email);
+    return cors(raw || JSON.stringify({ at: 0, data: null }));
+  }
+
+  return cors(JSON.stringify({ error: 'not found' }), 404);
+}
 
 async function handlePay(request, env, url) {
   const path = url.pathname.replace(/\/+$/, '');
