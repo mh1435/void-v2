@@ -943,7 +943,6 @@ function syncFontSizeSeg() {
 function refreshSettingsSubvalues() {
   document.querySelectorAll('.menu-item[data-open-panel="panel-capabilities"] .sub').forEach(s => s.textContent = capCount() + ' enabled');
   document.querySelectorAll('.menu-item[data-open-panel="panel-colormode"] .sub').forEach(s => s.textContent = colorModeLabel());
-  document.querySelectorAll('.menu-item[data-open-panel="panel-fontstyle"] .sub').forEach(s => s.textContent = (App.settings.fontSize || 'default').replace(/^./, c => c.toUpperCase()));
 }
 
 function setEl(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
@@ -1052,7 +1051,6 @@ function openSettingsPanel(panelId) {
   } else if (panelId === 'panel-colormode') {
     syncColorModeSeg();
     applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
-  } else if (panelId === 'panel-fontstyle') {
     syncFontSizeSeg();
   } else if (panelId === 'panel-notifications') {
     refreshNotifStatus();
