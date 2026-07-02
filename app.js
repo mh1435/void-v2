@@ -16,7 +16,7 @@ const App = {
     responseMode: 'standard',
     reducedMotion: false,
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
-    voiceEngine: 'device', realisticVoice: 'Celeste-PlayAI',
+    voiceEngine: 'device', realisticVoice: 'autumn',
     floatingAssistantEnabled: false,
     haptic: true,
     accentColor: '', accentColor2: '',
@@ -1428,8 +1428,10 @@ function setupVoice() {
 }
 
 let realisticAudioEl = null;
+let realisticGen = 0;
 function stopSpeaking() {
   try { window.speechSynthesis?.cancel(); } catch (_) {}
+  realisticGen++; // invalidates any in-flight speakRealistic chunk loop
   if (realisticAudioEl) { try { realisticAudioEl.pause(); } catch (_) {} realisticAudioEl = null; }
 }
 
@@ -1450,22 +1452,51 @@ function speak(text) {
   window.speechSynthesis.speak(utter);
 }
 
+// Groq's Orpheus TTS caps input at 200 chars, so a full reply is split on
+// sentence boundaries into speakable chunks and played back-to-back.
+function splitForTTS(text, maxLen = 190) {
+  const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]*\s*/g) || [text];
+  const chunks = [];
+  let cur = '';
+  for (const s of sentences) {
+    if ((cur + s).length > maxLen) {
+      if (cur) chunks.push(cur.trim());
+      cur = s.length > maxLen ? s.slice(0, maxLen) : s;
+    } else {
+      cur += s;
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks.slice(0, 12); // cap so a very long reply can't spam dozens of requests
+}
+
 async function speakRealistic(text) {
+  const myGen = realisticGen; // stopSpeaking() already bumped this before we were called
+  const voice = App.settings.realisticVoice || 'autumn';
+  const chunks = splitForTTS(text);
   try {
-    const voice = App.settings.realisticVoice || 'Celeste-PlayAI';
-    const res = await fetch(`${VOID_CORE_API.url}/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.slice(0, 1000), voice }),
-    });
-    if (!res.ok) throw new Error('tts failed');
-    const blob = await res.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    audio.playbackRate = App.settings.voiceRate || 1.0;
-    audio.onended = () => { if (App.voiceConvo) setTimeout(() => App.startListening?.(), 300); };
-    realisticAudioEl = audio;
-    await audio.play();
+    for (const chunk of chunks) {
+      if (myGen !== realisticGen) return; // superseded by a newer speak()/stop
+      const res = await fetch(`${VOID_CORE_API.url}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chunk, voice }),
+      });
+      if (!res.ok) throw new Error('tts failed');
+      const blob = await res.blob();
+      if (myGen !== realisticGen) return;
+      await new Promise((resolve, reject) => {
+        const audio = new Audio(URL.createObjectURL(blob));
+        audio.playbackRate = App.settings.voiceRate || 1.0;
+        realisticAudioEl = audio;
+        audio.onended = resolve;
+        audio.onerror = () => reject(new Error('playback failed'));
+        audio.play().catch(reject);
+      });
+    }
+    if (myGen === realisticGen && App.voiceConvo) setTimeout(() => App.startListening?.(), 300);
   } catch (_) {
+    if (myGen !== realisticGen) return; // interrupted on purpose — don't fall back
     // offline, worker not yet redeployed, or blocked — fall back to the device voice
     // so speech never just goes silent
     if (window.speechSynthesis) {

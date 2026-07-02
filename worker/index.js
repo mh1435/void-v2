@@ -54,19 +54,21 @@ const PRICE_FALLBACK = { pro: 'price_1TnHz3Em0xqepKvLCBfnW5dd', max: 'price_1TnI
 
 /* ── Realistic voices ──────────────────────────────────────────────
    Reuses the GROQ_KEY secret already configured for chat — no separate
-   key needed. Groq's PlayAI TTS returns clearly gendered neural voices. */
+   key needed. Orpheus (Canopy Labs) returns clearly gendered neural voices.
+   Groq caps input at 200 characters, so the app sends one sentence/chunk
+   at a time rather than a whole reply in one call. */
 async function handleTTS(request, env) {
   if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
   if (!env.GROQ_KEY) return cors(JSON.stringify({ error: 'tts not configured' }), 503);
   let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
-  const text = (body.text || '').toString().slice(0, 1000);
-  const voice = (body.voice || 'Celeste-PlayAI').toString();
+  const text = (body.text || '').toString().slice(0, 200);
+  const voice = (body.voice || 'autumn').toString();
   if (!text) return cors(JSON.stringify({ error: 'text required' }), 400);
   try {
     const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.GROQ_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'playai-tts', input: text, voice, response_format: 'wav' }),
+      body: JSON.stringify({ model: 'canopylabs/orpheus-v1-english', input: text, voice, response_format: 'wav' }),
       signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) {
