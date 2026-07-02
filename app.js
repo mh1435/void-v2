@@ -19,6 +19,7 @@ const App = {
     floatingAssistantEnabled: false,
     haptic: true,
     accentColor: '', accentColor2: '',
+    persona: '',
   },
   tasks: [],
   commands: [],
@@ -42,7 +43,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Floating assistant overlay: accessible over other apps
 - Custom commands and task lists
 - Knowledge lookups: "who is X" / "what is X" / "tell me about X" pull a real Wikipedia summary, injected as a KNOWLEDGE LOOKUP block below
-- /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to> quick lookup commands
+- /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
 - Opening other apps/sites on request ("open spotify", "navigate to X", "play X on youtube")
 
 Rules:
@@ -51,6 +52,16 @@ Rules:
 - If asked what you can do, describe the capabilities above naturally
 - Be direct, useful, and conversational
 - CRITICAL: If a LIVE CONTEXT, WEATHER LOOKUP, or KNOWLEDGE LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a website instead — you DO have this data when it's provided below. Only say data is unavailable if no such block was given for that request.`;
+
+/* Personas — selectable modes that reshape how VOID responds */
+const PERSONAS = [
+  { id: '',          label: 'Default',    emoji: '🌀', prompt: '' },
+  { id: 'tutor',     label: 'Tutor',      emoji: '📚', prompt: 'PERSONA: You are in TUTOR mode. Explain step by step, check understanding, use simple examples, and encourage the user. Never just give the answer to homework-style questions — guide them to it.' },
+  { id: 'coder',     label: 'Coder',      emoji: '💻', prompt: 'PERSONA: You are in CODER mode. Be precise and technical. Prefer code examples over prose, mention edge cases, and keep explanations tight. Assume the user is a developer.' },
+  { id: 'translator',label: 'Translator', emoji: '🌐', prompt: 'PERSONA: You are in TRANSLATOR mode. When given text, translate it. If the target language is not specified, ask once, then remember it. Show only the translation plus a short pronunciation hint when useful.' },
+  { id: 'listener',  label: 'Listener',   emoji: '💙', prompt: 'PERSONA: You are in LISTENER mode. Be warm, calm, and supportive. Listen more than you advise. Never lecture. You are not a therapist and say so if things get serious, suggesting professional help.' },
+  { id: 'roast',     label: 'Roast',      emoji: '🔥', prompt: 'PERSONA: You are in ROAST mode. Be playfully savage and witty with the user — clever burns, never genuinely cruel, never slurs or attacks on protected traits. Keep it fun.' },
+];
 
 const LANG_NAMES = {
   en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
@@ -93,7 +104,9 @@ function buildSystemPrompt(extraCtx) {
     const dateStr = `${DAYS_FULL[now.getDay()]}, ${MONTHS_FULL[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
     liveCtx = `\n\nLIVE CONTEXT (auto-detected, may not be 100% accurate):\n- User location: ${App.liveContext.city}, ${App.liveContext.country}\n- Local time: ${App.liveContext.localTime || ''}\n- Current weather: ${App.liveContext.weather || 'unavailable'}\n- Today's date: ${dateStr}`;
   }
-  return VOID_SYSTEM + inject + liveCtx + (extraCtx || '');
+  const persona = PERSONAS.find(p => p.id === App.settings.persona);
+  const personaCtx = persona && persona.prompt ? `\n\n${persona.prompt}` : '';
+  return VOID_SYSTEM + personaCtx + inject + liveCtx + (extraCtx || '');
 }
 
 // Detect "weather in <city>" style questions so we can fetch real data for ANY city, not just the user's own.
@@ -437,6 +450,7 @@ function bootApp() {
   setupTasksPanel();
   setupPreferencesPanel();
   setupProviderPicker();
+  setupPersonaPicker();
   setupMemoryPanel();
   setupStudyMode();
   setupNavDrawer();
@@ -1243,6 +1257,8 @@ function speak(text) {
     const voice = window.speechSynthesis.getVoices().find(v => v.name === App.settings.voiceName);
     if (voice) utter.voice = voice;
   }
+  // Live voice mode: once VOID finishes talking, hand the mic back to the user
+  utter.onend = () => { if (App.voiceConvo) setTimeout(() => App.startListening?.(), 300); };
   window.speechSynthesis.speak(utter);
 }
 
@@ -1263,6 +1279,13 @@ function setupChat() {
     recognizer.lang = getSTTLang();
     recognizer.addEventListener('result', (e) => {
       const text = e.results[0][0].transcript;
+      if (App.voiceConvo) {
+        // Live voice mode: send what was heard immediately, hands-free
+        input.value = text;
+        input.dispatchEvent(new Event('input'));
+        sendMessage();
+        return;
+      }
       input.value = (input.value ? input.value + ' ' : '') + text;
       input.dispatchEvent(new Event('input'));
       App.voiceTriggered = true;
@@ -1275,6 +1298,33 @@ function setupChat() {
     recognizer.addEventListener('error', () => {
       listening = false;
       sendBtn.classList.remove('mic-active');
+    });
+  }
+
+  // Shared entry point so speak()/generateAssistantReply can hand the mic back
+  App.startListening = () => {
+    if (!recognizer || listening) return;
+    try {
+      recognizer.lang = getSTTLang();
+      recognizer.start();
+      listening = true;
+      sendBtn.classList.add('mic-active');
+    } catch (_) {}
+  };
+
+  // Live voice conversation toggle
+  const convoBtn = document.getElementById('voice-convo-btn');
+  if (convoBtn) {
+    convoBtn.addEventListener('click', () => {
+      App.voiceConvo = !App.voiceConvo;
+      convoBtn.classList.toggle('active', App.voiceConvo);
+      if (App.voiceConvo) {
+        appendMessage('system', '🎙 Live voice mode on — just talk. VOID answers out loud and listens again. Tap LIVE to stop.');
+        App.startListening();
+      } else {
+        try { recognizer?.stop(); } catch (_) {}
+        window.speechSynthesis?.cancel();
+      }
     });
   }
 
@@ -1510,6 +1560,33 @@ async function sendMessage() {
     return;
   }
 
+  // /brief — daily briefing built from data the app already has
+  if (['/brief', '/briefing'].includes(text.toLowerCase().trim())) {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    const typingId = appendTyping();
+    if (!App.liveContext.city) { try { await initLiveContext(); } catch(_) {} }
+    removeTyping(typingId);
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayEnd = dayStart + 86400000;
+    const dueToday = App.tasks.filter(t => !t.done && t.due && t.due >= dayStart && t.due < dayEnd);
+    const openTasks = App.tasks.filter(t => !t.done);
+    let out = `📋 **Daily Briefing** — ${dateStr}\n`;
+    if (App.liveContext.city) out += `\n📍 ${App.liveContext.city}${App.liveContext.country ? ', ' + App.liveContext.country : ''}`;
+    if (App.liveContext.localTime) out += `\n🕒 ${App.liveContext.localTime}`;
+    if (App.liveContext.weather) out += `\n⛅ ${App.liveContext.weather}`;
+    out += dueToday.length
+      ? `\n\n⏰ Due today:\n${dueToday.map(t => `• ${t.text} (${new Date(t.due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n')}`
+      : '\n\n⏰ Nothing due today.';
+    if (openTasks.length) out += `\n📌 ${openTasks.length} open task${openTasks.length > 1 ? 's' : ''} total`;
+    const quote = document.getElementById('void-quote-line')?.textContent?.trim();
+    if (quote) out += `\n\n💭 ${quote}`;
+    appendMessage('system', out);
+    return;
+  }
+
   // Natural-language app opening ("open spotify", "navigate to X", "play X on youtube"...)
   const appAction = detectAppAction(text);
   if (appAction) {
@@ -1584,11 +1661,37 @@ async function generateAssistantReply(triggerText) {
   if (reply) {
     App.chatHistory.push({ role: 'assistant', content: reply });
     saveChatHistory();
-    appendMessage('system', reply, App.chatHistory.length - 1);
-    if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
+    streamInMessage(reply, App.chatHistory.length - 1);
+    if (App.voiceConvo) {
+      App.voiceTriggered = false;
+      if (App.settings.voiceEnabled) speak(reply);           // speak() resumes listening when done
+      else setTimeout(() => App.startListening?.(), 400);    // voice off — jump straight back to mic
+    } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
   } else {
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
+}
+
+// Typewriter reveal for assistant replies — gives the streaming feel without
+// needing SSE support from the Worker. Skipped under reduced motion.
+function streamInMessage(text, historyIndex) {
+  appendMessage('system', App.settings.reducedMotion ? text : '', historyIndex);
+  if (App.settings.reducedMotion) return;
+  const box = document.getElementById('messages-box');
+  const bubble = box.lastElementChild?.querySelector('.bubble-body');
+  if (!bubble) return;
+  let i = 0;
+  const step = Math.max(2, Math.round(text.length / 120)); // finish in ~2s regardless of length
+  const timer = setInterval(() => {
+    i = Math.min(text.length, i + step);
+    bubble.textContent = text.slice(0, i);
+    box.scrollTop = box.scrollHeight;
+    if (i >= text.length) {
+      clearInterval(timer);
+      bubble.innerHTML = renderMarkdownLite(text);
+      box.scrollTop = box.scrollHeight;
+    }
+  }, 16);
 }
 
 // Drops the given assistant reply (and anything after it) from history, then re-asks.
@@ -1897,23 +2000,34 @@ function deleteChat(id) {
 function renderChatList() {
   const list = document.getElementById('chat-list');
   if (!list) return;
-  const sorted = [...App.chats].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const sorted = [...App.chats].sort((a, b) =>
+    (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0));
   list.innerHTML = sorted.map(c => `
     <div class="nav-chat-item${c.id === App.currentChatId ? ' active' : ''}" data-chat-id="${c.id}">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       <span class="nav-chat-title">${escapeHTML(c.title || 'New chat')}</span>
+      <button class="nav-chat-pin${c.pinned ? ' pinned' : ''}" data-pin-id="${c.id}" aria-label="${c.pinned ? 'Unpin chat' : 'Pin chat'}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="${c.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>
+      </button>
       <button class="nav-chat-del" data-del-id="${c.id}" aria-label="Delete chat">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>`).join('');
   list.querySelectorAll('.nav-chat-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.closest('.nav-chat-del')) return;
+      if (e.target.closest('.nav-chat-del') || e.target.closest('.nav-chat-pin')) return;
       switchChat(item.dataset.chatId);
     });
   });
   list.querySelectorAll('.nav-chat-del').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); deleteChat(btn.dataset.delId); });
+  });
+  list.querySelectorAll('.nav-chat-pin').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const chat = App.chats.find(c => c.id === btn.dataset.pinId);
+      if (chat) { chat.pinned = !chat.pinned; saveChats(); renderChatList(); }
+    });
   });
 }
 
@@ -1984,6 +2098,53 @@ function setupProviderPicker() {
 
   document.addEventListener('click', () => picker.classList.remove('open'));
   picker.addEventListener('click', (e) => e.stopPropagation());
+}
+
+/* ============ Persona picker (chat modes) ============ */
+
+function setupPersonaPicker() {
+  const btn = document.getElementById('persona-pick-btn');
+  const picker = document.getElementById('persona-picker');
+  if (!btn || !picker) return;
+
+  const renderList = () => {
+    const list = document.getElementById('persona-list');
+    if (!list) return;
+    list.innerHTML = PERSONAS.map(p => `
+      <div class="persona-item${(App.settings.persona || '') === p.id ? ' active' : ''}" data-persona="${p.id}">
+        <span class="persona-emoji">${p.emoji}</span>
+        <span class="persona-name">${p.label}</span>
+        ${(App.settings.persona || '') === p.id ? '<span class="persona-check">✓</span>' : ''}
+      </div>`).join('');
+    list.querySelectorAll('.persona-item').forEach(item => {
+      item.addEventListener('click', () => {
+        App.settings.persona = item.dataset.persona;
+        saveSettings();
+        syncPersonaBadge();
+        picker.classList.remove('open');
+      });
+    });
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = picker.classList.contains('open');
+    document.getElementById('provider-picker')?.classList.remove('open');
+    if (isOpen) picker.classList.remove('open');
+    else { renderList(); picker.classList.add('open'); }
+  });
+
+  document.addEventListener('click', () => picker.classList.remove('open'));
+  picker.addEventListener('click', (e) => e.stopPropagation());
+  syncPersonaBadge();
+}
+
+function syncPersonaBadge() {
+  const btn = document.getElementById('persona-pick-btn');
+  if (!btn) return;
+  const p = PERSONAS.find(x => x.id === (App.settings.persona || '')) || PERSONAS[0];
+  btn.innerHTML = `${p.emoji} ${p.id ? p.label.toUpperCase() : 'MODE'} &#9662;`;
+  btn.classList.toggle('active', !!p.id);
 }
 
 function renderProviderPicker() {

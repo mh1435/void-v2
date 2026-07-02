@@ -320,6 +320,23 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   padding: 4px 10px; border-radius: 12px; cursor: pointer;
 }
 .util-badge:active { background: var(--accent-soft); color: var(--accent); }
+.util-badge.active {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* Persona picker rows (inside the provider-picker popup shell) */
+.persona-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; cursor: pointer; font-size: 13px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.persona-item:last-child { border-bottom: none; }
+.persona-item:active { background: var(--accent-soft); }
+.persona-item.active .persona-name { color: var(--accent); font-weight: 700; }
+.persona-emoji { font-size: 15px; }
+.persona-name { flex: 1; color: var(--text); }
+.persona-check { color: var(--accent); font-weight: 700; }
 .util-spacer { flex: 1; }
 .model-badge { font-size: 10px; color: var(--muted); opacity: 0.5; letter-spacing: 0.02em; }
 .chat-box-bar .model-badge { display: none; }  /* model shown in the pill itself */
@@ -1349,11 +1366,13 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .nav-chat-title {
   flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.nav-chat-del {
+.nav-chat-del, .nav-chat-pin {
   background: none; border: none; color: var(--muted); cursor: pointer;
   padding: 4px; border-radius: 6px; opacity: 0.6; flex-shrink: 0;
 }
 .nav-chat-del:active { opacity: 1; color: var(--hub-red); }
+.nav-chat-pin:active { opacity: 1; color: var(--accent); }
+.nav-chat-pin.pinned { opacity: 1; color: var(--accent); }
 .nav-profile {
   display: flex; align-items: center; gap: 12px; width: 100%;
   padding: 12px 16px;

@@ -100,10 +100,16 @@ if (window.caches && caches.keys) {
             <div class="provider-picker-title">VOID AI — SELECT PROVIDER</div>
             <div id="provider-list"></div>
           </div>
+          <div class="provider-picker" id="persona-picker">
+            <div class="provider-picker-title">VOID MODE — PERSONA</div>
+            <div id="persona-list"></div>
+          </div>
           <div class="chat-box">
             <textarea id="chat-input" rows="1" placeholder="Ask Void anything..."></textarea>
             <div class="chat-box-bar">
               <button class="util-badge provider-btn" id="provider-pick-btn">VOID AI &#9662;</button>
+              <button class="util-badge" id="persona-pick-btn">🌀 MODE &#9662;</button>
+              <button class="util-badge" id="voice-convo-btn">🎙 LIVE</button>
               <span class="model-badge monospace" id="active-model-indicator">AI</span>
               <div class="util-spacer"></div>
               <button class="send-btn" id="send-msg-btn" aria-label="Send or Mic" data-mode="mic">
