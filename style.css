@@ -387,6 +387,14 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 /* Bookmark/star action button */
 .bubble-act-btn.starred { color: #ffb800; }
 
+/* Realistic voice picker */
+.voice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+.voice-chip {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 10px 6px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; text-align: center;
+}
+.voice-chip.active { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text); border-color: transparent; }
+
 /* Memory facts list */
 .memory-fact-row {
   display: flex; align-items: center; gap: 10px;

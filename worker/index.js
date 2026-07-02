@@ -20,6 +20,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/pay')) return handlePay(request, env, url);
     if (url.pathname.startsWith('/sync')) return handleSync(request, env, url);
+    if (url.pathname.startsWith('/tts')) return handleTTS(request, env);
     if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
     let body;
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
@@ -50,6 +51,34 @@ function shuffle(arr) {
 }
 
 const PRICE_FALLBACK = { pro: 'price_1TnHz3Em0xqepKvLCBfnW5dd', max: 'price_1TnI4oEm0xqepKvLvoGiTO9X' };
+
+/* ── Realistic voices ──────────────────────────────────────────────
+   Reuses the GROQ_KEY secret already configured for chat — no separate
+   key needed. Groq's PlayAI TTS returns clearly gendered neural voices. */
+async function handleTTS(request, env) {
+  if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
+  if (!env.GROQ_KEY) return cors(JSON.stringify({ error: 'tts not configured' }), 503);
+  let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
+  const text = (body.text || '').toString().slice(0, 1000);
+  const voice = (body.voice || 'Celeste-PlayAI').toString();
+  if (!text) return cors(JSON.stringify({ error: 'text required' }), 400);
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'playai-tts', input: text, voice, response_format: 'wav' }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return cors(JSON.stringify({ error: 'tts provider error', detail: detail.slice(0, 300) }), 502);
+    }
+    const buf = await res.arrayBuffer();
+    return new Response(buf, { status: 200, headers: { 'Content-Type': 'audio/wav', 'Access-Control-Allow-Origin': '*' } });
+  } catch (e) {
+    return cors(JSON.stringify({ error: String(e) }), 500);
+  }
+}
 
 /* ── Cross-device sync ─────────────────────────────────────────────
    Backups live in the PLANS KV namespace, guarded by a per-account sync

@@ -16,6 +16,7 @@ const App = {
     responseMode: 'standard',
     reducedMotion: false,
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
+    voiceEngine: 'device', realisticVoice: 'Celeste-PlayAI',
     floatingAssistantEnabled: false,
     haptic: true,
     accentColor: '', accentColor2: '',
@@ -1388,11 +1389,55 @@ function setupVoice() {
   if (testBtn) {
     testBtn.addEventListener('click', () => speak('Void core voice configuration confirmed.'));
   }
+
+  // Voice engine: Device (browser/OS voices, offline) vs Realistic (neural voices, online)
+  const engineSeg = document.getElementById('voice-engine-seg');
+  const realisticPicker = document.getElementById('realistic-voice-picker');
+  const nameRow = document.getElementById('voice-name-row');
+  function syncEngineUI() {
+    const realistic = App.settings.voiceEngine === 'realistic';
+    if (engineSeg) engineSeg.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.engine === App.settings.voiceEngine));
+    if (realisticPicker) realisticPicker.style.display = realistic ? '' : 'none';
+    if (nameRow) nameRow.style.display = realistic ? 'none' : '';
+  }
+  if (engineSeg) {
+    engineSeg.querySelectorAll('.seg-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        App.settings.voiceEngine = b.dataset.engine;
+        syncEngineUI();
+        saveSettings();
+      });
+    });
+  }
+  syncEngineUI();
+
+  // Realistic voice chips, grouped Girls/Boys — tap to pick + instantly preview
+  const voiceChips = document.querySelectorAll('.voice-chip');
+  function syncVoiceChips() {
+    voiceChips.forEach(c => c.classList.toggle('active', c.dataset.voice === App.settings.realisticVoice));
+  }
+  voiceChips.forEach(c => {
+    c.addEventListener('click', () => {
+      App.settings.realisticVoice = c.dataset.voice;
+      syncVoiceChips();
+      saveSettings();
+      speak('Hey, this is what I sound like.');
+    });
+  });
+  syncVoiceChips();
+}
+
+let realisticAudioEl = null;
+function stopSpeaking() {
+  try { window.speechSynthesis?.cancel(); } catch (_) {}
+  if (realisticAudioEl) { try { realisticAudioEl.pause(); } catch (_) {} realisticAudioEl = null; }
 }
 
 function speak(text) {
-  if (!App.settings.voiceEnabled || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
+  if (!App.settings.voiceEnabled) return;
+  stopSpeaking();
+  if (App.settings.voiceEngine === 'realistic') { speakRealistic(text); return; }
+  if (!window.speechSynthesis) return;
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = App.settings.voiceRate;
   utter.pitch = App.settings.voicePitch;
@@ -1403,6 +1448,32 @@ function speak(text) {
   // Live voice mode: once VOID finishes talking, hand the mic back to the user
   utter.onend = () => { if (App.voiceConvo) setTimeout(() => App.startListening?.(), 300); };
   window.speechSynthesis.speak(utter);
+}
+
+async function speakRealistic(text) {
+  try {
+    const voice = App.settings.realisticVoice || 'Celeste-PlayAI';
+    const res = await fetch(`${VOID_CORE_API.url}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 1000), voice }),
+    });
+    if (!res.ok) throw new Error('tts failed');
+    const blob = await res.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    audio.playbackRate = App.settings.voiceRate || 1.0;
+    audio.onended = () => { if (App.voiceConvo) setTimeout(() => App.startListening?.(), 300); };
+    realisticAudioEl = audio;
+    await audio.play();
+  } catch (_) {
+    // offline, worker not yet redeployed, or blocked — fall back to the device voice
+    // so speech never just goes silent
+    if (window.speechSynthesis) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = App.settings.voiceRate;
+      window.speechSynthesis.speak(utter);
+    }
+  }
 }
 
 /* ============ Chat ============ */
@@ -1504,7 +1575,7 @@ function setupChat() {
         App.startListening();
       } else {
         try { recognizer?.stop(); } catch (_) {}
-        window.speechSynthesis?.cancel();
+        stopSpeaking();
       }
     });
   }

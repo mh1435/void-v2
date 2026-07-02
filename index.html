@@ -879,12 +879,33 @@ if ('serviceWorker' in navigator) {
         <label class="switch"><input type="checkbox" id="toggle-voice-enabled"><span class="switch-track"><span class="switch-thumb"></span></span></label>
       </div>
       <div class="setting-row stacked">
+        <div class="setting-label"><span>Engine</span><span class="setting-sub">Realistic uses natural neural voices online; Device uses your phone's built-in voices offline</span></div>
+        <div class="segmented" id="voice-engine-seg">
+          <button class="seg-btn" data-engine="device">Device</button>
+          <button class="seg-btn" data-engine="realistic">Realistic</button>
+        </div>
+      </div>
+      <div id="realistic-voice-picker" style="display:none">
+        <div class="setting-label" style="margin:12px 0 8px;"><span>Girls</span></div>
+        <div class="voice-grid">
+          <button class="voice-chip" data-voice="Celeste-PlayAI">Celeste</button>
+          <button class="voice-chip" data-voice="Arista-PlayAI">Arista</button>
+          <button class="voice-chip" data-voice="Deedee-PlayAI">Deedee</button>
+        </div>
+        <div class="setting-label" style="margin:14px 0 8px;"><span>Boys</span></div>
+        <div class="voice-grid">
+          <button class="voice-chip" data-voice="Atlas-PlayAI">Atlas</button>
+          <button class="voice-chip" data-voice="Fritz-PlayAI">Fritz</button>
+          <button class="voice-chip" data-voice="Thunder-PlayAI">Thunder</button>
+        </div>
+      </div>
+      <div class="setting-row stacked" id="voice-name-row">
         <div class="setting-label"><span>Voice Name</span></div>
         <select class="select-input" id="voice-name-select">
           <option value="">Default</option>
         </select>
       </div>
-      
+
       <div class="settings-section-label">SPEECH METRICS</div>
       <div class="setting-row stacked">
         <div class="setting-label"><span>Speed Rate (<span id="voice-rate-value">1.0×</span>)</span></div>
