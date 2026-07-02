@@ -53,6 +53,22 @@ Rules:
 - Be direct, useful, and conversational
 - CRITICAL: If a LIVE CONTEXT, WEATHER LOOKUP, or KNOWLEDGE LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a website instead — you DO have this data when it's provided below. Only say data is unavailable if no such block was given for that request.`;
 
+/* Share-to-VOID: MainActivity delivers text shared from other apps here.
+   Registered at parse time so cold-start retries from the native side land. */
+window.__voidReceiveShare = (text) => {
+  App.pendingShare = text;
+  applyPendingShare();
+};
+function applyPendingShare() {
+  if (!App.pendingShare) return;
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  try { switchTab('tab-chat'); } catch (_) {}
+  input.value = App.pendingShare;
+  input.dispatchEvent(new Event('input'));
+  App.pendingShare = null;
+}
+
 /* Personas — selectable modes that reshape how VOID responds */
 const PERSONAS = [
   { id: '',          label: 'Default',    emoji: '🌀', prompt: '' },
@@ -466,6 +482,7 @@ function bootApp() {
   initLiveContext();
   initQuoteWidget();
   checkForAppUpdate();
+  applyPendingShare();
 }
 
 // Web (JS/CSS/HTML) changes apply instantly on next launch — no APK needed.

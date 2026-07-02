@@ -49,6 +49,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Share text from any app straight into VOID chat -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
         </activity>
 
         <!-- Floating assistant overlay service -->
@@ -56,6 +63,16 @@
             android:name=".FloatingService"
             android:foregroundServiceType="specialUse"
             android:exported="false" />
+
+        <!-- Home screen widget -->
+        <receiver android:name=".VoidWidgetProvider" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/void_widget_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

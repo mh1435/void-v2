@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:padding="16dp"
+    android:background="@drawable/void_widget_bg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="VOID"
+        android:textColor="#9a87ff"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.2" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Ask anything →"
+        android:textColor="#8a8a92"
+        android:textSize="13sp" />
+
+</LinearLayout>
