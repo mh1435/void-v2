@@ -467,6 +467,7 @@ function bootApp() {
   setupPreferencesPanel();
   setupProviderPicker();
   setupPersonaPicker();
+  setupPlusMenu();
   setupSyncPanel();
   setupMemoryPanel();
   setupStudyMode();
@@ -1377,6 +1378,7 @@ function setupChat() {
     convoBtn.addEventListener('click', () => {
       App.voiceConvo = !App.voiceConvo;
       convoBtn.classList.toggle('active', App.voiceConvo);
+      document.getElementById('plus-btn')?.classList.toggle('active', App.voiceConvo);
       if (App.voiceConvo) {
         appendMessage('system', '🎙 Live voice mode on — just talk. VOID answers out loud and listens again. Tap LIVE to stop.');
         App.startListening();
@@ -1551,7 +1553,7 @@ async function quickAI(systemPrompt, userText) {
 }
 
 // Tiny haptic tap where it feels right (send, pin, pomodoro done)
-function buzz(ms = 12) {
+function buzz(ms = 35) {
   if (App.settings.haptic !== false && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
 }
 
@@ -1898,18 +1900,26 @@ function streamInMessage(text, historyIndex) {
   const box = document.getElementById('messages-box');
   const bubble = box.lastElementChild?.querySelector('.bubble-body');
   if (!bubble) return;
-  let i = 0;
-  const step = Math.max(2, Math.round(text.length / 120)); // finish in ~2s regardless of length
-  const timer = setInterval(() => {
-    i = Math.min(text.length, i + step);
-    bubble.textContent = text.slice(0, i);
-    box.scrollTop = box.scrollHeight;
-    if (i >= text.length) {
-      clearInterval(timer);
+  // requestAnimationFrame + time-based progress: one paint per display frame
+  // (true 60fps) instead of a fixed setInterval that stutters under load.
+  const duration = Math.min(1800, Math.max(500, text.length * 10));
+  const start = performance.now();
+  let lastN = -1;
+  function frame(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const n = Math.ceil(text.length * t);
+    if (n !== lastN) {
+      lastN = n;
+      bubble.textContent = text.slice(0, n);
+      box.scrollTop = box.scrollHeight;
+    }
+    if (t < 1) requestAnimationFrame(frame);
+    else {
       bubble.innerHTML = renderMarkdownLite(text);
       box.scrollTop = box.scrollHeight;
     }
-  }, 16);
+  }
+  requestAnimationFrame(frame);
 }
 
 // Drops the given assistant reply (and anything after it) from history, then re-asks.
@@ -2465,6 +2475,48 @@ function syncPersonaBadge() {
   const p = PERSONAS.find(x => x.id === (App.settings.persona || '')) || PERSONAS[0];
   btn.innerHTML = `${p.emoji} ${p.id ? p.label.toUpperCase() : 'MODE'} &#9662;`;
   btn.classList.toggle('active', !!p.id);
+}
+
+/* Claude-style "+" quick-actions menu — consolidates attach / mode / live
+   voice / provider into one button so the composer stays clean. The old
+   badge buttons stay in the DOM (hidden) and are proxy-clicked, so all
+   existing handlers keep working unchanged. */
+function setupPlusMenu() {
+  const btn = document.getElementById('plus-btn');
+  const menu = document.getElementById('plus-menu');
+  if (!btn || !menu) return;
+
+  const syncRows = () => {
+    const p = PERSONAS.find(x => x.id === (App.settings.persona || '')) || PERSONAS[0];
+    const modeSub = document.getElementById('plus-mode-sub');
+    const liveSub = document.getElementById('plus-live-sub');
+    if (modeSub) modeSub.textContent = p.label;
+    if (liveSub) liveSub.textContent = App.voiceConvo ? 'On' : 'Off';
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('provider-picker')?.classList.remove('open');
+    document.getElementById('persona-picker')?.classList.remove('open');
+    const isOpen = menu.classList.contains('open');
+    if (isOpen) menu.classList.remove('open');
+    else { syncRows(); menu.classList.add('open'); }
+  });
+
+  menu.querySelectorAll('.persona-item').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.classList.remove('open');
+      const act = row.dataset.plus;
+      if (act === 'attach') document.getElementById('attach-btn')?.click();
+      else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
+      else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
+      else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
+    });
+  });
+
+  document.addEventListener('click', () => menu.classList.remove('open'));
+  menu.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function renderProviderPicker() {
@@ -3129,7 +3181,7 @@ function togglePomodoro() {
     const left = pomoEndsAt - Date.now();
     if (left <= 0) {
       stopPomodoro();
-      buzz(200);
+      buzz(300);
       recordFocusMinutes(POMO_MINUTES);
       if (App.settings.voiceEnabled) speak('Pomodoro complete. Time for a five minute break.');
       appendStudyMsg('ai', '🍅 Pomodoro complete — take a 5 minute break!');

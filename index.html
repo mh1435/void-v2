@@ -110,6 +110,13 @@ if ('serviceWorker' in navigator) {
             <div class="provider-picker-title">VOID MODE — PERSONA</div>
             <div id="persona-list"></div>
           </div>
+          <div class="provider-picker" id="plus-menu">
+            <div class="provider-picker-title">QUICK ACTIONS</div>
+            <div class="persona-item" data-plus="attach"><span class="persona-emoji">📎</span><span class="persona-name">Attach image</span></div>
+            <div class="persona-item" data-plus="mode"><span class="persona-emoji">🌀</span><span class="persona-name">Chat mode</span><span class="plus-sub" id="plus-mode-sub">Default</span></div>
+            <div class="persona-item" data-plus="live"><span class="persona-emoji">🎙</span><span class="persona-name">Live voice</span><span class="plus-sub" id="plus-live-sub">Off</span></div>
+            <div class="persona-item" data-plus="provider"><span class="persona-emoji">⚡</span><span class="persona-name">AI provider</span><span class="plus-sub">VOID AI</span></div>
+          </div>
           <div class="chat-box">
             <div class="attach-preview" id="attach-preview" style="display:none">
               <img id="attach-preview-img" alt="attachment preview">
@@ -118,13 +125,17 @@ if ('serviceWorker' in navigator) {
             <textarea id="chat-input" rows="1" placeholder="Ask Void anything..."></textarea>
             <div class="chat-box-bar">
               <input type="file" id="attach-input" accept="image/*" style="display:none">
-              <div class="bar-badges">
+              <button class="plus-btn" id="plus-btn" aria-label="Quick actions">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <div class="bar-badges" style="display:none">
                 <button class="util-badge" id="attach-btn" aria-label="Attach image">📎</button>
                 <button class="util-badge provider-btn" id="provider-pick-btn">VOID AI &#9662;</button>
                 <button class="util-badge" id="persona-pick-btn">🌀 MODE &#9662;</button>
                 <button class="util-badge" id="voice-convo-btn">🎙 LIVE</button>
                 <span class="model-badge monospace" id="active-model-indicator">AI</span>
               </div>
+              <div class="util-spacer"></div>
               <button class="send-btn" id="send-msg-btn" aria-label="Send or Mic" data-mode="mic">
                 <svg class="btn-icon-mic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
