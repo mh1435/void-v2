@@ -2788,12 +2788,81 @@ function setupStudyMode() {
   if (sendBtn) sendBtn.addEventListener('click', sendStudyMessage);
   if (input)   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendStudyMessage(); });
   if (micBtn)  micBtn.addEventListener('click',  triggerStudyMic);
+
+  // Pomodoro timer
+  const pomoBtn = document.getElementById('study-pomo-btn');
+  if (pomoBtn) pomoBtn.addEventListener('click', togglePomodoro);
+}
+
+/* ============ Pomodoro + focus stats ============ */
+
+const POMO_MINUTES = 25;
+let pomoEndsAt = null, pomoInterval = null;
+
+function togglePomodoro() {
+  if (pomoEndsAt) { stopPomodoro(); return; }
+  pomoEndsAt = Date.now() + POMO_MINUTES * 60000;
+  document.getElementById('study-pomo-btn')?.classList.add('active');
+  const display = document.getElementById('study-pomo-display');
+  if (display) display.style.display = '';
+  pomoInterval = setInterval(() => {
+    const left = pomoEndsAt - Date.now();
+    if (left <= 0) {
+      stopPomodoro();
+      recordFocusMinutes(POMO_MINUTES);
+      if (App.settings.voiceEnabled) speak('Pomodoro complete. Time for a five minute break.');
+      appendStudyMsg('ai', '🍅 Pomodoro complete — take a 5 minute break!');
+      return;
+    }
+    const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+    if (display) display.textContent = `🍅 ${m}:${String(s).padStart(2, '0')}`;
+  }, 500);
+}
+
+function stopPomodoro() {
+  if (pomoInterval) { clearInterval(pomoInterval); pomoInterval = null; }
+  pomoEndsAt = null;
+  document.getElementById('study-pomo-btn')?.classList.remove('active');
+  const display = document.getElementById('study-pomo-display');
+  if (display) { display.style.display = 'none'; display.textContent = ''; }
+}
+
+/* Focus stats — minutes per day + streak, stored per user */
+function focusStats() {
+  try { return JSON.parse(localStorage.getItem(userKey('focusStats'))) || {}; } catch(_) { return {}; }
+}
+function recordFocusMinutes(mins) {
+  const stats = focusStats();
+  const key = new Date().toISOString().slice(0, 10);
+  stats[key] = (stats[key] || 0) + mins;
+  try { localStorage.setItem(userKey('focusStats'), JSON.stringify(stats)); } catch(_) {}
+}
+function focusStreak(stats) {
+  let streak = 0;
+  const d = new Date();
+  for (;;) {
+    const key = d.toISOString().slice(0, 10);
+    if (stats[key] > 0) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+function renderFocusStats() {
+  const el = document.getElementById('study-stats-line');
+  if (!el) return;
+  const stats = focusStats();
+  const today = stats[new Date().toISOString().slice(0, 10)] || 0;
+  const week = Object.entries(stats).reduce((sum, [k, v]) =>
+    (Date.now() - new Date(k).getTime() < 7 * 86400000) ? sum + v : sum, 0);
+  const streak = focusStreak(stats);
+  el.textContent = `🍅 Today ${today}m · Week ${week}m${streak > 1 ? ` · ${streak}🔥 day streak` : ''}`;
 }
 
 /* openStudyPanel — called from STUDY pill, shows the location grid */
 function openStudyPanel() {
   switchTab('tab-study-grid');
   renderStudyGrid(STUDY_LOCATIONS);
+  renderFocusStats();
   const s = document.getElementById('study-search-input');
   if (s) s.value = '';
 }
@@ -2805,6 +2874,7 @@ function openStudyVideo(loc) {
   if (!overlay) return;
   overlay.style.display = 'block';
   studyState.active = true;
+  studyState.sessionStart = Date.now();
   studyState.chatHistory = [];
 
   // Reset chat to welcome
@@ -2859,6 +2929,15 @@ function closeStudyVideo() {
   overlay.style.display = 'none';
   overlay.setAttribute('aria-hidden', 'true');
   studyState.active = false;
+
+  // Log the session's focus minutes and stop any running pomodoro
+  if (studyState.sessionStart) {
+    const mins = Math.floor((Date.now() - studyState.sessionStart) / 60000);
+    if (mins >= 1) recordFocusMinutes(mins);
+    studyState.sessionStart = null;
+  }
+  stopPomodoro();
+  renderFocusStats();
 
   if (studyState.clockInterval) { clearInterval(studyState.clockInterval); studyState.clockInterval = null; }
   stopWakeWord();

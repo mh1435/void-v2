@@ -517,6 +517,7 @@ if (window.caches && caches.keys) {
         <div class="gamehub-search-box">
           <input type="text" class="text-input" id="study-search-input" placeholder="Search locations or vibes...">
         </div>
+        <div class="study-stats-line" id="study-stats-line"></div>
         <div class="study-loc-grid" id="study-loc-grid"></div>
       </div>
     </div>
@@ -548,7 +549,12 @@ if (window.caches && caches.keys) {
       <div class="study-clock" id="study-clock">00:00:00</div>
       <div class="study-date"  id="study-date"></div>
       <div class="study-city-live" id="study-city-live" style="display:none"></div>
+      <div class="study-pomo-display" id="study-pomo-display" style="display:none"></div>
     </div>
+
+    <button class="study-ui-btn" id="study-pomo-btn" aria-label="Pomodoro timer">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/></svg>
+    </button>
 
     <div class="study-wake-pill" id="study-wake-pill">
       <span class="study-wake-dot"></span>

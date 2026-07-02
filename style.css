@@ -1703,6 +1703,19 @@ body.reduced-motion *::after {
   transition: background 0.15s; box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 .study-ui-btn:active { background: rgba(255,255,255,0.2); }
+.study-ui-btn.active {
+  background: rgba(124,111,255,0.4); border-color: rgba(124,111,255,0.7);
+  box-shadow: 0 0 14px rgba(124,111,255,0.4);
+}
+.study-pomo-display {
+  font-family: var(--hub-mono); font-size: clamp(11px, 2.2vw, 15px); font-weight: 700;
+  color: #ffb4a2; letter-spacing: 0.08em; text-shadow: 0 1px 8px rgba(0,0,0,0.9);
+}
+.study-stats-line {
+  font-family: var(--hub-mono); font-size: 11px; color: var(--muted);
+  letter-spacing: 0.05em; padding: 0 2px 10px;
+}
+.study-stats-line:empty { display: none; }
 
 /* Sound toggle icon swap (muted shows the crossed-out speaker) */
 #study-sound-btn .snd-off { display: none; }
