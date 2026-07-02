@@ -1323,6 +1323,43 @@ function setupChat() {
     });
   }
 
+  // Welcome suggestion chips → send that prompt directly
+  const box = document.getElementById('messages-box');
+  if (box) {
+    box.addEventListener('click', (e) => {
+      const chip = e.target.closest('.welcome-chip');
+      if (!chip) return;
+      input.value = chip.dataset.chip || chip.textContent;
+      input.dispatchEvent(new Event('input'));
+      sendMessage();
+    });
+
+    // Scroll-to-bottom button — appears once you've scrolled up a bit
+    const scrollBtn = document.getElementById('scroll-bottom-btn');
+    if (scrollBtn) {
+      box.addEventListener('scroll', () => {
+        const away = box.scrollHeight - box.scrollTop - box.clientHeight;
+        scrollBtn.classList.toggle('show', away > 250);
+      });
+      scrollBtn.addEventListener('click', () => {
+        const away = box.scrollHeight - box.scrollTop - box.clientHeight;
+        // Smooth for short hops; instant when far away so it never crawls
+        box.scrollTo({ top: box.scrollHeight, behavior: away > box.clientHeight * 3 ? 'auto' : 'smooth' });
+      });
+    }
+
+    // Copy button on code blocks (delegated — blocks are added dynamically)
+    box.addEventListener('click', (e) => {
+      const btn = e.target.closest('.code-copy');
+      if (!btn) return;
+      const pre = btn.closest('pre');
+      if (!pre) return;
+      navigator.clipboard?.writeText(pre.querySelector('code')?.textContent || '').catch(() => {});
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1400);
+    });
+  }
+
   // Shared entry point so speak()/generateAssistantReply can hand the mic back
   App.startListening = () => {
     if (!recognizer || listening) return;
@@ -1505,6 +1542,19 @@ async function callOpenAICompat(url, key, model, messages) {
   return data.choices[0].message.content;
 }
 
+// One-shot AI call outside the chat history — used by /translate etc.
+async function quickAI(systemPrompt, userText) {
+  const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }];
+  try { if (VOID_CORE_API.url) return await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs); } catch (_) {}
+  try { return await callPollinations(msgs); } catch (_) {}
+  return null;
+}
+
+// Tiny haptic tap where it feels right (send, pin, pomodoro done)
+function buzz(ms = 12) {
+  if (App.settings.haptic !== false && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
+}
+
 async function callPollinations(messages) {
   const res = await fetch('https://text.pollinations.ai/openai', {
     method: 'POST',
@@ -1520,6 +1570,7 @@ async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+  buzz();
 
   // /define command
   if (text.toLowerCase().startsWith('/define ')) {
@@ -1648,6 +1699,97 @@ async function sendMessage() {
     const quote = document.getElementById('void-quote-line')?.textContent?.trim();
     if (quote) out += `\n\n💭 ${quote}`;
     appendMessage('system', out);
+    return;
+  }
+
+  // /help — list every command
+  if (text.toLowerCase().trim() === '/help') {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    appendMessage('system', [
+      '🧭 **VOID commands**',
+      '',
+      '`/brief` — daily briefing (weather, tasks, quote)',
+      '`/image <prompt>` — generate an image',
+      '`/define <word>` — dictionary lookup',
+      '`/price <coin>` — crypto price',
+      '`/convert 100 usd to eur` — currency',
+      '`/translate <lang> <text>` — translate anything',
+      '`/calc <expression>` — calculator',
+      '`/qr <text or link>` — QR code',
+      '`/roll 2d6` · `/flip` · `/pick a, b, c` — quick decisions',
+      '',
+      'Also try: "open spotify", "navigate to <place>", "play <song> on youtube", "weather in <city>", "who is <person>"',
+    ].join('\n'));
+    return;
+  }
+
+  // /calc — safe local calculator
+  if (text.toLowerCase().startsWith('/calc ')) {
+    const expr = text.slice(6).trim();
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    if (!/^[\d\s+\-*/().,%^eE]+$/.test(expr)) {
+      appendMessage('system', 'I can only calculate numbers and + − × ÷ ( ) % ^ here.');
+    } else {
+      try {
+        const result = Function('"use strict";return (' + expr.replace(/\^/g, '**').replace(/,/g, '') + ')')();
+        appendMessage('system', `🧮 ${expr} = **${Number.isFinite(result) ? +result.toPrecision(12) : result}**`);
+      } catch (_) { appendMessage('system', 'That expression didn\'t compute — check the syntax.'); }
+    }
+    return;
+  }
+
+  // /qr — QR code image (free, no key)
+  if (text.toLowerCase().startsWith('/qr ')) {
+    const data = text.slice(4).trim();
+    if (data) {
+      appendMessage('user', text);
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      appendImageMessage(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data)}`, 'QR code');
+    }
+    return;
+  }
+
+  // /roll, /flip, /pick — quick decisions, all local
+  if (text.toLowerCase().trim() === '/flip') {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    appendMessage('system', `🪙 **${Math.random() < 0.5 ? 'Heads' : 'Tails'}**`);
+    return;
+  }
+  if (/^\/roll(\s|$)/i.test(text.trim())) {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    const m = text.trim().match(/^\/roll\s*(\d*)d?(\d+)?$/i);
+    const count = Math.min(20, parseInt(m?.[1] || '1', 10) || 1);
+    const sides = Math.min(1000, parseInt(m?.[2] || '6', 10) || 6);
+    const rolls = Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
+    appendMessage('system', `🎲 ${count}d${sides}: ${rolls.join(' + ')}${count > 1 ? ` = **${rolls.reduce((a, b) => a + b, 0)}**` : ''}`);
+    return;
+  }
+  if (text.toLowerCase().startsWith('/pick ')) {
+    const opts = text.slice(6).split(/[,;]| or /i).map(s => s.trim()).filter(Boolean);
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    appendMessage('system', opts.length >= 2
+      ? `🎯 I pick: **${opts[Math.floor(Math.random() * opts.length)]}**`
+      : 'Give me at least two options, e.g. /pick pizza, sushi, tacos');
+    return;
+  }
+
+  // /translate <lang> <text> — routed through the AI so any language works
+  if (text.toLowerCase().startsWith('/translate ')) {
+    const m = text.slice(11).trim().match(/^(\S+)\s+([\s\S]+)$/);
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    if (!m) { appendMessage('system', 'Usage: /translate spanish Hello, how are you?'); return; }
+    const typingId = appendTyping();
+    const reply = await quickAI(
+      `You are a translator. Translate the user's text into ${m[1]}. Output ONLY the translation, then if the script is non-Latin add one short pronunciation line.`,
+      m[2]);
+    removeTyping(typingId);
+    appendMessage('system', reply || 'Translation failed — try again.');
     return;
   }
 
@@ -1931,7 +2073,7 @@ function escapeHTML(str) {
 function renderMarkdownLite(text) {
   const blocks = [];
   let src = String(text).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    blocks.push(`<pre><code>${escapeHTML(code.replace(/\n$/, ''))}</code></pre>`);
+    blocks.push(`<pre><button class="code-copy" type="button">Copy</button><code>${escapeHTML(code.replace(/\n$/, ''))}</code></pre>`);
     return `${blocks.length - 1}`;
   });
 
@@ -2111,6 +2253,12 @@ function renderActiveChat() {
   } else {
     box.innerHTML = `<div class="matrix-welcome"><div class="welcome-logo">VOID</div>
       <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
+      <div class="welcome-chips">
+        <button class="welcome-chip" data-chip="What can you do?">What can you do?</button>
+        <button class="welcome-chip" data-chip="/brief">📋 Daily briefing</button>
+        <button class="welcome-chip" data-chip="/image a neon city at night">🎨 Make an image</button>
+        <button class="welcome-chip" data-chip="/help">All commands</button>
+      </div>
       <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div></div>`;
   }
 }
@@ -2165,6 +2313,9 @@ function renderChatList() {
     <div class="nav-chat-item${c.id === App.currentChatId ? ' active' : ''}" data-chat-id="${c.id}">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       <span class="nav-chat-title">${escapeHTML(c.title || 'New chat')}</span>
+      <button class="nav-chat-rename" data-rename-id="${c.id}" aria-label="Rename chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+      </button>
       <button class="nav-chat-pin${c.pinned ? ' pinned' : ''}" data-pin-id="${c.id}" aria-label="${c.pinned ? 'Unpin chat' : 'Pin chat'}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="${c.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>
       </button>
@@ -2174,18 +2325,27 @@ function renderChatList() {
     </div>`).join('');
   list.querySelectorAll('.nav-chat-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.closest('.nav-chat-del') || e.target.closest('.nav-chat-pin')) return;
+      if (e.target.closest('.nav-chat-del') || e.target.closest('.nav-chat-pin') || e.target.closest('.nav-chat-rename')) return;
       switchChat(item.dataset.chatId);
     });
   });
   list.querySelectorAll('.nav-chat-del').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); deleteChat(btn.dataset.delId); });
   });
+  list.querySelectorAll('.nav-chat-rename').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const chat = App.chats.find(c => c.id === btn.dataset.renameId);
+      if (!chat) return;
+      const name = prompt('Rename chat', chat.title || 'New chat');
+      if (name && name.trim()) { chat.title = name.trim().slice(0, 60); saveChats(); renderChatList(); }
+    });
+  });
   list.querySelectorAll('.nav-chat-pin').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const chat = App.chats.find(c => c.id === btn.dataset.pinId);
-      if (chat) { chat.pinned = !chat.pinned; saveChats(); renderChatList(); }
+      if (chat) { chat.pinned = !chat.pinned; buzz(); saveChats(); renderChatList(); }
     });
   });
 }
@@ -2246,6 +2406,7 @@ function setupProviderPicker() {
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+    document.getElementById('persona-picker')?.classList.remove('open');
     const isOpen = picker.classList.contains('open');
     if (isOpen) {
       picker.classList.remove('open');
@@ -2968,6 +3129,7 @@ function togglePomodoro() {
     const left = pomoEndsAt - Date.now();
     if (left <= 0) {
       stopPomodoro();
+      buzz(200);
       recordFocusMinutes(POMO_MINUTES);
       if (App.settings.voiceEnabled) speak('Pomodoro complete. Time for a five minute break.');
       appendStudyMsg('ai', '🍅 Pomodoro complete — take a 5 minute break!');
