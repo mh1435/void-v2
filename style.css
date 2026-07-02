@@ -109,8 +109,9 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   font-size: 13px;
 }
 
-.hud-left, .hud-right { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
-.hud-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; }
+.hud-left, .hud-right { flex: 1 0 0; min-width: 40px; display: flex; align-items: center; gap: 6px; }
+.hud-right { justify-content: flex-end; }
+.hud-center { flex: 0 1 auto; display: flex; justify-content: center; align-items: center; min-width: 0; }
 
 .system-title {
   font-family: var(--hub-display);
@@ -368,6 +369,20 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .plus-sub { font-size: 11px; color: var(--muted); }
+
+/* Header chat-options dropdown (three-dot menu) */
+.header-menu {
+  position: fixed; left: 10px; top: calc(var(--safe-top) + 58px);
+  width: 220px; z-index: 95;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border); border-radius: 14px;
+  box-shadow: var(--glass-shadow); overflow: hidden;
+  display: none;
+}
+.header-menu.open { display: block; }
+.persona-item.danger .persona-name { color: var(--danger); }
 
 /* Welcome suggestion chips */
 .welcome-chips {

@@ -468,6 +468,7 @@ function bootApp() {
   setupProviderPicker();
   setupPersonaPicker();
   setupPlusMenu();
+  setupChatMenu();
   setupSyncPanel();
   setupMemoryPanel();
   setupStudyMode();
@@ -618,8 +619,6 @@ function setupNav() {
   const openSettingsBtn = document.getElementById('open-settings-btn');
   if (openSettingsBtn) openSettingsBtn.addEventListener('click', openNavDrawer);
 
-  const exportBtn = document.getElementById('export-chat-btn');
-  if (exportBtn) exportBtn.addEventListener('click', exportCurrentChat);
   document.getElementById('close-settings-btn').addEventListener('click', () => {
     document.getElementById('view-settings').classList.remove('active');
     document.getElementById('view-main').classList.add('active');
@@ -677,14 +676,15 @@ function switchTabRaw(targetId) {
 // VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
 const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view'];
 function updateAppChromeForTab(targetId) {
-  const exportBtn = document.getElementById('export-chat-btn');
-  if (exportBtn) {
+  const chatMenuBtn = document.getElementById('chat-menu-btn');
+  if (chatMenuBtn) {
     // visibility (not display) keeps the button's width reserved in the layout,
     // so the centered INTELLIGENCE/WORKSPACE pill doesn't shift when it toggles.
     const show = targetId === 'tab-chat';
-    exportBtn.style.visibility = show ? '' : 'hidden';
-    exportBtn.style.pointerEvents = show ? '' : 'none';
+    chatMenuBtn.style.visibility = show ? '' : 'hidden';
+    chatMenuBtn.style.pointerEvents = show ? '' : 'none';
   }
+  document.getElementById('chat-menu')?.classList.remove('open');
 
   const appHeader = document.getElementById('app-hud-header');
   if (appHeader) appHeader.style.display = SUB_PAGE_TABS.includes(targetId) ? 'none' : '';
@@ -2230,6 +2230,55 @@ function setupSyncPanel() {
       setStatus('Restored ✓ — reloading…');
       setTimeout(() => location.reload(), 700);
     } catch (_) { setStatus('Network error.'); }
+  });
+}
+
+/* Chat options dropdown (the header's three-dot menu) */
+function setupChatMenu() {
+  const btn = document.getElementById('chat-menu-btn');
+  const menu = document.getElementById('chat-menu');
+  if (!btn || !menu) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => menu.classList.remove('open'));
+  menu.addEventListener('click', (e) => e.stopPropagation());
+
+  const chatAsText = () => {
+    const chat = getCurrentChat();
+    let out = `${chat?.title || 'VOID Chat'}\n\n`;
+    App.chatHistory.forEach(m => { out += `${m.role === 'user' ? 'You' : 'VOID'}: ${msgText(m.content)}\n\n`; });
+    return out.trim();
+  };
+
+  menu.querySelectorAll('.persona-item').forEach(row => {
+    row.addEventListener('click', async () => {
+      menu.classList.remove('open');
+      const act = row.dataset.chatmenu;
+      if (act === 'export') {
+        exportCurrentChat();
+      } else if (act === 'share') {
+        if (!App.chatHistory.length) return;
+        const text = chatAsText();
+        if (navigator.share) { try { await navigator.share({ title: getCurrentChat()?.title || 'VOID Chat', text }); } catch (_) {} }
+        else { navigator.clipboard?.writeText(text).catch(() => {}); appendMessage('system', '📋 Conversation copied — paste it anywhere to share.'); }
+      } else if (act === 'copy') {
+        if (!App.chatHistory.length) return;
+        navigator.clipboard?.writeText(chatAsText()).catch(() => {});
+        appendMessage('system', '📋 Conversation copied.');
+      } else if (act === 'rename') {
+        const chat = getCurrentChat();
+        if (!chat) return;
+        const name = prompt('Rename chat', chat.title || 'New chat');
+        if (name && name.trim()) { chat.title = name.trim().slice(0, 60); saveChats(); renderChatList(); }
+      } else if (act === 'delete') {
+        const chat = getCurrentChat();
+        if (!chat) return;
+        if (confirm('Delete this chat? This can\'t be undone.')) deleteChat(chat.id);
+      }
+    });
   });
 }
 
