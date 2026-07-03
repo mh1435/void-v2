@@ -256,6 +256,15 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .bubble-body pre code { background: transparent; padding: 0; font-size: 12px; }
 .bubble-body a { color: inherit; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.35); }
 
+.bubble-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 6px; }
+.source-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px;
+  padding: 4px 10px; font-size: 11px; color: var(--muted); text-decoration: none;
+  font-family: var(--hub-mono);
+}
+.source-chip:active { color: var(--accent); border-color: var(--accent); }
+
 .bubble-actions {
   display: flex; gap: 2px; margin-top: 4px; opacity: 0; transition: opacity 0.15s;
 }

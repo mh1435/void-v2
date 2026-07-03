@@ -178,14 +178,15 @@ function extractKnowledgeQuery(text) {
 
 async function getKnowledgeLookupCtx(text) {
   const q = extractKnowledgeQuery(text);
-  if (!q) return '';
+  if (!q) return { ctx: '', source: null };
   try {
     const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q.replace(/\s+/g, '_'))}`);
-    if (!r.ok) return '';
+    if (!r.ok) return { ctx: '', source: null };
     const d = await r.json();
-    if (!d.extract) return '';
-    return `\n\nKNOWLEDGE LOOKUP for "${q}" (Wikipedia): ${d.extract}`;
-  } catch(_) { return ''; }
+    if (!d.extract) return { ctx: '', source: null };
+    const url = d.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(q.replace(/\s+/g, '_'))}`;
+    return { ctx: `\n\nKNOWLEDGE LOOKUP for "${q}" (Wikipedia): ${d.extract}`, source: { label: 'Wikipedia', url } };
+  } catch(_) { return { ctx: '', source: null }; }
 }
 
 // Natural-language image-generation intent ("draw me a dragon", "generate an
@@ -212,15 +213,19 @@ function extractWebSearchQuery(text) {
 }
 async function getWebSearchCtx(text) {
   const q = extractWebSearchQuery(text);
-  if (!q) return '';
+  if (!q) return { ctx: '', source: null };
   try {
     const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`);
-    if (!r.ok) return '';
+    if (!r.ok) return { ctx: '', source: null };
     const d = await r.json();
     const summary = d.AbstractText || d.Answer || (d.RelatedTopics || []).map(t => t.Text).filter(Boolean).slice(0, 3).join(' | ');
-    if (!summary) return '';
-    return `\n\nWEB LOOKUP for "${q}": ${summary.slice(0, 600)}${d.AbstractURL ? ` (source: ${d.AbstractURL})` : ''}`;
-  } catch (_) { return ''; }
+    if (!summary) return { ctx: '', source: null };
+    let source = null;
+    if (d.AbstractURL) {
+      try { source = { label: new URL(d.AbstractURL).hostname.replace(/^www\./, ''), url: d.AbstractURL }; } catch (_) {}
+    }
+    return { ctx: `\n\nWEB LOOKUP for "${q}": ${summary.slice(0, 600)}${d.AbstractURL ? ` (source: ${d.AbstractURL})` : ''}`, source };
+  } catch (_) { return { ctx: '', source: null }; }
 }
 
 /* ============ Open other apps (like Gemini's app-opening) ============ */
@@ -2177,15 +2182,16 @@ async function sendMessage() {
 async function generateAssistantReply(triggerText) {
   const typingId = appendTyping();
   const weatherCtx = await getWeatherLookupCtx(triggerText || '');
-  const knowledgeCtx = await getKnowledgeLookupCtx(triggerText || '');
-  const webCtx = await getWebSearchCtx(triggerText || '');
+  const knowledge = await getKnowledgeLookupCtx(triggerText || '');
+  const web = await getWebSearchCtx(triggerText || '');
+  const sources = [knowledge.source, web.source].filter(Boolean);
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
   const recent = App.chatHistory.slice(-20).map((m, i, arr) =>
     (i < arr.length - 1 && Array.isArray(m.content))
       ? { role: m.role, content: msgText(m.content) + ' [attached an image earlier]' }
       : m);
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx + webCtx) }, ...recent];
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx + web.ctx) }, ...recent];
 
   let reply = null;
   let lastError = null;
@@ -2246,7 +2252,7 @@ async function generateAssistantReply(triggerText) {
   } // end if (!reply) fallback chain
 
   if (reply) {
-    App.chatHistory.push({ role: 'assistant', content: reply });
+    App.chatHistory.push({ role: 'assistant', content: reply, sources });
     saveChatHistory();
     const historyIndex = App.chatHistory.length - 1;
     if (streamedLive) {
@@ -2255,13 +2261,13 @@ async function generateAssistantReply(triggerText) {
       if (el) {
         el.removeAttribute('id');
         el.dataset.historyIndex = historyIndex;
-        el.innerHTML = buildBubbleInnerHTML('assistant', reply, historyIndex);
+        el.innerHTML = buildBubbleInnerHTML('assistant', reply, historyIndex, sources);
       } else {
-        appendMessage('assistant', reply, historyIndex);
+        appendMessage('assistant', reply, historyIndex, sources);
       }
     } else {
       removeTyping(typingId);
-      streamInMessage(reply, historyIndex);
+      streamInMessage(reply, historyIndex, sources);
     }
     if (App.voiceConvo) {
       App.voiceTriggered = false;
@@ -2277,8 +2283,8 @@ async function generateAssistantReply(triggerText) {
 
 // Typewriter reveal for assistant replies — gives the streaming feel without
 // needing SSE support from the Worker. Skipped under reduced motion.
-function streamInMessage(text, historyIndex) {
-  appendMessage('system', App.settings.reducedMotion ? text : '', historyIndex);
+function streamInMessage(text, historyIndex, sources = []) {
+  appendMessage('system', App.settings.reducedMotion ? text : '', historyIndex, sources);
   if (App.settings.reducedMotion) return;
   const box = document.getElementById('messages-box');
   const bubble = box.lastElementChild?.querySelector('.bubble-body');
@@ -2348,7 +2354,7 @@ function editMessageAt(index) {
   input.focus();
 }
 
-function buildBubbleInnerHTML(role, content, historyIndex) {
+function buildBubbleInnerHTML(role, content, historyIndex, sources = []) {
   const text = msgText(content);
   const images = msgImages(content);
   const isUser = role === 'user';
@@ -2358,6 +2364,9 @@ function buildBubbleInnerHTML(role, content, historyIndex) {
     ? `<img src="${u}" alt="attachment" style="max-width:200px;max-height:200px;border-radius:12px;display:block;margin-bottom:6px;">`
     : `<img src="${u}" alt="generated image" loading="lazy" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px;">`
   ).join('');
+  const sourcesHTML = sources.length
+    ? `<div class="bubble-sources">${sources.map(s => `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="source-chip">🔗 ${escapeHTML(s.label)}</a>`).join('')}</div>`
+    : '';
 
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   const label = isUser ? 'YOU' : 'VOID';
@@ -2365,6 +2374,7 @@ function buildBubbleInnerHTML(role, content, historyIndex) {
   return `
     <div class="bubble-meta">${label} // ${time}</div>
     <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${imgHTML}${renderMarkdownLite(text)}</div>
+    ${sourcesHTML}
     <div class="bubble-actions">
       <button class="bubble-act-btn" data-act="copy" aria-label="Copy message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -2388,7 +2398,7 @@ function buildBubbleInnerHTML(role, content, historyIndex) {
   `;
 }
 
-function appendMessage(role, content, historyIndex = null) {
+function appendMessage(role, content, historyIndex = null, sources = []) {
   const box = document.getElementById('messages-box');
   const welcome = box.querySelector('.matrix-welcome');
   if (welcome) welcome.remove();
@@ -2399,7 +2409,7 @@ function appendMessage(role, content, historyIndex = null) {
   const el = document.createElement('div');
   el.className = `chat-bubble ${role === 'user' ? 'user' : 'assistant'}`;
   if (historyIndex != null) el.dataset.historyIndex = historyIndex;
-  el.innerHTML = buildBubbleInnerHTML(role, content, historyIndex);
+  el.innerHTML = buildBubbleInnerHTML(role, content, historyIndex, sources);
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return el;
@@ -2813,7 +2823,7 @@ function renderActiveChat() {
   box.innerHTML = '';
   App.msgCount = 0;
   if (App.chatHistory.length) {
-    App.chatHistory.forEach((msg, i) => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content, i));
+    App.chatHistory.forEach((msg, i) => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content, i, msg.sources || []));
   } else {
     box.innerHTML = `<div class="matrix-welcome"><div class="welcome-logo">VOID</div>
       <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
@@ -4864,9 +4874,9 @@ const VoidFloat = (() => {
 
     (async () => {
       const weatherCtx = await getWeatherLookupCtx(text);
-      const knowledgeCtx = await getKnowledgeLookupCtx(text);
+      const knowledge = await getKnowledgeLookupCtx(text);
       const msgs = [
-        { role: 'system', content: buildSystemPrompt(weatherCtx + knowledgeCtx) + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
+        { role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx) + '\n\nYou are responding inside a compact floating widget. Keep replies very short (1–3 sentences).' },
         ...history.slice(-10)
       ];
       let reply = null;
