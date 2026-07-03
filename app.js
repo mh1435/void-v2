@@ -84,6 +84,15 @@ const PERSONAS = [
   { id: 'roast',     label: 'Roast',      emoji: '🔥', prompt: 'PERSONA: You are in ROAST mode. Be playfully savage and witty with the user — clever burns, never genuinely cruel, never slurs or attacks on protected traits. Keep it fun.' },
 ];
 
+const IMAGE_STYLES = [
+  { id: '',                                                     emoji: '🎨', label: 'No style' },
+  { id: 'photorealistic, highly detailed, 8k',                  emoji: '📷', label: 'Realistic' },
+  { id: 'anime style, vibrant colors, studio quality',          emoji: '🌸', label: 'Anime' },
+  { id: '3d render, octane render, cinematic lighting',         emoji: '🧊', label: '3D Render' },
+  { id: 'pixel art, 16-bit, retro game style',                  emoji: '👾', label: 'Pixel Art' },
+  { id: 'cinematic still, dramatic lighting, film grain',       emoji: '🎬', label: 'Cinematic' },
+];
+
 const LANG_NAMES = {
   en:'English', ar:'Arabic', ms:'Malay', id:'Indonesian', tl:'Filipino',
   th:'Thai', vi:'Vietnamese', zh:'Chinese', ko:'Korean', ja:'Japanese',
@@ -177,6 +186,18 @@ async function getKnowledgeLookupCtx(text) {
     if (!d.extract) return '';
     return `\n\nKNOWLEDGE LOOKUP for "${q}" (Wikipedia): ${d.extract}`;
   } catch(_) { return ''; }
+}
+
+// Natural-language image-generation intent ("draw me a dragon", "generate an
+// image of a sunset", "make a picture of..."). Deliberately narrow so it
+// only fires on clear requests, not every mention of the word "image".
+function extractImageGenPrompt(text) {
+  const m = text.trim().match(/^(?:hey\s+void[,\s]+)?(?:can you |could you |please )?(?:draw|paint|sketch)(?:\s+me)?\s+(.+)$/i)
+    || text.trim().match(/^(?:hey\s+void[,\s]+)?(?:can you |could you |please )?(?:generate|create|make)(?:\s+me)?\s+(?:an?|the)\s+(?:image|picture|photo|illustration|drawing)\s+of\s+(.+)$/i)
+    || text.trim().match(/^(?:hey\s+void[,\s]+)?imagine\s+(.+)$/i);
+  if (!m) return null;
+  const prompt = m[1].trim().replace(/[?.!]+$/, '').trim();
+  return prompt.length >= 2 && prompt.length <= 300 ? prompt : null;
 }
 
 // Web-search grounding for current-events style questions ("news about X",
@@ -495,6 +516,7 @@ function bootApp() {
   setupPreferencesPanel();
   setupProviderPicker();
   setupPersonaPicker();
+  setupImageStylePicker();
   setupPlusMenu();
   setupChatMenu();
   setupSyncPanel();
@@ -1860,11 +1882,11 @@ async function sendMessage() {
   if (text.toLowerCase().startsWith('/image ')) {
     const prompt = text.slice(7).trim();
     if (prompt) {
-      appendMessage('user', text);
+      App.chatHistory.push({ role: 'user', content: text });
+      appendMessage('user', text, App.chatHistory.length - 1);
+      saveChatHistory();
       input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-      const seed = Math.floor(Math.random() * 1e9);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=640&seed=${seed}&nologo=true`;
-      appendImageMessage(url, prompt);
+      await runImageGeneration(prompt);
     }
     return;
   }
@@ -1927,7 +1949,7 @@ async function sendMessage() {
       '`/qr <text or link>` — QR code',
       '`/roll 2d6` · `/flip` · `/pick a, b, c` — quick decisions',
       '',
-      'Also try: "open spotify", "navigate to <place>", "play <song> on youtube", "weather in <city>", "who is <person>"',
+      'Also try: "open spotify", "navigate to <place>", "play <song> on youtube", "weather in <city>", "who is <person>", "draw me <anything>"',
     ].join('\n'));
     return;
   }
@@ -2008,6 +2030,17 @@ async function sendMessage() {
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     appendMessage('system', `🚀 ${appAction.label}`);
     window.open(appAction.url, '_blank');
+    return;
+  }
+
+  // Natural-language image generation ("draw me a dragon", "generate an image of...")
+  const imagePrompt = extractImageGenPrompt(text);
+  if (imagePrompt) {
+    App.chatHistory.push({ role: 'user', content: text });
+    appendMessage('user', text, App.chatHistory.length - 1);
+    saveChatHistory();
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runImageGeneration(imagePrompt);
     return;
   }
 
@@ -2133,6 +2166,19 @@ function streamInMessage(text, historyIndex) {
 // Drops the given assistant reply (and anything after it) from history, then re-asks.
 async function regenerateMessageAt(index) {
   if (index == null || !App.chatHistory[index] || App.chatHistory[index].role !== 'assistant') return;
+  const old = App.chatHistory[index];
+  // Image replies regenerate as a fresh image (new seed), not a new LLM call
+  const oldImages = msgImages(old.content);
+  if (oldImages.length) {
+    const caption = msgText(old.content);
+    const promptMatch = caption.match(/^Generated:\s*"([\s\S]+)"$/);
+    const prompt = promptMatch ? promptMatch[1] : caption;
+    App.chatHistory = App.chatHistory.slice(0, index);
+    saveChats();
+    renderActiveChat();
+    await runImageGeneration(prompt);
+    return;
+  }
   let triggerText = '';
   for (let i = index - 1; i >= 0; i--) {
     if (App.chatHistory[i].role === 'user') { triggerText = App.chatHistory[i].content; break; }
@@ -2170,10 +2216,15 @@ function appendMessage(role, content, historyIndex = null) {
 
   const text = msgText(content);
   const images = msgImages(content);
-  const imgHTML = images.map(u => `<img src="${u}" alt="attachment" style="max-width:200px;max-height:200px;border-radius:12px;display:block;margin-bottom:6px;">`).join('');
+  const isUser = role === 'user';
+  // AI-generated images are the actual content and deserve real size; user-attached
+  // photo previews stay small since the point is just showing what was sent.
+  const imgHTML = images.map(u => isUser
+    ? `<img src="${u}" alt="attachment" style="max-width:200px;max-height:200px;border-radius:12px;display:block;margin-bottom:6px;">`
+    : `<img src="${u}" alt="generated image" loading="lazy" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px;">`
+  ).join('');
 
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  const isUser = role === 'user';
   const bubbleClass = isUser ? 'user' : 'assistant';
   const label = isUser ? 'YOU' : 'VOID';
 
@@ -2192,6 +2243,9 @@ function appendMessage(role, content, historyIndex = null) {
       </button>` : ''}${!isUser && historyIndex != null ? `
       <button class="bubble-act-btn" data-act="regen" aria-label="Regenerate response">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>` : ''}${!isUser && images.length ? `
+      <button class="bubble-act-btn" data-act="download-img" data-img-url="${escapeHTML(images[0])}" aria-label="Download image">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button>` : ''}${!isUser ? `
       <button class="bubble-act-btn${App.bookmarks.some(b => b.text === text) ? ' starred' : ''}" data-act="star" aria-label="Save message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="${App.bookmarks.some(b => b.text === text) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -2239,12 +2293,61 @@ function setupMessageActions() {
       }
     } else if (act === 'regen') {
       regenerateMessageAt(index);
+    } else if (act === 'download-img') {
+      downloadImage(btn.dataset.imgUrl);
     } else if (act === 'star') {
       const justSaved = toggleBookmark(rawText);
       btn.classList.toggle('starred', justSaved);
       btn.querySelector('svg').setAttribute('fill', justSaved ? 'currentColor' : 'none');
     }
   });
+}
+
+async function downloadImage(url) {
+  if (!url) return;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = `void-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 4000);
+  } catch (_) {
+    // cross-origin fetch blocked or offline — fall back to opening it directly
+    window.open(url, '_blank');
+  }
+}
+
+// AI image generation — free, no-key, via Pollinations. Shared by the /image
+// command and natural-language requests ("draw me a dragon"). Shows a typing
+// indicator while the image loads, then persists it into chat history like
+// any other assistant message (so it survives reload/chat-switch and gets
+// the normal copy/star/delete/download actions for free).
+async function runImageGeneration(prompt) {
+  const typingId = appendTyping();
+  const seed = Math.floor(Math.random() * 1e9);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true`;
+  try {
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('image failed to load'));
+      img.src = url;
+      setTimeout(() => reject(new Error('image generation timed out')), 30000);
+    });
+    removeTyping(typingId);
+    const content = [{ type: 'image_url', image_url: { url } }, { type: 'text', text: `Generated: "${prompt}"` }];
+    App.chatHistory.push({ role: 'assistant', content });
+    saveChatHistory();
+    appendMessage('assistant', content, App.chatHistory.length - 1);
+  } catch (_) {
+    removeTyping(typingId);
+    appendMessage('system', `Couldn't generate that image — try rephrasing the prompt or try again in a moment.`);
+  }
 }
 
 function appendImageMessage(url, prompt) {
@@ -2733,6 +2836,36 @@ function setupPersonaPicker() {
   syncPersonaBadge();
 }
 
+/* ============ Image style picker (for /image generation) ============ */
+
+function setupImageStylePicker() {
+  const picker = document.getElementById('image-style-picker');
+  const list = document.getElementById('image-style-list');
+  if (!picker || !list) return;
+
+  list.innerHTML = IMAGE_STYLES.map((s, i) => `
+    <div class="persona-item" data-style-index="${i}">
+      <span class="persona-emoji">${s.emoji}</span>
+      <span class="persona-name">${s.label}</span>
+    </div>`).join('');
+
+  list.querySelectorAll('.persona-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const style = IMAGE_STYLES[parseInt(item.dataset.styleIndex, 10)];
+      picker.classList.remove('open');
+      const input = document.getElementById('chat-input');
+      if (!input) return;
+      input.value = style.id ? `/image ${style.id}, ` : '/image ';
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      updateSendMicBtn();
+    });
+  });
+
+  document.addEventListener('click', () => picker.classList.remove('open'));
+  picker.addEventListener('click', (e) => e.stopPropagation());
+}
+
 function syncPersonaBadge() {
   const btn = document.getElementById('persona-pick-btn');
   if (!btn) return;
@@ -2773,6 +2906,11 @@ function setupPlusMenu() {
       menu.classList.remove('open');
       const act = row.dataset.plus;
       if (act === 'attach') document.getElementById('attach-btn')?.click();
+      else if (act === 'image') {
+        document.getElementById('provider-picker')?.classList.remove('open');
+        document.getElementById('persona-picker')?.classList.remove('open');
+        document.getElementById('image-style-picker')?.classList.add('open');
+      }
       else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
       else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
       else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
