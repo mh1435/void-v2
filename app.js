@@ -1812,10 +1812,16 @@ async function callPollinations(messages) {
   return data.choices[0].message.content;
 }
 
+let sendMessageInFlight = false;
 async function sendMessage() {
+  // Guards against a stray double-submit (e.g. a slow tap registering twice
+  // on a flaky connection) firing the same command/reply twice.
+  if (sendMessageInFlight) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+  sendMessageInFlight = true;
+  try {
   buzz();
 
   // /define command
@@ -1878,15 +1884,20 @@ async function sendMessage() {
     return;
   }
 
-  // /image command — free, no-key image generation via Pollinations
+  // /image command — free, no-key image generation via Pollinations, or
+  // image editing (via Gemini) when a reference photo is attached
   if (text.toLowerCase().startsWith('/image ')) {
     const prompt = text.slice(7).trim();
     if (prompt) {
-      App.chatHistory.push({ role: 'user', content: text });
-      appendMessage('user', text, App.chatHistory.length - 1);
+      const refImage = App.pendingImage;
+      const userContent = refImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }] : text;
+      App.chatHistory.push({ role: 'user', content: userContent });
+      appendMessage('user', userContent, App.chatHistory.length - 1);
       saveChatHistory();
+      clearPendingImage();
       input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-      await runImageGeneration(prompt);
+      if (refImage) await runImageEdit(prompt, refImage);
+      else await runImageGeneration(prompt);
     }
     return;
   }
@@ -1940,7 +1951,7 @@ async function sendMessage() {
       '🧭 **VOID commands**',
       '',
       '`/brief` — daily briefing (weather, tasks, quote)',
-      '`/image <prompt>` — generate an image',
+      '`/image <prompt>` — generate an image (attach a photo first to edit/restyle it instead)',
       '`/define <word>` — dictionary lookup',
       '`/price <coin>` — crypto price',
       '`/convert 100 usd to eur` — currency',
@@ -2033,14 +2044,19 @@ async function sendMessage() {
     return;
   }
 
-  // Natural-language image generation ("draw me a dragon", "generate an image of...")
+  // Natural-language image generation ("draw me a dragon", "generate an image of..."),
+  // or image editing (via Gemini) when a reference photo is attached
   const imagePrompt = extractImageGenPrompt(text);
   if (imagePrompt) {
-    App.chatHistory.push({ role: 'user', content: text });
-    appendMessage('user', text, App.chatHistory.length - 1);
+    const refImage = App.pendingImage;
+    const userContent = refImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }] : text;
+    App.chatHistory.push({ role: 'user', content: userContent });
+    appendMessage('user', userContent, App.chatHistory.length - 1);
     saveChatHistory();
+    clearPendingImage();
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    await runImageGeneration(imagePrompt);
+    if (refImage) await runImageEdit(imagePrompt, refImage);
+    else await runImageGeneration(imagePrompt);
     return;
   }
 
@@ -2059,6 +2075,9 @@ async function sendMessage() {
   updateSendMicBtn();
 
   await generateAssistantReply(text);
+  } finally {
+    sendMessageInFlight = false;
+  }
 }
 
 // Runs the provider fallback chain against the current App.chatHistory and appends the
@@ -2327,18 +2346,29 @@ async function downloadImage(url) {
 // indicator while the image loads, then persists it into chat history like
 // any other assistant message (so it survives reload/chat-switch and gets
 // the normal copy/star/delete/download actions for free).
+function loadImageOnce(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = resolve;
+    img.onerror = () => reject(new Error('image failed to load'));
+    img.src = url;
+    setTimeout(() => reject(new Error('image generation timed out')), timeoutMs);
+  });
+}
+
 async function runImageGeneration(prompt) {
   const typingId = appendTyping();
-  const seed = Math.floor(Math.random() * 1e9);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true`;
+  const pollinationsUrl = () => `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${Math.floor(Math.random() * 1e9)}&nologo=true`;
   try {
-    await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = resolve;
-      img.onerror = () => reject(new Error('image failed to load'));
-      img.src = url;
-      setTimeout(() => reject(new Error('image generation timed out')), 30000);
-    });
+    let url = pollinationsUrl();
+    try {
+      await loadImageOnce(url, 25000);
+    } catch (_) {
+      // Pollinations occasionally drops a request — one silent retry with a
+      // fresh seed before actually giving up on the user.
+      url = pollinationsUrl();
+      await loadImageOnce(url, 25000);
+    }
     removeTyping(typingId);
     const content = [{ type: 'image_url', image_url: { url } }, { type: 'text', text: `Generated: "${prompt}"` }];
     App.chatHistory.push({ role: 'assistant', content });
@@ -2347,6 +2377,36 @@ async function runImageGeneration(prompt) {
   } catch (_) {
     removeTyping(typingId);
     appendMessage('system', `Couldn't generate that image — try rephrasing the prompt or try again in a moment.`);
+  }
+}
+
+// Image editing / reference-image generation — "make this a pixel art",
+// "put a hat on this cat". Uses the attached photo (App.pendingImage) via
+// Gemini's image model, proxied through the worker (reuses GEMINI_KEY).
+async function runImageEdit(prompt, imageDataUri) {
+  const typingId = appendTyping();
+  try {
+    const m = imageDataUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) throw new Error('bad image data');
+    const [, mimeType, base64] = m;
+    const res = await fetch(`${VOID_CORE_API.url}/image-edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, image: base64, mimeType }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!res.ok) throw new Error('image edit failed');
+    const data = await res.json();
+    if (!data.data) throw new Error('no image in response');
+    const url = `data:${data.mimeType || 'image/png'};base64,${data.data}`;
+    removeTyping(typingId);
+    const content = [{ type: 'image_url', image_url: { url } }, { type: 'text', text: `Edited: "${prompt}"` }];
+    App.chatHistory.push({ role: 'assistant', content });
+    saveChatHistory();
+    appendMessage('assistant', content, App.chatHistory.length - 1);
+  } catch (_) {
+    removeTyping(typingId);
+    appendMessage('system', `Couldn't edit that image — try a different prompt or try again in a moment.`);
   }
 }
 

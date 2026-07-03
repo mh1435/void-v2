@@ -21,6 +21,7 @@ export default {
     if (url.pathname.startsWith('/pay')) return handlePay(request, env, url);
     if (url.pathname.startsWith('/sync')) return handleSync(request, env, url);
     if (url.pathname.startsWith('/tts')) return handleTTS(request, env);
+    if (url.pathname.startsWith('/image-edit')) return handleImageEdit(request, env);
     if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
     let body;
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
@@ -77,6 +78,43 @@ async function handleTTS(request, env) {
     }
     const buf = await res.arrayBuffer();
     return new Response(buf, { status: 200, headers: { 'Content-Type': 'audio/wav', 'Access-Control-Allow-Origin': '*' } });
+  } catch (e) {
+    return cors(JSON.stringify({ error: String(e) }), 500);
+  }
+}
+
+/* ── Image editing (reference-image generation) ─────────────────────
+   Reuses the GEMINI_KEY secret already configured for chat — no separate
+   key needed. Gemini's image-capable model can take a user photo plus a
+   text prompt and return an edited/restyled image. */
+async function handleImageEdit(request, env) {
+  if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
+  if (!env.GEMINI_KEY) return cors(JSON.stringify({ error: 'image editing not configured' }), 503);
+  let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
+  const prompt = (body.prompt || '').toString().slice(0, 800);
+  const imageData = (body.image || '').toString();
+  const mimeType = (body.mimeType || 'image/jpeg').toString();
+  if (!prompt || !imageData) return cors(JSON.stringify({ error: 'prompt and image required' }), 400);
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': env.GEMINI_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: imageData } }] }],
+        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return cors(JSON.stringify({ error: 'image edit provider error', detail: detail.slice(0, 300) }), 502);
+    }
+    const data = await res.json();
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const imgPart = parts.find(p => p.inline_data || p.inlineData);
+    const inline = imgPart?.inline_data || imgPart?.inlineData;
+    if (!inline?.data) return cors(JSON.stringify({ error: 'no image returned' }), 502);
+    return cors(JSON.stringify({ mimeType: inline.mime_type || inline.mimeType || 'image/png', data: inline.data }));
   } catch (e) {
     return cors(JSON.stringify({ error: String(e) }), 500);
   }
