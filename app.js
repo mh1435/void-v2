@@ -790,9 +790,9 @@ function updateAppChromeForTab(targetId) {
   const wordmark = document.getElementById('workspace-wordmark');
   const isChat = targetId === 'tab-chat';
   if (chatMenuBtn) {
-    // visibility (not display) keeps the button's width reserved in the layout,
-    // so the centered INTELLIGENCE/WORKSPACE pill doesn't shift when it toggles.
-    chatMenuBtn.style.visibility = isChat ? '' : 'hidden';
+    // display:none on Workspace so it doesn't reserve phantom width next to
+    // the wordmark — that reserved space was crowding VOID into the pill.
+    chatMenuBtn.style.display = isChat ? '' : 'none';
     chatMenuBtn.style.pointerEvents = isChat ? '' : 'none';
   }
   // The VOID wordmark fills that same left slot on Workspace (where the
