@@ -1831,6 +1831,55 @@ async function callOpenAICompat(url, key, model, messages) {
   return data.choices[0].message.content;
 }
 
+// True token-by-token streaming (real ChatGPT/Claude-style live text) via
+// standard OpenAI-compatible SSE — onChunk(fullTextSoFar) fires as each
+// piece arrives. If the connection drops mid-stream, whatever text already
+// arrived is returned as the (truncated) reply instead of being thrown away,
+// so the caller never abandons a bubble the user has already started reading.
+async function callOpenAICompatStream(url, key, model, messages, onChunk) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (key) headers['Authorization'] = `Bearer ${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ model, messages, max_tokens: 1024, stream: true })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `${res.status}`);
+  }
+  if (!res.body) throw new Error('no stream body');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep the possibly-incomplete last line for next read
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const json = JSON.parse(payload);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) { full += delta; onChunk(full); }
+        } catch (_) { /* partial/malformed chunk — skip it */ }
+      }
+    }
+  } catch (streamErr) {
+    if (full) return full; // got something real before the drop — keep it
+    throw streamErr;
+  }
+  if (!full) throw new Error('empty stream response');
+  return full;
+}
+
 // One-shot AI call outside the chat history — used by /translate etc.
 async function quickAI(systemPrompt, userText) {
   const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }];
@@ -2140,11 +2189,29 @@ async function generateAssistantReply(triggerText) {
 
   let reply = null;
   let lastError = null;
+  let streamedLive = false;
+
+  // Real token-by-token streaming: the typing-dots bubble morphs in place
+  // into live text the first time a chunk arrives, so there's no flicker
+  // between "thinking" and "answering". Non-streaming fallback providers
+  // (native Gemini, Pollinations) just skip this and use the old
+  // wait-then-playback behavior below.
+  const box = document.getElementById('messages-box');
+  function onChunk(full) {
+    const el = document.getElementById(typingId);
+    if (!el) return;
+    if (!streamedLive) {
+      streamedLive = true;
+      el.querySelector('.bubble-body').classList.add('bubble-ai');
+    }
+    el.querySelector('.bubble-body').textContent = full;
+    box.scrollTop = box.scrollHeight;
+  }
 
   // Always try the shared VOID core first
   if (VOID_CORE_API.url) {
     try {
-      reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
+      reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk);
     } catch(e) { lastError = e; }
   }
 
@@ -2160,17 +2227,17 @@ async function generateAssistantReply(triggerText) {
       if (p === 'gemini' && App.settings.geminiKey) {
         reply = await callGemini(messages); break;
       } else if (p === 'groq' && App.settings.groqKey) {
-        reply = await callOpenAICompat('https://api.groq.com/openai/v1/chat/completions',
-          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages); break;
+        reply = await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
+          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages, onChunk); break;
       } else if (p === 'openrouter' && App.settings.apiKey) {
-        reply = await callOpenAICompat('https://openrouter.ai/api/v1/chat/completions',
-          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages); break;
+        reply = await callOpenAICompatStream('https://openrouter.ai/api/v1/chat/completions',
+          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk); break;
       } else if (p === 'together' && App.settings.togetherKey) {
-        reply = await callOpenAICompat('https://api.together.xyz/v1/chat/completions',
-          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages); break;
+        reply = await callOpenAICompatStream('https://api.together.xyz/v1/chat/completions',
+          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages, onChunk); break;
       } else if (p === 'mistral' && App.settings.mistralKey) {
-        reply = await callOpenAICompat('https://api.mistral.ai/v1/chat/completions',
-          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages); break;
+        reply = await callOpenAICompatStream('https://api.mistral.ai/v1/chat/completions',
+          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk); break;
       } else if (p === 'pollinations') {
         reply = await callPollinations(messages); break;
       }
@@ -2178,12 +2245,24 @@ async function generateAssistantReply(triggerText) {
   }
   } // end if (!reply) fallback chain
 
-  removeTyping(typingId);
-
   if (reply) {
     App.chatHistory.push({ role: 'assistant', content: reply });
     saveChatHistory();
-    streamInMessage(reply, App.chatHistory.length - 1);
+    const historyIndex = App.chatHistory.length - 1;
+    if (streamedLive) {
+      // Upgrade the same bubble in place: real markdown render + action buttons.
+      const el = document.getElementById(typingId);
+      if (el) {
+        el.removeAttribute('id');
+        el.dataset.historyIndex = historyIndex;
+        el.innerHTML = buildBubbleInnerHTML('assistant', reply, historyIndex);
+      } else {
+        appendMessage('assistant', reply, historyIndex);
+      }
+    } else {
+      removeTyping(typingId);
+      streamInMessage(reply, historyIndex);
+    }
     if (App.voiceConvo) {
       App.voiceTriggered = false;
       if (App.settings.voiceEnabled) speak(reply);           // speak() resumes listening when done
@@ -2191,6 +2270,7 @@ async function generateAssistantReply(triggerText) {
     } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
     if (triggerText) maybeExtractMemory(triggerText); // fire-and-forget, doesn't block the reply
   } else {
+    removeTyping(typingId);
     appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
   }
 }
@@ -2268,14 +2348,7 @@ function editMessageAt(index) {
   input.focus();
 }
 
-function appendMessage(role, content, historyIndex = null) {
-  const box = document.getElementById('messages-box');
-  const welcome = box.querySelector('.matrix-welcome');
-  if (welcome) welcome.remove();
-
-  App.msgCount++;
-  updateWelcomeStatsLine();
-
+function buildBubbleInnerHTML(role, content, historyIndex) {
   const text = msgText(content);
   const images = msgImages(content);
   const isUser = role === 'user';
@@ -2287,13 +2360,9 @@ function appendMessage(role, content, historyIndex = null) {
   ).join('');
 
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  const bubbleClass = isUser ? 'user' : 'assistant';
   const label = isUser ? 'YOU' : 'VOID';
 
-  const el = document.createElement('div');
-  el.className = `chat-bubble ${bubbleClass}`;
-  if (historyIndex != null) el.dataset.historyIndex = historyIndex;
-  el.innerHTML = `
+  return `
     <div class="bubble-meta">${label} // ${time}</div>
     <div class="bubble-body${isUser ? '' : ' bubble-ai'}">${imgHTML}${renderMarkdownLite(text)}</div>
     <div class="bubble-actions">
@@ -2317,8 +2386,23 @@ function appendMessage(role, content, historyIndex = null) {
       </button>
     </div>
   `;
+}
+
+function appendMessage(role, content, historyIndex = null) {
+  const box = document.getElementById('messages-box');
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+
+  App.msgCount++;
+  updateWelcomeStatsLine();
+
+  const el = document.createElement('div');
+  el.className = `chat-bubble ${role === 'user' ? 'user' : 'assistant'}`;
+  if (historyIndex != null) el.dataset.historyIndex = historyIndex;
+  el.innerHTML = buildBubbleInnerHTML(role, content, historyIndex);
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
+  return el;
 }
 
 function setupMessageActions() {

@@ -27,19 +27,23 @@ export default {
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
     const messages = body.messages || [];
     const max_tokens = body.max_tokens || 1024;
+    const wantStream = !!body.stream;
     const available = PROVIDERS.filter(p => env[p.keyEnv]);
     const order = shuffle(available);
     for (const p of order) {
       try {
         const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env[p.keyEnv]}`, ...(p.extra || {}) };
-        const res = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify({ model: p.model, messages, max_tokens }), signal: AbortSignal.timeout(30000) });
-        if (res.ok) return cors(await res.text());
+        const res = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify({ model: p.model, messages, max_tokens, stream: wantStream }), signal: AbortSignal.timeout(60000) });
+        // res.ok only requires the response headers to have arrived, not the
+        // (possibly still-streaming) body — so it's still safe to fall back
+        // to the next provider below without ever having sent bytes to the client.
+        if (res.ok) return wantStream ? streamResponse(res) : cors(await res.text());
         if (res.status === 429) continue;
       } catch { continue; }
     }
     try {
-      const res = await fetch('https://text.pollinations.ai/openai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'openai', messages, max_tokens }), signal: AbortSignal.timeout(30000) });
-      if (res.ok) return cors(await res.text());
+      const res = await fetch('https://text.pollinations.ai/openai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'openai', messages, max_tokens, stream: wantStream }), signal: AbortSignal.timeout(60000) });
+      if (res.ok) return wantStream ? streamResponse(res) : cors(await res.text());
     } catch {}
     return cors(JSON.stringify({ error: 'All providers unavailable' }), 502);
   },
@@ -243,4 +247,19 @@ async function verifyStripe(payload, sigHeader, secret) {
 
 function cors(body, status = 200) {
   return new Response(body, { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
+}
+
+// Pipes an upstream SSE chat-completions stream straight through to the
+// client as it arrives, instead of buffering the whole reply first.
+function streamResponse(res) {
+  return new Response(res.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
