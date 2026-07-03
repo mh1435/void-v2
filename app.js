@@ -270,8 +270,9 @@ function detectAppAction(text) {
 }
 
 async function initLiveContext() {
-  // Try GPS silently — if Android already granted permission it succeeds immediately,
-  // if not, error callback fires right away and we fall through to IP-based.
+  // Try GPS — if permission was already granted (in-app or via Android Settings)
+  // this resolves with a real fix; if not/denied, the error callback fires and
+  // we fall through to IP-based location instead.
   if (navigator.geolocation) {
     await new Promise(resolve => {
       navigator.geolocation.getCurrentPosition(async pos => {
@@ -289,22 +290,25 @@ async function initLiveContext() {
         } catch(_) {}
         resolve();
       }, () => resolve(),
-      { timeout: 1, maximumAge: Infinity }); // cached only — no dialog, no blocking
+      { timeout: 6000, maximumAge: 300000 }); // cached fix up to 5min old is fine, otherwise wait up to 6s for a fresh one
     });
   }
 
-  // Fall back to IP-based if GPS didn't give a city
+  // Fall back to IP-based if GPS didn't give a city (no permission, or it timed out)
   if (!App.liveContext.city) {
     try {
-      const r = await fetch('https://ip-api.com/json/?fields=city,country,countryCode,lat,lon,timezone');
+      // ip-api.com's free tier is HTTP-only (403s on HTTPS) and would get
+      // mixed-content-blocked from this HTTPS app anyway — ipwho.is is free,
+      // keyless, and HTTPS-native.
+      const r = await fetch('https://ipwho.is/');
       if (r.ok) {
         const d = await r.json();
-        if (d.city) {
+        if (d.success !== false && d.city) {
           App.liveContext.city     = d.city;
           App.liveContext.country  = d.country;
-          App.liveContext.lat      = d.lat;
-          App.liveContext.lon      = d.lon;
-          App.liveContext.timezone = d.timezone;
+          App.liveContext.lat      = d.latitude;
+          App.liveContext.lon      = d.longitude;
+          App.liveContext.timezone = d.timezone?.id || '';
         }
       }
     } catch(_) {}
@@ -1535,28 +1539,61 @@ function setupChat() {
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-msg-btn');
 
+  // The browser Web Speech API (webkitSpeechRecognition) only works in standalone
+  // Chrome — it's not available inside an Android WebView, which is how this app
+  // runs once packaged as an APK. So the native app uses a real Capacitor plugin
+  // instead; the web/PWA build keeps using the Web Speech API as before.
+  const NativeSTT = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.SpeechRecognition : null;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognizer = null;
   let listening = false;
+  let nativeSTTPermGranted = false;
 
-  if (SpeechRecognition) {
+  function handleHeardText(text) {
+    if (!text) return;
+    if (App.voiceConvo) {
+      // Live voice mode: send what was heard immediately, hands-free
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      sendMessage();
+      return;
+    }
+    input.value = (input.value ? input.value + ' ' : '') + text;
+    input.dispatchEvent(new Event('input'));
+    App.voiceTriggered = true;
+  }
+
+  async function startNativeListening() {
+    if (listening) return;
+    try {
+      if (!nativeSTTPermGranted) {
+        const perm = await NativeSTT.requestPermissions();
+        nativeSTTPermGranted = perm.speechRecognition === 'granted' || perm.speechRecognition === 'limited';
+        if (!nativeSTTPermGranted) {
+          appendMessage('system', "🎙 Microphone access is off for VOID — enable it in your phone's Settings → Apps → VOID → Permissions to use voice input.");
+          return;
+        }
+      }
+      listening = true;
+      sendBtn.classList.add('mic-active');
+      const result = await NativeSTT.start({ language: getSTTLang(), maxResults: 1, partialResults: false, popup: false });
+      listening = false;
+      sendBtn.classList.remove('mic-active');
+      updateSendMicBtn();
+      handleHeardText(result?.matches?.[0]);
+    } catch (_) {
+      listening = false;
+      sendBtn.classList.remove('mic-active');
+      updateSendMicBtn();
+    }
+  }
+
+  if (!NativeSTT && SpeechRecognition) {
     recognizer = new SpeechRecognition();
     recognizer.continuous = false;
     recognizer.interimResults = false;
     recognizer.lang = getSTTLang();
-    recognizer.addEventListener('result', (e) => {
-      const text = e.results[0][0].transcript;
-      if (App.voiceConvo) {
-        // Live voice mode: send what was heard immediately, hands-free
-        input.value = text;
-        input.dispatchEvent(new Event('input'));
-        sendMessage();
-        return;
-      }
-      input.value = (input.value ? input.value + ' ' : '') + text;
-      input.dispatchEvent(new Event('input'));
-      App.voiceTriggered = true;
-    });
+    recognizer.addEventListener('result', (e) => handleHeardText(e.results[0][0].transcript));
     recognizer.addEventListener('end', () => {
       listening = false;
       sendBtn.classList.remove('mic-active');
@@ -1607,6 +1644,7 @@ function setupChat() {
 
   // Shared entry point so speak()/generateAssistantReply can hand the mic back
   App.startListening = () => {
+    if (NativeSTT) { startNativeListening(); return; }
     if (!recognizer || listening) return;
     try {
       recognizer.lang = getSTTLang();
@@ -1627,7 +1665,7 @@ function setupChat() {
         appendMessage('system', '🎙 Live voice mode on — just talk. VOID answers out loud and listens again. Tap LIVE to stop.');
         App.startListening();
       } else {
-        try { recognizer?.stop(); } catch (_) {}
+        try { NativeSTT ? NativeSTT.stop() : recognizer?.stop(); } catch (_) {}
         stopSpeaking();
       }
     });
@@ -1649,18 +1687,23 @@ function setupChat() {
   sendBtn.addEventListener('click', () => {
     if (sendBtn.dataset.mode === 'send') {
       sendMessage();
-    } else {
-      if (!recognizer) return;
-      if (listening) {
-        recognizer.stop();
-        return;
-      }
-      try {
-        recognizer.start();
-        listening = true;
-        sendBtn.classList.add('mic-active');
-      } catch(e) {}
+      return;
     }
+    if (NativeSTT) {
+      if (listening) { NativeSTT.stop().catch(() => {}); return; }
+      startNativeListening();
+      return;
+    }
+    if (!recognizer) return;
+    if (listening) {
+      recognizer.stop();
+      return;
+    }
+    try {
+      recognizer.start();
+      listening = true;
+      sendBtn.classList.add('mic-active');
+    } catch(e) {}
   });
 
   // Image attach — downscaled client-side so vision requests stay small
