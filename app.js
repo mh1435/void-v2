@@ -1690,6 +1690,11 @@ function setupChat() {
   });
 
   sendBtn.addEventListener('click', () => {
+    if (sendBtn.dataset.mode === 'stop') {
+      // Abort the in-flight reply; any text already streamed in is kept.
+      try { App.currentAbort?.abort(); } catch (_) {}
+      return;
+    }
     if (sendBtn.dataset.mode === 'send') {
       sendMessage();
       return;
@@ -1756,9 +1761,18 @@ function updateSendMicBtn() {
   const input = document.getElementById('chat-input');
   const btn = document.getElementById('send-msg-btn');
   if (!btn || !input) return;
-  const hasText = input.value.trim().length > 0;
   const micIcon = btn.querySelector('.btn-icon-mic');
   const sendIcon = btn.querySelector('.btn-icon-send');
+  const stopIcon = btn.querySelector('.btn-icon-stop');
+  if (App.generating) {
+    if (micIcon) micIcon.style.display = 'none';
+    if (sendIcon) sendIcon.style.display = 'none';
+    if (stopIcon) stopIcon.style.display = '';
+    btn.dataset.mode = 'stop';
+    return;
+  }
+  if (stopIcon) stopIcon.style.display = 'none';
+  const hasText = input.value.trim().length > 0;
   if (hasText) {
     if (micIcon) micIcon.style.display = 'none';
     if (sendIcon) sendIcon.style.display = '';
@@ -1841,17 +1855,29 @@ async function callOpenAICompat(url, key, model, messages) {
 // piece arrives. If the connection drops mid-stream, whatever text already
 // arrived is returned as the (truncated) reply instead of being thrown away,
 // so the caller never abandons a bubble the user has already started reading.
-async function callOpenAICompatStream(url, key, model, messages, onChunk) {
+async function callOpenAICompatStream(url, key, model, messages, onChunk, signal) {
   const headers = { 'Content-Type': 'application/json' };
   if (key) headers['Authorization'] = `Bearer ${key}`;
   const res = await fetch(url, {
     method: 'POST',
     headers,
+    signal,
     body: JSON.stringify({ model, messages, max_tokens: 1024, stream: true })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error?.message || `${res.status}`);
+  }
+  // A provider (or the Worker before it's redeployed with stream support) may
+  // ignore stream:true and send back a normal buffered completion. Detect that
+  // by content-type and use the reply as-is rather than throwing it away.
+  const ctype = res.headers.get('content-type') || '';
+  if (!ctype.includes('text/event-stream')) {
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('empty response');
+    onChunk(content);
+    return content;
   }
   if (!res.body) throw new Error('no stream body');
   const reader = res.body.getReader();
@@ -2181,6 +2207,11 @@ async function sendMessage() {
 // result. Shared by sendMessage() (new user turn) and regenerateMessageAt() (no new turn).
 async function generateAssistantReply(triggerText) {
   const typingId = appendTyping();
+  App.generating = true;
+  App.currentAbort = new AbortController();
+  const abortSignal = App.currentAbort.signal;
+  updateSendMicBtn();
+  try {
   const weatherCtx = await getWeatherLookupCtx(triggerText || '');
   const knowledge = await getKnowledgeLookupCtx(triggerText || '');
   const web = await getWebSearchCtx(triggerText || '');
@@ -2217,11 +2248,12 @@ async function generateAssistantReply(triggerText) {
   // Always try the shared VOID core first
   if (VOID_CORE_API.url) {
     try {
-      reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk);
+      reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
     } catch(e) { lastError = e; }
   }
 
-  if (!reply) {
+  // User hit Stop with nothing streamed yet — don't cascade into other providers.
+  if (!reply && !abortSignal.aborted) {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
   const tryProviders = [...order, 'together', 'mistral', 'pollinations'];
   const tried = new Set();
@@ -2229,21 +2261,22 @@ async function generateAssistantReply(triggerText) {
   for (const p of tryProviders) {
     if (tried.has(p)) continue;
     tried.add(p);
+    if (abortSignal.aborted) break;
     try {
       if (p === 'gemini' && App.settings.geminiKey) {
         reply = await callGemini(messages); break;
       } else if (p === 'groq' && App.settings.groqKey) {
         reply = await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
-          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages, onChunk); break;
+          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages, onChunk, abortSignal); break;
       } else if (p === 'openrouter' && App.settings.apiKey) {
         reply = await callOpenAICompatStream('https://openrouter.ai/api/v1/chat/completions',
-          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk); break;
+          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk, abortSignal); break;
       } else if (p === 'together' && App.settings.togetherKey) {
         reply = await callOpenAICompatStream('https://api.together.xyz/v1/chat/completions',
-          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages, onChunk); break;
+          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages, onChunk, abortSignal); break;
       } else if (p === 'mistral' && App.settings.mistralKey) {
         reply = await callOpenAICompatStream('https://api.mistral.ai/v1/chat/completions',
-          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk); break;
+          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk, abortSignal); break;
       } else if (p === 'pollinations') {
         reply = await callPollinations(messages); break;
       }
@@ -2275,9 +2308,19 @@ async function generateAssistantReply(triggerText) {
       else setTimeout(() => App.startListening?.(), 400);    // voice off — jump straight back to mic
     } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
     if (triggerText) maybeExtractMemory(triggerText); // fire-and-forget, doesn't block the reply
+    maybeSuggestFollowups(triggerText, reply);        // fire-and-forget too
   } else {
     removeTyping(typingId);
-    appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
+    if (abortSignal.aborted) {
+      appendMessage('system', '⏹ Stopped.');
+    } else {
+      appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
+    }
+  }
+  } finally {
+    App.generating = false;
+    App.currentAbort = null;
+    updateSendMicBtn();
   }
 }
 
@@ -2402,6 +2445,7 @@ function appendMessage(role, content, historyIndex = null, sources = []) {
   const box = document.getElementById('messages-box');
   const welcome = box.querySelector('.matrix-welcome');
   if (welcome) welcome.remove();
+  clearFollowupChips(); // stale suggestions don't apply once the conversation moves
 
   App.msgCount++;
   updateWelcomeStatsLine();
@@ -3503,6 +3547,50 @@ async function maybeExtractMemory(userText) {
       if (!dupe) { App.memoryFacts.push(fact); saveMemoryFacts(); renderMemoryFacts(); }
     }
   } catch (_) {} finally { memoryExtractInFlight = false; }
+}
+
+/* ============ Suggested follow-ups (like ChatGPT's next-question chips) ============ */
+
+function clearFollowupChips() {
+  document.querySelectorAll('.followup-chips').forEach(e => e.remove());
+}
+
+let followupInFlight = false;
+async function maybeSuggestFollowups(userText, reply) {
+  // Skip in hands-free voice mode (chips are useless mid-conversation by ear)
+  // and for short/simple replies where "what next" is obvious.
+  if (App.voiceConvo || followupInFlight || !reply || reply.length < 120) return;
+  followupInFlight = true;
+  try {
+    const raw = await quickAI(
+      'Suggest 3 very short follow-up questions the user might naturally ask next in this conversation. ' +
+      'Each under 8 words. Reply with ONLY the 3 questions, one per line, no numbering, no bullets.',
+      `User asked: ${msgText(userText).slice(0, 300)}\n\nAssistant answered: ${reply.slice(0, 600)}`);
+    if (!raw) return;
+    const questions = raw.split('\n').map(q => q.trim().replace(/^[-*\d.)\s]+/, '')).filter(q => q.length >= 6 && q.length <= 70).slice(0, 3);
+    if (!questions.length) return;
+    // The conversation may have moved on while we were thinking — only attach
+    // the chips if this reply is still the latest message.
+    const last = App.chatHistory[App.chatHistory.length - 1];
+    if (!last || last.role !== 'assistant' || msgText(last.content) !== reply || App.generating) return;
+    const box = document.getElementById('messages-box');
+    if (!box) return;
+    clearFollowupChips();
+    const wrap = document.createElement('div');
+    wrap.className = 'followup-chips';
+    wrap.innerHTML = questions.map(q => `<button class="followup-chip" type="button">${escapeHTML(q)}</button>`).join('');
+    wrap.querySelectorAll('.followup-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('chat-input');
+        if (!input) return;
+        input.value = btn.textContent;
+        input.dispatchEvent(new Event('input'));
+        sendMessage();
+      });
+    });
+    box.appendChild(wrap);
+    box.scrollTop = box.scrollHeight;
+  } catch (_) {} finally { followupInFlight = false; }
 }
 
 function renderMemoryFacts() {
