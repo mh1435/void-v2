@@ -206,6 +206,44 @@ function extractImageGenPrompt(text) {
   return prompt.length >= 2 && prompt.length <= 300 ? prompt : null;
 }
 
+// Skip the intent-classification round-trip for messages that are obviously
+// plain conversation or questions, so "hi" / "explain recursion" stay instant.
+// Anything else (a bare description like "a wolf howling at the moon", or
+// "make me a logo") gets classified so VOID can act without a slash command.
+function looksLikePlainChat(text) {
+  const t = text.trim().toLowerCase();
+  if (t.length < 3) return true;
+  if (t.endsWith('?')) return true;
+  if (/^(hi|hey|hello|yo|sup|gm|hiya|thanks|thank you|thx|ok|okay|k|yes|no|nope|yeah|yep|nice|cool|great|awesome|lol|haha|lmao|good morning|good night|good evening)\b/.test(t)) return true;
+  if (/^(what|whats|what's|who|whos|who's|why|how|hows|how's|when|where|which|whose|is|are|am|was|were|do|does|did|can|could|would|will|should|explain|tell me|describe|summarize|summarise|translate|define|help|list|compare|give me a summary|what do you|how do|how does|why is|why do)\b/.test(t)) return true;
+  return false;
+}
+
+// AI intent router: decides whether a message wants a picture, a written
+// document, or is just normal chat — so users never need a slash command.
+// Returns { type: 'image'|'document'|'chat', prompt } or null on failure.
+async function classifyIntent(text) {
+  const reply = await quickAI(
+    'You route messages for an assistant that can (a) create an IMAGE, (b) write a DOCUMENT/file, or (c) just CHAT. ' +
+    'Reply with ONLY one line:\n' +
+    '`IMAGE | <subject>` if the user wants a picture, logo, artwork, or photo created.\n' +
+    '`DOCUMENT | <what>` if they want a written document or file produced (resume, cover letter, essay, report, letter, proposal, etc.).\n' +
+    '`CHAT` for everything else — questions, explanations, summaries, coding help, translations, or normal conversation.\n' +
+    'Rule: if they ask you to explain, describe, summarize, or answer in words, that is CHAT, not IMAGE or DOCUMENT. ' +
+    'Examples:\n"a wolf howling at the moon" -> IMAGE | a wolf howling at the moon\n' +
+    '"make me a logo for a coffee shop" -> IMAGE | a logo for a coffee shop\n' +
+    '"write a cover letter for a nurse role" -> DOCUMENT | a cover letter for a nurse role\n' +
+    '"explain how photosynthesis works" -> CHAT\n"summarize this article" -> CHAT',
+    text);
+  if (!reply) return null;
+  const line = reply.trim().split('\n')[0];
+  let mm = line.match(/^\s*IMAGE\s*\|\s*(.+)$/i);
+  if (mm) return { type: 'image', prompt: mm[1].trim().replace(/[."']+$/, '').trim() };
+  mm = line.match(/^\s*DOCUMENT\s*\|\s*(.+)$/i);
+  if (mm) return { type: 'document', prompt: mm[1].trim() };
+  return { type: 'chat' };
+}
+
 // Web-search grounding for current-events style questions ("news about X",
 // "latest on X", "what's happening with X today"). Uses DuckDuckGo's free
 // Instant Answer API — no key. Best-effort: many queries return nothing,
@@ -2272,21 +2310,15 @@ async function sendMessage() {
     appendMessage('user', text);
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     appendMessage('system', [
-      '🧭 **VOID commands**',
+      '🧭 **Just talk to me — no commands needed.**',
       '',
-      '`/brief` — daily briefing (weather, tasks, quote)',
-      '`/image <prompt>` — generate an image (attach a photo first to edit/restyle it instead)',
-      '`/doc <description>` — write a document, export as .txt / Word / .pdf',
-      '`/gh <repos|new|push>` — GitHub: list repos, create one, or commit a file',
-      '`/define <word>` — dictionary lookup',
-      '`/price <coin>` — crypto price',
-      '`/convert 100 usd to eur` — currency',
-      '`/translate <lang> <text>` — translate anything',
-      '`/calc <expression>` — calculator',
-      '`/qr <text or link>` — QR code',
-      '`/roll 2d6` · `/flip` · `/pick a, b, c` — quick decisions',
+      '🎨 **Images** — "make me a logo of a wolf", "a neon city at night", or attach a photo and say "turn this into pixel art"',
+      '📄 **Documents** — "write me a cover letter for a nurse job" → save as .txt / Word / PDF',
+      '🐙 **GitHub** — "/gh scaffold you/repo a flask todo api", "/gh get you/repo main.py", then "/gh edit …"',
+      '🌦 **Ask anything** — weather, "who is …", news, math, translations — I pull real data automatically',
+      '🚀 **Actions** — "open spotify", "navigate to Cairo", "play lofi on youtube"',
       '',
-      'Also try: "open spotify", "navigate to <place>", "play <song> on youtube", "weather in <city>", "who is <person>", "draw me <anything>"',
+      'Handy shortcuts still work if you like them: `/brief` `/doc` `/image` `/gh` `/qr` `/roll` `/flip` `/pick` `/calc` `/convert` `/define` `/price` `/translate`',
     ].join('\n'));
     return;
   }
@@ -2383,6 +2415,41 @@ async function sendMessage() {
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     if (refImage) await runImageEdit(imagePrompt, refImage);
     else await runImageGeneration(imagePrompt);
+    return;
+  }
+
+  // Natural-language intent routing — no slash needed. Skipped for messages
+  // that clearly read as plain chat/questions, so those stay instant.
+  if (!looksLikePlainChat(text)) {
+    const refImage = App.pendingImage;
+    // Show the user's message + a thinking indicator while we classify.
+    const userContent = refImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }] : text;
+    App.chatHistory.push({ role: 'user', content: userContent });
+    appendMessage('user', userContent, App.chatHistory.length - 1);
+    saveChatHistory();
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    const typingId = appendTyping();
+    const intent = await classifyIntent(text);
+    removeTyping(typingId);
+    if (intent && intent.type === 'image') {
+      clearPendingImage();
+      if (refImage) await runImageEdit(intent.prompt || text, refImage);
+      else await runImageGeneration(intent.prompt || text);
+      return;
+    }
+    if (intent && intent.type === 'document') {
+      const typingId2 = appendTyping();
+      const doc = await generateDocument(intent.prompt || text);
+      removeTyping(typingId2);
+      if (doc) { storeDocument(doc.title, doc.content); showDocumentMessage(doc.title, doc.content); }
+      else appendMessage('system', 'Could not generate that — try rephrasing.');
+      return;
+    }
+    // Classified as chat (or classifier failed) — fall through to a normal reply,
+    // reusing the message we already pushed above.
+    if (!consumeFreeMessage()) { showUpgradePrompt(); return; }
+    clearPendingImage();
+    await generateAssistantReply(text);
     return;
   }
 
