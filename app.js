@@ -28,6 +28,7 @@ const App = {
   commands: [],
   memoryFacts: [],   // auto-extracted facts about the user, persisted per account
   bookmarks: [],     // starred assistant messages
+  documents: [],     // created/edited documents, per account
   chatHistory: [],   // messages of the ACTIVE chat (reference into chats[].messages)
   chats: [],         // [{ id, title, messages:[], updatedAt }]
   currentChatId: null,
@@ -530,6 +531,8 @@ function bootApp() {
   setupChatMenu();
   setupSyncPanel();
   setupMemoryPanel();
+  setupDocFormatPicker();
+  setupDocumentsPanel();
   setupStudyMode();
   setupNavDrawer();
   setupClonedPanels();
@@ -541,6 +544,7 @@ function bootApp() {
   loadChats();
   loadMemoryFacts();
   loadBookmarks();
+  loadDocuments();
   updateUserDisplay();
   initLiveContext();
   initQuoteWidget();
@@ -1197,6 +1201,8 @@ function openSettingsPanel(panelId) {
     renderMemoryFacts();
   } else if (panelId === 'panel-saved') {
     renderBookmarks();
+  } else if (panelId === 'panel-documents') {
+    renderDocumentsList();
   } else if (panelId === 'panel-billing') {
     hydrateBilling();
   } else if (panelId === 'panel-profile') {
@@ -2025,6 +2031,44 @@ async function sendMessage() {
     return;
   }
 
+  // /doc — write a document from a description, save it, offer export
+  if (text.toLowerCase().startsWith('/doc ')) {
+    const req = text.slice(5).trim();
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    if (!req) { appendMessage('system', 'Usage: /doc a one-page cover letter for a marketing role'); return; }
+    const typingId = appendTyping();
+    const doc = await generateDocument(req);
+    removeTyping(typingId);
+    if (!doc) { appendMessage('system', 'Could not generate that document — try again.'); return; }
+    storeDocument(doc.title, doc.content);
+    showDocumentMessage(doc.title, doc.content);
+    return;
+  }
+
+  // /editdoc — revise the document currently being edited (set from Documents panel)
+  if (text.toLowerCase().startsWith('/editdoc ')) {
+    const instruction = text.slice(9).trim();
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    const base = App.editingDoc;
+    if (!base) { appendMessage('system', 'Open a document from Settings → Documents → Edit first.'); return; }
+    if (!instruction) { appendMessage('system', 'Tell me what to change, e.g. /editdoc make it more formal'); return; }
+    const typingId = appendTyping();
+    const revised = await quickAI(
+      'You are editing an existing document. Apply the user\'s change and return the FULL updated document as plain text — a title line then the body, no markdown symbols, no commentary.',
+      `CURRENT DOCUMENT (title: ${base.title}):\n${base.content}\n\nCHANGE REQUESTED: ${instruction}`);
+    removeTyping(typingId);
+    if (!revised) { appendMessage('system', 'Could not edit that document — try again.'); return; }
+    const lines = revised.trim().split('\n');
+    const newTitle = (lines[0] || base.title).replace(/^#+\s*/, '').trim().slice(0, 80) || base.title;
+    const newContent = lines.slice(1).join('\n').trim() || revised.trim();
+    storeDocument(newTitle, newContent);
+    App.editingDoc = App.documents.find(d => d.title === newTitle) || null;
+    showDocumentMessage(newTitle, newContent);
+    return;
+  }
+
   // /convert command — "/convert 100 usd to eur"
   if (text.toLowerCase().startsWith('/convert ')) {
     const m = text.slice(9).trim().match(/^([\d.,]+)\s*([a-z]{3})\s*(?:to|in)\s*([a-z]{3})$/i);
@@ -2075,6 +2119,7 @@ async function sendMessage() {
       '',
       '`/brief` — daily briefing (weather, tasks, quote)',
       '`/image <prompt>` — generate an image (attach a photo first to edit/restyle it instead)',
+      '`/doc <description>` — write a document, export as .txt / Word / .pdf',
       '`/define <word>` — dictionary lookup',
       '`/price <coin>` — crypto price',
       '`/convert 100 usd to eur` — currency',
@@ -2433,6 +2478,9 @@ function buildBubbleInnerHTML(role, content, historyIndex, sources = []) {
       </button>` : ''}${!isUser ? `
       <button class="bubble-act-btn${App.bookmarks.some(b => b.text === text) ? ' starred' : ''}" data-act="star" aria-label="Save message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="${App.bookmarks.some(b => b.text === text) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </button>` : ''}${!isUser && !images.length && text.length > 40 ? `
+      <button class="bubble-act-btn" data-act="savedoc" aria-label="Save as document">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       </button>` : ''}
       <button class="bubble-act-btn" data-act="del" aria-label="Delete message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2499,6 +2547,10 @@ function setupMessageActions() {
       const justSaved = toggleBookmark(rawText);
       btn.classList.toggle('starred', justSaved);
       btn.querySelector('svg').setAttribute('fill', justSaved ? 'currentColor' : 'none');
+    } else if (act === 'savedoc') {
+      const title = rawText.split('\n')[0].replace(/^#+\s*/, '').trim().slice(0, 60) || 'VOID Document';
+      storeDocument(title, rawText);
+      openDocFormatPicker(title, rawText, btn);
     }
   });
 }
@@ -2858,6 +2910,286 @@ function exportCurrentChat() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/* ============ Documents: create / edit / export (.txt, Word, .pdf) ============ */
+
+function loadDocuments() {
+  try { App.documents = JSON.parse(localStorage.getItem(userKey('documents'))) || []; } catch (_) { App.documents = []; }
+}
+function saveDocuments() {
+  try { localStorage.setItem(userKey('documents'), JSON.stringify(App.documents.slice(-60))); } catch (_) {}
+}
+
+// Save a Blob or string to the user's device using the same anchor-download
+// path the existing chat/image export uses (works in PWA + Android WebView).
+function saveFileBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function safeFileName(title) {
+  return (title || 'document').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'document';
+}
+
+// --- Word (.doc): an HTML document with Office namespaces. Word, Google Docs
+// and LibreOffice all open this reliably, with no zip library needed. ---
+function buildWordDoc(title, body) {
+  const esc = s => escapeHTML(s);
+  const paras = String(body).replace(/\r/g, '').split('\n')
+    .map(line => line.trim() === '' ? '<p>&nbsp;</p>' : `<p>${esc(line)}</p>`).join('');
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;} h1{font-size:18pt;} p{margin:0 0 10pt 0;}</style></head>
+<body><h1>${esc(title)}</h1>${paras}</body></html>`;
+}
+
+// --- PDF: dependency-free multi-page text generator (validated separately). ---
+function pdfEscape(s) { return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
+function pdfWrapLine(text, maxChars) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (w.length > maxChars) {
+      if (cur) { lines.push(cur); cur = ''; }
+      for (let i = 0; i < w.length; i += maxChars) lines.push(w.slice(i, i + maxChars));
+      continue;
+    }
+    if ((cur + (cur ? ' ' : '') + w).length > maxChars) { if (cur) lines.push(cur); cur = w; }
+    else { cur += (cur ? ' ' : '') + w; }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+function buildPdf(title, body) {
+  const PAGE_W = 612, PAGE_H = 792, MARGIN = 54, FONT = 11, LINE = 15, TITLE_FONT = 18;
+  const usableW = PAGE_W - MARGIN * 2;
+  const maxChars = Math.floor(usableW / (FONT * 0.5));
+  const titleMaxChars = Math.floor(usableW / (TITLE_FONT * 0.5));
+  const rendered = [];
+  if (title) { for (const l of pdfWrapLine(title, titleMaxChars)) rendered.push({ text: l, size: TITLE_FONT }); rendered.push({ text: '', size: FONT }); }
+  for (const p of String(body).replace(/\r/g, '').split('\n')) {
+    if (p === '') { rendered.push({ text: '', size: FONT }); continue; }
+    for (const l of pdfWrapLine(p, maxChars)) rendered.push({ text: l, size: FONT });
+  }
+  const linesPerPage = Math.floor((PAGE_H - MARGIN * 2) / LINE);
+  const pages = [];
+  for (let i = 0; i < rendered.length; i += linesPerPage) pages.push(rendered.slice(i, i + linesPerPage));
+  if (!pages.length) pages.push([{ text: '', size: FONT }]);
+
+  const catalogNum = 1, pagesNum = 2, fontNum = 3;
+  const pageObjNums = [], contentObjNums = [];
+  let nextNum = 4;
+  for (let i = 0; i < pages.length; i++) { pageObjNums.push(nextNum++); contentObjNums.push(nextNum++); }
+  const objDefs = {};
+  objDefs[catalogNum] = `<< /Type /Catalog /Pages ${pagesNum} 0 R >>`;
+  objDefs[pagesNum] = `<< /Type /Pages /Kids [${pageObjNums.map(n => `${n} 0 R`).join(' ')}] /Count ${pages.length} >>`;
+  objDefs[fontNum] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`;
+  pages.forEach((pageLines, idx) => {
+    const pageNum = pageObjNums[idx], contentNum = contentObjNums[idx];
+    objDefs[pageNum] = `<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 ${fontNum} 0 R >> >> /Contents ${contentNum} 0 R >>`;
+    let stream = 'BT\n', curSize = FONT, first = true;
+    stream += `/F1 ${FONT} Tf\n1 0 0 1 ${MARGIN} ${PAGE_H - MARGIN} Tm\n`;
+    for (const ln of pageLines) {
+      if (ln.size !== curSize) { stream += `/F1 ${ln.size} Tf\n`; curSize = ln.size; }
+      if (first) first = false; else stream += `0 -${LINE} Td\n`;
+      stream += `(${pdfEscape(ln.text)}) Tj\n`;
+    }
+    stream += 'ET';
+    objDefs[contentNum] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+  const totalObjs = nextNum - 1;
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (let n = 1; n <= totalObjs; n++) { offsets[n] = pdf.length; pdf += `${n} 0 obj\n${objDefs[n]}\nendobj\n`; }
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
+  for (let n = 1; n <= totalObjs; n++) pdf += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return pdf;
+}
+
+function exportDocument(title, content, fmt) {
+  const name = safeFileName(title);
+  buzz();
+  if (fmt === 'txt') {
+    saveFileBlob(new Blob([`${title}\n\n${content}`], { type: 'text/plain;charset=utf-8' }), `${name}.txt`);
+  } else if (fmt === 'doc') {
+    saveFileBlob(new Blob([buildWordDoc(title, content)], { type: 'application/msword' }), `${name}.doc`);
+  } else if (fmt === 'pdf') {
+    // Build as a binary-safe byte array so the PDF isn't corrupted by UTF-8 re-encoding.
+    const raw = buildPdf(title, content);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i) & 0xff;
+    saveFileBlob(new Blob([bytes], { type: 'application/pdf' }), `${name}.pdf`);
+  }
+}
+
+// The format picker is shared: whatever set pendingDocExport gets exported when
+// the user taps a format. Anchored near the tapped element.
+let pendingDocExport = null;
+function openDocFormatPicker(title, content, anchorEl) {
+  pendingDocExport = { title, content };
+  const picker = document.getElementById('doc-format-picker');
+  if (!picker) return;
+  // Hoist to <body> so it's never trapped inside an inactive view's stacking
+  // context (it lives next to a settings panel in the markup).
+  if (picker.parentElement !== document.body) document.body.appendChild(picker);
+  picker.classList.add('open');
+  if (anchorEl) {
+    const r = anchorEl.getBoundingClientRect();
+    picker.style.position = 'fixed';
+    picker.style.left = Math.max(12, Math.min(window.innerWidth - 232, r.left)) + 'px';
+    const below = r.bottom + 150 < window.innerHeight;
+    picker.style.top = below ? (r.bottom + 6) + 'px' : '';
+    picker.style.bottom = below ? '' : (window.innerHeight - r.top + 6) + 'px';
+  }
+}
+function setupDocFormatPicker() {
+  const picker = document.getElementById('doc-format-picker');
+  if (!picker) return;
+  picker.querySelectorAll('.persona-item').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      picker.classList.remove('open');
+      if (pendingDocExport) exportDocument(pendingDocExport.title, pendingDocExport.content, row.dataset.docfmt);
+    });
+  });
+  document.addEventListener('click', () => picker.classList.remove('open'));
+  picker.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// Persist a document to the per-account store (dedupes by title, newest first).
+function storeDocument(title, content) {
+  const existing = App.documents.find(d => d.title === title);
+  if (existing) { existing.content = content; existing.updatedAt = Date.now(); }
+  else App.documents.unshift({ id: 'doc-' + Date.now(), title, content, createdAt: Date.now(), updatedAt: Date.now() });
+  saveDocuments();
+  renderDocumentsList();
+}
+
+// Ask the AI to write a document from a short description.
+async function generateDocument(request) {
+  const reply = await quickAI(
+    'You are a professional document writer. Write a complete, well-structured, ready-to-use document based on the user\'s request. ' +
+    'Start with a single title line, then the body. Use plain text with clear paragraphs and line breaks — no markdown symbols like # or **. Do not add commentary before or after the document.',
+    request);
+  if (!reply) return null;
+  const lines = reply.trim().split('\n');
+  const title = (lines[0] || 'Document').replace(/^#+\s*/, '').trim().slice(0, 80) || 'Document';
+  const content = lines.slice(1).join('\n').trim() || reply.trim();
+  return { title, content };
+}
+
+function renderDocumentsList() {
+  const list = document.getElementById('documents-list');
+  const empty = document.getElementById('documents-empty');
+  if (!list) return;
+  if (empty) empty.style.display = App.documents.length ? 'none' : '';
+  list.innerHTML = App.documents.map(d => `
+    <div class="doc-item" data-doc-id="${d.id}">
+      <div class="doc-item-title">${escapeHTML(d.title)}</div>
+      <div class="doc-item-preview">${escapeHTML(d.content.slice(0, 100))}${d.content.length > 100 ? '…' : ''}</div>
+      <div class="doc-item-actions">
+        <button class="doc-mini-btn" data-doc-act="export" data-doc-id="${d.id}">⬇ Export</button>
+        <button class="doc-mini-btn" data-doc-act="edit" data-doc-id="${d.id}">✎ Edit</button>
+        <button class="doc-mini-btn danger" data-doc-act="del" data-doc-id="${d.id}">✕</button>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('[data-doc-act]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const doc = App.documents.find(d => d.id === btn.dataset.docId);
+      if (!doc) return;
+      const act = btn.dataset.docAct;
+      if (act === 'export') {
+        openDocFormatPicker(doc.title, doc.content, btn);
+      } else if (act === 'del') {
+        App.documents = App.documents.filter(d => d.id !== doc.id);
+        saveDocuments();
+        renderDocumentsList();
+      } else if (act === 'edit') {
+        // Send the user back to chat with a prefilled edit request referencing this doc.
+        closeSettingsPanel();
+        document.getElementById('view-settings')?.classList.remove('active');
+        document.getElementById('view-main')?.classList.add('active');
+        const input = document.getElementById('chat-input');
+        if (input) {
+          App.editingDoc = doc;
+          input.value = `/editdoc `;
+          input.focus();
+          appendMessage('system', `✎ Editing "${doc.title}". Type what to change after /editdoc (e.g. "/editdoc make it shorter and more formal").`);
+          updateSendMicBtn();
+        }
+      }
+    });
+  });
+}
+
+// A chat bubble presenting a generated/edited document with an export button.
+function showDocumentMessage(title, content) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+  clearFollowupChips();
+  App.msgCount++;
+  updateWelcomeStatsLine();
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `
+    <div class="bubble-meta">VOID // ${time}</div>
+    <div class="bubble-body bubble-ai">
+      <div class="doc-card">
+        <div class="doc-card-head">
+          <span class="doc-card-icon">📄</span>
+          <span class="doc-card-title">${escapeHTML(title)}</span>
+        </div>
+        <div class="doc-card-body">${escapeHTML(content.slice(0, 500))}${content.length > 500 ? '…' : ''}</div>
+        <button class="doc-card-save" type="button">⬇ Save as file</button>
+      </div>
+    </div>`;
+  el.querySelector('.doc-card-save').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDocFormatPicker(title, content, e.currentTarget);
+  });
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setupDocumentsPanel() {
+  const btn = document.getElementById('doc-create-btn');
+  const input = document.getElementById('doc-create-input');
+  if (btn && input) {
+    btn.addEventListener('click', async () => {
+      const req = input.value.trim();
+      if (!req) return;
+      btn.disabled = true;
+      btn.textContent = 'Writing…';
+      try {
+        const doc = await generateDocument(req);
+        if (doc) {
+          storeDocument(doc.title, doc.content);
+          input.value = '';
+          openDocFormatPicker(doc.title, doc.content, btn);
+        } else {
+          alert('Could not generate the document — try again.');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate document';
+      }
+    });
+  }
+  renderDocumentsList();
 }
 
 // Re-render the message area for the active chat.

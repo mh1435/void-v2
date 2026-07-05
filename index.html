@@ -715,6 +715,10 @@ if ('serviceWorker' in navigator) {
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
           <div class="menu-label"><span>Saved</span></div>
         </div>
+        <div class="menu-item" data-open-panel="panel-documents">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
+          <div class="menu-label"><span>Documents</span><span class="menu-sub">Create &amp; export .txt · Word · .pdf</span></div>
+        </div>
       </div>
 
       <!-- Device -->
@@ -1061,6 +1065,38 @@ if ('serviceWorker' in navigator) {
       <div id="saved-list"></div>
       <p class="muted small" id="saved-empty">Tap the star on any VOID reply to save it here.</p>
     </div>
+  </div>
+
+  <!-- DOCUMENTS -->
+  <div class="settings-panel" id="panel-documents">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <span>Documents</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label">CREATE</div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Describe a document for VOID to write</span></div>
+        <textarea class="text-input" id="doc-create-input" rows="2" placeholder="e.g. a professional resume for a data analyst, or a 1-page project proposal"></textarea>
+      </div>
+      <button class="primary-btn full" id="doc-create-btn">Generate document</button>
+      <p class="muted small" style="margin-top:8px;">Tip: in chat you can also type <code>/doc</code> then your request, or tap the 📄 on any VOID reply to save it as a file.</p>
+
+      <div class="sheet-divider"></div>
+      <div class="settings-section-label">YOUR DOCUMENTS</div>
+      <div id="documents-list"></div>
+      <p class="muted small" id="documents-empty">No documents yet — generate one above.</p>
+    </div>
+  </div>
+
+  <!-- Document export format picker -->
+  <div class="provider-picker doc-format-picker" id="doc-format-picker">
+    <div class="provider-picker-title">SAVE AS</div>
+    <div class="persona-item" data-docfmt="txt"><span class="persona-emoji">📄</span><span class="persona-name">Plain text (.txt)</span></div>
+    <div class="persona-item" data-docfmt="doc"><span class="persona-emoji">📘</span><span class="persona-name">Word (.doc)</span></div>
+    <div class="persona-item" data-docfmt="pdf"><span class="persona-emoji">📕</span><span class="persona-name">PDF (.pdf)</span></div>
   </div>
 
   <!-- PROFILE -->
