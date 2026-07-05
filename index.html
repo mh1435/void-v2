@@ -773,6 +773,10 @@ if ('serviceWorker' in navigator) {
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"></path></svg></div>
           <div class="menu-label"><span>GitHub</span><span class="menu-sub">Publish code &amp; files to your repos</span></div>
         </div>
+        <div class="menu-item" data-open-panel="panel-gems">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"></path><path d="M11 3 8 9l4 12 4-12-3-6"></path><path d="M2 9h20"></path></svg></div>
+          <div class="menu-label"><span>Gems</span><span class="menu-sub">Build your own custom AI assistants</span></div>
+        </div>
       </div>
 
       <!-- Device -->
@@ -1142,6 +1146,35 @@ if ('serviceWorker' in navigator) {
       <div class="settings-section-label">YOUR DOCUMENTS</div>
       <div id="documents-list"></div>
       <p class="muted small" id="documents-empty">No documents yet — generate one above.</p>
+    </div>
+  </div>
+
+  <!-- GEMS -->
+  <div class="settings-panel" id="panel-gems">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <span>Gems</span>
+    </div>
+    <div class="panel-content">
+      <div class="settings-section-label" id="gem-form-label">CREATE A GEM</div>
+      <p class="muted small" style="margin-bottom:10px;">Build a custom assistant with its own name and personality. Pick it from the chat MODE menu anytime.</p>
+      <div class="setting-row input-group">
+        <input type="text" class="text-input" id="gem-emoji-input" maxlength="2" placeholder="✦" style="width:56px;text-align:center;flex:0 0 auto;">
+        <input type="text" class="text-input" id="gem-name-input" placeholder="Name (e.g. MLBB Coach)" style="flex:1;">
+      </div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Instructions</span><span class="setting-sub">How should it behave? What's its expertise, tone, rules?</span></div>
+        <textarea class="text-input" id="gem-instructions-input" rows="4" placeholder="e.g. You are an expert Mobile Legends coach. Give concise, practical advice on builds, rotations, and counters. Always be encouraging."></textarea>
+      </div>
+      <button class="primary-btn full" id="gem-save-btn">Save Gem</button>
+      <button class="ghost-btn full" id="gem-cancel-btn" style="margin-top:8px;display:none;">Cancel edit</button>
+
+      <div class="sheet-divider"></div>
+      <div class="settings-section-label">YOUR GEMS</div>
+      <div id="gems-list"></div>
+      <p class="muted small" id="gems-empty">No Gems yet — create one above.</p>
     </div>
   </div>
 

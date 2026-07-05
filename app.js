@@ -29,6 +29,7 @@ const App = {
   memoryFacts: [],   // auto-extracted facts about the user, persisted per account
   bookmarks: [],     // starred assistant messages
   documents: [],     // created/edited documents, per account
+  gems: [],          // user-created custom assistants (like Gemini Gems)
   githubToken: '',   // user's GitHub PAT — device-only, never synced
   githubUser: null,  // { login, ... } once connected
   githubRepos: [],
@@ -139,8 +140,15 @@ function buildSystemPrompt(extraCtx) {
     const dateStr = `${DAYS_FULL[now.getDay()]}, ${MONTHS_FULL[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
     liveCtx = `\n\nLIVE CONTEXT (auto-detected, may not be 100% accurate):\n- User location: ${App.liveContext.city}, ${App.liveContext.country}\n- Local time: ${App.liveContext.localTime || ''}\n- Current weather: ${App.liveContext.weather || 'unavailable'}\n- Today's date: ${dateStr}`;
   }
-  const persona = PERSONAS.find(p => p.id === App.settings.persona);
-  const personaCtx = persona && persona.prompt ? `\n\n${persona.prompt}` : '';
+  const pid = App.settings.persona || '';
+  let personaCtx = '';
+  if (pid.startsWith('gem:')) {
+    const gem = App.gems.find(g => g.id === pid);
+    if (gem && gem.instructions) personaCtx = `\n\nYou are "${gem.name}", a custom assistant created by the user. Follow these instructions above all: ${gem.instructions}`;
+  } else {
+    const persona = PERSONAS.find(p => p.id === pid);
+    if (persona && persona.prompt) personaCtx = `\n\n${persona.prompt}`;
+  }
   return VOID_SYSTEM + personaCtx + inject + liveCtx + memoryContext() + (extraCtx || '');
 }
 
@@ -606,6 +614,7 @@ function bootApp() {
   setupMemoryPanel();
   setupDocFormatPicker();
   setupDocumentsPanel();
+  setupGemsPanel();
   setupGitHubPanel();
   setupGitHubPushSheet();
   setupStudyMode();
@@ -620,6 +629,7 @@ function bootApp() {
   loadMemoryFacts();
   loadBookmarks();
   loadDocuments();
+  loadGems();
   loadGitHub();
   updateUserDisplay();
   initLiveContext();
@@ -1279,6 +1289,8 @@ function openSettingsPanel(panelId) {
     renderBookmarks();
   } else if (panelId === 'panel-documents') {
     renderDocumentsList();
+  } else if (panelId === 'panel-gems') {
+    renderGemsList();
   } else if (panelId === 'panel-github') {
     renderGitHubState();
     if (App.githubToken && !App.githubUser) ghVerify().catch(() => {});
@@ -3076,7 +3088,7 @@ function setupSyncPanel() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: App.currentUser, token,
-          data: { settings: App.settings, chats: App.chats, tasks: App.tasks, commands: App.commands },
+          data: { settings: App.settings, chats: App.chats, tasks: App.tasks, commands: App.commands, gems: App.gems },
         }),
       });
       const d = await r.json().catch(() => ({}));
@@ -3104,6 +3116,7 @@ function setupSyncPanel() {
       }
       if (Array.isArray(d.data.tasks)) { App.tasks = d.data.tasks; saveTasks(); }
       if (Array.isArray(d.data.commands)) { App.commands = d.data.commands; saveCommands(); }
+      if (Array.isArray(d.data.gems)) { App.gems = d.data.gems; saveGems(); }
       setStatus('Restored ✓ — reloading…');
       setTimeout(() => location.reload(), 700);
     } catch (_) { setStatus('Network error.'); }
@@ -3185,6 +3198,13 @@ function loadDocuments() {
 }
 function saveDocuments() {
   try { localStorage.setItem(userKey('documents'), JSON.stringify(App.documents.slice(-60))); } catch (_) {}
+}
+
+function loadGems() {
+  try { App.gems = JSON.parse(localStorage.getItem(userKey('gems'))) || []; } catch (_) { App.gems = []; }
+}
+function saveGems() {
+  try { localStorage.setItem(userKey('gems'), JSON.stringify(App.gems.slice(-40))); } catch (_) {}
 }
 
 // Save a Blob or string to the user's device using the same anchor-download
@@ -3656,6 +3676,96 @@ function setupDocumentsPanel() {
     });
   }
   renderDocumentsList();
+}
+
+/* ============ Gems: user-created custom assistants ============ */
+
+let editingGemId = null;
+
+function renderGemsList() {
+  const list = document.getElementById('gems-list');
+  const empty = document.getElementById('gems-empty');
+  if (!list) return;
+  if (empty) empty.style.display = App.gems.length ? 'none' : '';
+  list.innerHTML = App.gems.map(g => `
+    <div class="doc-item" data-gem-id="${g.id}">
+      <div class="doc-item-title">${g.emoji || '✦'} ${escapeHTML(g.name)}${App.settings.persona === g.id ? ' <span style="color:var(--accent);font-size:11px;">• active</span>' : ''}</div>
+      <div class="doc-item-preview">${escapeHTML(g.instructions.slice(0, 110))}${g.instructions.length > 110 ? '…' : ''}</div>
+      <div class="doc-item-actions">
+        <button class="doc-mini-btn" data-gem-act="use" data-gem-id="${g.id}">${App.settings.persona === g.id ? '✓ Using' : 'Use'}</button>
+        <button class="doc-mini-btn" data-gem-act="edit" data-gem-id="${g.id}">✎ Edit</button>
+        <button class="doc-mini-btn danger" data-gem-act="del" data-gem-id="${g.id}">✕</button>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('[data-gem-act]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const gem = App.gems.find(g => g.id === b.dataset.gemId);
+      if (!gem) return;
+      const act = b.dataset.gemAct;
+      if (act === 'use') {
+        App.settings.persona = (App.settings.persona === gem.id) ? '' : gem.id;
+        saveSettings(); syncPersonaBadge(); renderGemsList();
+      } else if (act === 'edit') {
+        startEditGem(gem);
+      } else if (act === 'del') {
+        App.gems = App.gems.filter(g => g.id !== gem.id);
+        if (App.settings.persona === gem.id) { App.settings.persona = ''; saveSettings(); syncPersonaBadge(); }
+        saveGems(); renderGemsList();
+      }
+    });
+  });
+}
+
+function startEditGem(gem) {
+  editingGemId = gem.id;
+  const emoji = document.getElementById('gem-emoji-input');
+  const name = document.getElementById('gem-name-input');
+  const instr = document.getElementById('gem-instructions-input');
+  const label = document.getElementById('gem-form-label');
+  const cancel = document.getElementById('gem-cancel-btn');
+  const save = document.getElementById('gem-save-btn');
+  if (emoji) emoji.value = gem.emoji || '';
+  if (name) name.value = gem.name;
+  if (instr) instr.value = gem.instructions;
+  if (label) label.textContent = 'EDIT GEM';
+  if (cancel) cancel.style.display = '';
+  if (save) save.textContent = 'Update Gem';
+  document.querySelector('#panel-gems .panel-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetGemForm() {
+  editingGemId = null;
+  ['gem-emoji-input', 'gem-name-input', 'gem-instructions-input'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const label = document.getElementById('gem-form-label');
+  const cancel = document.getElementById('gem-cancel-btn');
+  const save = document.getElementById('gem-save-btn');
+  if (label) label.textContent = 'CREATE A GEM';
+  if (cancel) cancel.style.display = 'none';
+  if (save) save.textContent = 'Save Gem';
+}
+
+function setupGemsPanel() {
+  const save = document.getElementById('gem-save-btn');
+  const cancel = document.getElementById('gem-cancel-btn');
+  if (save) save.addEventListener('click', () => {
+    const emoji = (document.getElementById('gem-emoji-input')?.value || '').trim();
+    const name = (document.getElementById('gem-name-input')?.value || '').trim();
+    const instructions = (document.getElementById('gem-instructions-input')?.value || '').trim();
+    if (!name || !instructions) { alert('Give your Gem a name and instructions.'); return; }
+    if (editingGemId) {
+      const gem = App.gems.find(g => g.id === editingGemId);
+      if (gem) { gem.emoji = emoji; gem.name = name; gem.instructions = instructions; }
+    } else {
+      App.gems.unshift({ id: 'gem:' + Date.now(), emoji, name, instructions });
+    }
+    saveGems();
+    if (App.settings.persona && App.settings.persona.startsWith('gem:')) syncPersonaBadge();
+    resetGemForm();
+    renderGemsList();
+  });
+  if (cancel) cancel.addEventListener('click', resetGemForm);
+  renderGemsList();
 }
 
 /* ============ GitHub: connect, create repos, commit files ============
@@ -4141,18 +4251,34 @@ function setupPersonaPicker() {
   const renderList = () => {
     const list = document.getElementById('persona-list');
     if (!list) return;
-    list.innerHTML = PERSONAS.map(p => `
-      <div class="persona-item${(App.settings.persona || '') === p.id ? ' active' : ''}" data-persona="${p.id}">
+    const cur = App.settings.persona || '';
+    const builtins = PERSONAS.map(p => `
+      <div class="persona-item${cur === p.id ? ' active' : ''}" data-persona="${p.id}">
         <span class="persona-emoji">${p.emoji}</span>
-        <span class="persona-name">${p.label}</span>
-        ${(App.settings.persona || '') === p.id ? '<span class="persona-check">✓</span>' : ''}
+        <span class="persona-name">${escapeHTML(p.label)}</span>
+        ${cur === p.id ? '<span class="persona-check">✓</span>' : ''}
       </div>`).join('');
+    const gems = App.gems.length ? `<div class="persona-section-label">✦ MY GEMS</div>` + App.gems.map(g => `
+      <div class="persona-item${cur === g.id ? ' active' : ''}" data-persona="${g.id}">
+        <span class="persona-emoji">${g.emoji || '✦'}</span>
+        <span class="persona-name">${escapeHTML(g.name)}</span>
+        ${cur === g.id ? '<span class="persona-check">✓</span>' : ''}
+      </div>`).join('') : '';
+    const createRow = `<div class="persona-item persona-create" data-persona-create="1"><span class="persona-emoji">➕</span><span class="persona-name">Create a Gem…</span></div>`;
+    list.innerHTML = builtins + gems + createRow;
     list.querySelectorAll('.persona-item').forEach(item => {
       item.addEventListener('click', () => {
+        picker.classList.remove('open');
+        if (item.dataset.personaCreate) {
+          document.getElementById('view-main')?.classList.remove('active');
+          document.getElementById('view-settings')?.classList.add('active');
+          openSettingsPanel('panel-gems');
+          setTimeout(() => document.getElementById('gem-name-input')?.focus(), 200);
+          return;
+        }
         App.settings.persona = item.dataset.persona;
         saveSettings();
         syncPersonaBadge();
-        picker.classList.remove('open');
       });
     });
   };
@@ -4203,7 +4329,16 @@ function setupImageStylePicker() {
 function syncPersonaBadge() {
   const btn = document.getElementById('persona-pick-btn');
   if (!btn) return;
-  const p = PERSONAS.find(x => x.id === (App.settings.persona || '')) || PERSONAS[0];
+  const pid = App.settings.persona || '';
+  if (pid.startsWith('gem:')) {
+    const gem = App.gems.find(g => g.id === pid);
+    if (gem) {
+      btn.innerHTML = `${gem.emoji || '✦'} ${escapeHTML(gem.name.toUpperCase())} &#9662;`;
+      btn.classList.add('active');
+      return;
+    }
+  }
+  const p = PERSONAS.find(x => x.id === pid) || PERSONAS[0];
   btn.innerHTML = `${p.emoji} ${p.id ? p.label.toUpperCase() : 'MODE'} &#9662;`;
   btn.classList.toggle('active', !!p.id);
 }
