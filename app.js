@@ -4830,6 +4830,14 @@ function setupGameHub() {
   const backToGames = document.getElementById('mlbb-back-to-games');
   if (backToGames) backToGames.addEventListener('click', closeMLBBContent);
 
+  // "Watch a guide" buttons in the map view → open a YouTube search (example videos)
+  document.querySelectorAll('.map-watch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = btn.dataset.yt || 'MLBB guide';
+      window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, '_blank');
+    });
+  });
+
   const studyBtn = document.getElementById('btn-open-study');
   if (studyBtn) {
     studyBtn.addEventListener('click', () => openStudyPanel());

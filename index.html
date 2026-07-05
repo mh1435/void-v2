@@ -317,97 +317,161 @@ if ('serviceWorker' in navigator) {
         <div class="gamehub-content-view" id="gamehub-view-maps">
           <div class="maps-scroll">
 
+            <div class="meta-banner">
+              <span class="meta-banner-tag">MID-SEASON META</span>
+              <span class="meta-banner-text">Objectives shifted: <b>Fire Turtle at ~2:00</b> gives a team ATK/Magic buff · <b>Lord from 8:00</b> · rotations now revolve around securing Turtle stacks and mid priority. Guidance below is current-patch fundamentals.</span>
+            </div>
+
+            <!-- Map diagram -->
             <div class="map-role-card">
-              <div class="map-role-header roamer-color">⚔ ROAMER ROUTES</div>
-              <div class="map-route-block">
-                <div class="map-route-title">Standard Route</div>
-                <div class="map-route-step"><span class="step-num">1</span>Help gold laner at bottom — trade or secure a kill level 1–2</div>
-                <div class="map-route-step"><span class="step-num">2</span>Move to river → assist jungler clearing turtle camp</div>
-                <div class="map-route-step"><span class="step-num">3</span>Rotate mid — control LBM / RBM bushes for vision</div>
-                <div class="map-route-step"><span class="step-num">4</span>Return bottom if enemy dives, or push top if exp needs help</div>
-              </div>
-              <div class="map-route-block warning-block">
-                <div class="map-route-title">🔴 Gold Lane Is Weak</div>
-                <div class="map-route-step"><span class="step-num">→</span>Stay bottom longer — 2v2 the enemy or zone them out</div>
-                <div class="map-route-step"><span class="step-num">→</span>Help gold farm safely under tower with roamer pressure</div>
-                <div class="map-route-step"><span class="step-num">→</span>Counter-gank when enemy roamer visits bottom</div>
-                <div class="map-route-step"><span class="step-num">→</span>Avoid forcing 2v1 if you're losing the trade</div>
-              </div>
-              <div class="map-route-block warning-block">
-                <div class="map-route-title">🔴 Mid Lane Is Weak</div>
-                <div class="map-route-step"><span class="step-num">→</span>Frequent mid rotations through river — set up kills</div>
-                <div class="map-route-step"><span class="step-num">→</span>Secure blue buff for your mage when possible</div>
-                <div class="map-route-step"><span class="step-num">→</span>Camp LBM or RBM to deny enemy jungler's mid ganks</div>
-                <div class="map-route-step"><span class="step-num">→</span>Zone out enemy mid from turtle vision</div>
-              </div>
-              <div class="map-route-block warning-block">
-                <div class="map-route-title">🔴 Exp Lane Is Weak</div>
-                <div class="map-route-step"><span class="step-num">→</span>Visit top lane at level 2–3 before they get dived</div>
-                <div class="map-route-step"><span class="step-num">→</span>After turtle, immediately rotate top to even the pressure</div>
-                <div class="map-route-step"><span class="step-num">→</span>Deep ward enemy top jungle to track their jungler</div>
+              <div class="map-role-header" style="color:var(--accent)">🗺 THE MAP AT A GLANCE</div>
+              <div class="map-diagram-wrap">
+                <svg viewBox="0 0 300 300" class="map-diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MLBB lane and objective map">
+                  <defs>
+                    <linearGradient id="mapbg" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0" stop-color="rgba(124,111,255,0.08)"/><stop offset="1" stop-color="rgba(0,0,0,0.25)"/>
+                    </linearGradient>
+                  </defs>
+                  <rect x="6" y="6" width="288" height="288" rx="18" fill="url(#mapbg)" stroke="rgba(255,255,255,0.08)"/>
+                  <!-- lanes -->
+                  <polyline points="44,256 256,256 256,44" fill="none" stroke="#ffb000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+                  <line x1="60" y1="240" x2="240" y2="60" stroke="#ca5cff" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+                  <polyline points="44,256 44,44 256,44" fill="none" stroke="#00ff66" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+                  <!-- river (anti-diagonal) -->
+                  <line x1="70" y1="70" x2="230" y2="230" stroke="#00f0ff" stroke-width="14" stroke-linecap="round" opacity="0.12"/>
+                  <!-- bases -->
+                  <circle cx="40" cy="260" r="14" fill="#3a7bff"/><text x="40" y="264" class="mapt" text-anchor="middle">◆</text>
+                  <circle cx="260" cy="40" r="14" fill="#ff4d4d"/><text x="260" y="44" class="mapt" text-anchor="middle">◆</text>
+                  <!-- objectives -->
+                  <circle cx="112" cy="112" r="11" fill="rgba(0,240,255,0.18)" stroke="#00f0ff"/><text x="112" y="116" class="mapt" text-anchor="middle">L</text>
+                  <circle cx="188" cy="188" r="11" fill="rgba(0,255,102,0.16)" stroke="#00ff66"/><text x="188" y="192" class="mapt" text-anchor="middle">T</text>
+                  <!-- buff camps -->
+                  <circle cx="150" cy="215" r="5" fill="#ff5d5d"/><circle cx="215" cy="150" r="5" fill="#3a7bff"/>
+                  <circle cx="150" cy="85" r="5" fill="#3a7bff"/><circle cx="85" cy="150" r="5" fill="#ff5d5d"/>
+                  <!-- labels -->
+                  <text x="250" y="150" class="mapl" fill="#ffb000" text-anchor="middle" transform="rotate(90 250 150)">GOLD</text>
+                  <text x="150" y="158" class="mapl" fill="#ca5cff" text-anchor="middle" transform="rotate(-45 150 150)">MID</text>
+                  <text x="150" y="40" class="mapl" fill="#00ff66" text-anchor="middle">EXP</text>
+                </svg>
+                <div class="map-legend">
+                  <span><i style="background:#ffb000"></i>Gold lane</span>
+                  <span><i style="background:#ca5cff"></i>Mid lane</span>
+                  <span><i style="background:#00ff66"></i>Exp lane</span>
+                  <span><i style="background:#00f0ff"></i>L = Lord pit</span>
+                  <span><i style="background:#00ff66"></i>T = Turtle pit</span>
+                  <span><i style="background:#3a7bff"></i>/<i style="background:#ff5d5d"></i> Buffs</span>
+                </div>
               </div>
             </div>
 
+            <!-- GOLD -->
             <div class="map-role-card">
-              <div class="map-role-header jungler-color">🌀 JUNGLER ROUTES</div>
+              <div class="map-role-header gold-color">🏹 GOLD LANE (Marksman)</div>
               <div class="map-route-block">
-                <div class="map-route-title">Standard Clear</div>
-                <div class="map-route-step"><span class="step-num">1</span>Start at buff camp closest to your gold lane for roamer leash</div>
-                <div class="map-route-step"><span class="step-num">2</span>Clear second buff camp, then small camps in your jungle</div>
-                <div class="map-route-step"><span class="step-num">3</span>Look for gank opportunity mid or bottom after clear</div>
-                <div class="map-route-step"><span class="step-num">4</span>Contest or secure turtle with full team at 3–4 min</div>
+                <div class="map-route-title">EARLY ROTATION</div>
+                <div class="map-route-step"><span class="step-num">1</span>Level 1: trade with your roamer to hit lvl 2 first, then all-in</div>
+                <div class="map-route-step"><span class="step-num">2</span>Farm safe under tower when enemy jungler is missing — never greed a wave into a gank</div>
+                <div class="map-route-step"><span class="step-num">3</span>At ~1:45 shove the wave, then rotate up to the Turtle with full skills</div>
+                <div class="map-route-step"><span class="step-num">4</span>Post-Turtle: return bottom, clear waves, and take the outer tower</div>
               </div>
               <div class="map-route-block">
-                <div class="map-route-title">Aggressive Invade</div>
-                <div class="map-route-step"><span class="step-num">1</span>Level 1 invade enemy buff with roamer — steal or force enemy to waste time</div>
-                <div class="map-route-step"><span class="step-num">2</span>Counter-jungle enemy small camps for gold advantage</div>
-                <div class="map-route-step"><span class="step-num">3</span>Use gold lead to snowball early ganks</div>
+                <div class="map-route-title">TIPS &amp; TRICKS</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Buy boots + your first attack-speed spike before recalling to power-farm</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Stand behind your tank in fights — your job is DPS uptime, not positioning heroics</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Late game: side-push to draw pressure while your team holds Lord vision</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Keep Purify/Flicker for the enemy assassin's dive, not for chasing kills</div>
+              </div>
+              <button class="map-watch-btn" data-yt="MLBB gold lane marksman guide rotation">▶ Watch a gold lane guide</button>
+            </div>
+
+            <!-- MID -->
+            <div class="map-role-card">
+              <div class="map-role-header mid-color">✨ MID LANE (Mage)</div>
+              <div class="map-route-block">
+                <div class="map-route-title">EARLY ROTATION</div>
+                <div class="map-route-step"><span class="step-num">1</span>Clear the first wave fast, then grab blue buff to fuel your mana</div>
+                <div class="map-route-step"><span class="step-num">2</span>Ping and rotate to Turtle before it spawns — mid arrives first, so you set the tempo</div>
+                <div class="map-route-step"><span class="step-num">3</span>Control LBM / RBM bushes for vision before every mid walk</div>
+                <div class="map-route-step"><span class="step-num">4</span>After Turtle, shove mid and roam to whichever side lane is diving</div>
+              </div>
+              <div class="map-route-block">
+                <div class="map-route-title">TIPS &amp; TRICKS</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Hold one CC/burst combo for the enemy jungler — punish ganks into free kills</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Track the enemy jungler on the minimap and call their position every clear</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Don't over-extend past river without vision — mid is the most-ganked lane</div>
+                <div class="map-route-step"><span class="step-num">✦</span>In fights, hit the frontline that's grouped up; only dive the carry if it's safe</div>
+              </div>
+              <button class="map-watch-btn" data-yt="MLBB mid lane mage rotation macro guide">▶ Watch a mid lane guide</button>
+            </div>
+
+            <!-- EXP -->
+            <div class="map-role-card">
+              <div class="map-role-header exp-color">🛡 EXP LANE (Fighter)</div>
+              <div class="map-route-block">
+                <div class="map-route-title">EARLY ROTATION</div>
+                <div class="map-route-step"><span class="step-num">1</span>Win the 1v1 or freeze the wave near your tower — never hard-feed the offlaner</div>
+                <div class="map-route-step"><span class="step-num">2</span>Hit lvl 4 before your opponent to win the first skill-level all-in</div>
+                <div class="map-route-step"><span class="step-num">3</span>When enemy recalls, shove the wave then rotate down for the Turtle fight</div>
+                <div class="map-route-step"><span class="step-num">4</span>Mid game: teleport/rotate to grouped fights — don't get stranded top</div>
+              </div>
+              <div class="map-route-block">
+                <div class="map-route-title">TIPS &amp; TRICKS</div>
+                <div class="map-route-step"><span class="step-num">✦</span>You are the frontline initiator — flank through jungle to hit their backline</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Track the enemy exp laner's ult; trade hardest when it's on cooldown</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Buy the first defense item that counters their carry (physical vs magic)</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Late game you can split-push a side lane to force a numbers advantage at Lord</div>
+              </div>
+              <button class="map-watch-btn" data-yt="MLBB exp lane fighter offlane guide">▶ Watch an exp lane guide</button>
+            </div>
+
+            <!-- JUNGLE -->
+            <div class="map-role-card">
+              <div class="map-role-header jungler-color">🌀 JUNGLE (Core Carry)</div>
+              <div class="map-route-block">
+                <div class="map-route-title">STANDARD CLEAR</div>
+                <div class="map-route-step"><span class="step-num">1</span>Start the buff closest to gold lane so your roamer can leash</div>
+                <div class="map-route-step"><span class="step-num">2</span>Full-clear both buffs + small camps, watching for the enemy jungler's start</div>
+                <div class="map-route-step"><span class="step-num">3</span>First gank on the lane with the most CC / lowest enemy HP after clear</div>
+                <div class="map-route-step"><span class="step-num">4</span>Group the team for Turtle at ~2:00 — never solo-contest it without vision</div>
+              </div>
+              <div class="map-route-block">
+                <div class="map-route-title">AGGRESSIVE INVADE</div>
+                <div class="map-route-step"><span class="step-num">1</span>Lvl 1 invade the enemy buff with your roamer — steal it or burn their time</div>
+                <div class="map-route-step"><span class="step-num">2</span>Counter-jungle their small camps whenever they show on the far side of the map</div>
+                <div class="map-route-step"><span class="step-num">3</span>Snowball the gold lead into repeated ganks before the enemy cores come online</div>
+              </div>
+              <div class="map-route-block">
+                <div class="map-route-title">TIPS &amp; TRICKS</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Always keep Retribution for the objective — never waste it on a camp before Turtle</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Hover the minimap: gank the lane the enemy jungler is farthest from</div>
+                <div class="map-route-step"><span class="step-num">✦</span>If you fall behind, farm safely and let your gold laner become the carry</div>
+              </div>
+              <button class="map-watch-btn" data-yt="MLBB jungle rotation gank pathing guide">▶ Watch a jungle guide</button>
+            </div>
+
+            <!-- ROAM -->
+            <div class="map-role-card">
+              <div class="map-role-header roamer-color">⚔ ROAM (Tank / Support)</div>
+              <div class="map-route-block">
+                <div class="map-route-title">STANDARD ROUTE</div>
+                <div class="map-route-step"><span class="step-num">1</span>Leash your jungler's first buff, then walk down to protect the gold laner lvl 1–2</div>
+                <div class="map-route-step"><span class="step-num">2</span>Move to the river and set vision for the Turtle fight</div>
+                <div class="map-route-step"><span class="step-num">3</span>Rotate mid — hold LBM / RBM so the enemy can't gank your mage</div>
+                <div class="map-route-step"><span class="step-num">4</span>Follow the fight: peel for your carry or engage onto their backline</div>
               </div>
               <div class="map-route-block warning-block">
-                <div class="map-route-title">🔴 Gold Lane Is Weak</div>
-                <div class="map-route-step"><span class="step-num">→</span>After first clear, immediately gank bottom to relieve pressure</div>
-                <div class="map-route-step"><span class="step-num">→</span>Focus on helping carry snowball rather than counter-jungling</div>
-                <div class="map-route-step"><span class="step-num">→</span>Secure turtle with gold laner to restore their economy</div>
+                <div class="map-route-title">🔴 IF A LANE IS LOSING</div>
+                <div class="map-route-step"><span class="step-num">→</span>Gold weak: stay bottom, zone the enemy, counter-gank their roamer</div>
+                <div class="map-route-step"><span class="step-num">→</span>Mid weak: camp LBM/RBM and rotate through river to deny ganks</div>
+                <div class="map-route-step"><span class="step-num">→</span>Exp weak: visit top by lvl 2–3 and deep-ward their jungle entrance</div>
               </div>
-              <div class="map-route-block warning-block">
-                <div class="map-route-title">🔴 Mid Lane Is Weak</div>
-                <div class="map-route-step"><span class="step-num">→</span>Prioritize mid ganks — easy kills with mid CC setup</div>
-                <div class="map-route-step"><span class="step-num">→</span>Secure blue buff and leave it for your mage</div>
-                <div class="map-route-step"><span class="step-num">→</span>Don't let enemy sneak turtle from mid river</div>
-              </div>
-            </div>
-
-            <div class="map-role-card">
-              <div class="map-role-header gold-color">🏹 GOLD LANE TIPS</div>
               <div class="map-route-block">
-                <div class="map-route-step"><span class="step-num">1</span>Trade aggressively level 1 with roamer — hit level 2 first</div>
-                <div class="map-route-step"><span class="step-num">2</span>Last-hit minions under tower safely when getting dived</div>
-                <div class="map-route-step"><span class="step-num">3</span>Recall when enemy jungler shows on mini-map bottom</div>
-                <div class="map-route-step"><span class="step-num">4</span>Rotate for turtle with full skills ready — your damage matters</div>
-                <div class="map-route-step"><span class="step-num">5</span>Split push side lane when team holds a fight elsewhere</div>
+                <div class="map-route-title">TIPS &amp; TRICKS</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Vision wins games — keep the flame/vision tool up around every objective</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Engage only when your carries are in range to follow up — never fight alone</div>
+                <div class="map-route-step"><span class="step-num">✦</span>Save your hard CC for the enemy's biggest threat, not the first hero you see</div>
               </div>
-            </div>
-
-            <div class="map-role-card">
-              <div class="map-role-header mid-color">✨ MID LANE TIPS</div>
-              <div class="map-route-block">
-                <div class="map-route-step"><span class="step-num">1</span>Fast wave clear → immediately rotate to turtle</div>
-                <div class="map-route-step"><span class="step-num">2</span>Control LBM (Left Bush Mid) and RBM for vision advantage</div>
-                <div class="map-route-step"><span class="step-num">3</span>First to arrive at turtle = biggest influence on early game</div>
-                <div class="map-route-step"><span class="step-num">4</span>Track enemy jungler position from mini-map — call it out</div>
-                <div class="map-route-step"><span class="step-num">5</span>After turtle, push mid tower before rotating elsewhere</div>
-              </div>
-            </div>
-
-            <div class="map-role-card">
-              <div class="map-role-header exp-color">🛡 EXP LANE TIPS</div>
-              <div class="map-route-block">
-                <div class="map-route-step"><span class="step-num">1</span>Win the 1v1 or play safe under tower — don't feed</div>
-                <div class="map-route-step"><span class="step-num">2</span>Never let opponent hit level 4 before you — deny their skill advantage</div>
-                <div class="map-route-step"><span class="step-num">3</span>Rotate when opponent recalls — push wave into tower first</div>
-                <div class="map-route-step"><span class="step-num">4</span>Join teamfight as frontline or secondary carry</div>
-                <div class="map-route-step"><span class="step-num">5</span>After lord spawns, teleport/rotate to teamfights — don't solo top</div>
-              </div>
+              <button class="map-watch-btn" data-yt="MLBB roam tank support rotation guide">▶ Watch a roam guide</button>
             </div>
 
           </div>

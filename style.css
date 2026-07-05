@@ -1419,6 +1419,31 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   border-radius: 4px; padding: 1px 5px; flex-shrink: 0; margin-top: 2px;
 }
 
+/* --- Map strategy view upgrades --- */
+.meta-banner {
+  background: linear-gradient(135deg, rgba(124,111,255,0.12), rgba(0,240,255,0.06));
+  border: 1px solid rgba(124,111,255,0.25); border-radius: 12px; padding: 11px 13px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.meta-banner-tag {
+  font-family: var(--hub-display); font-size: 9px; font-weight: 900; letter-spacing: 0.1em;
+  color: var(--accent); background: rgba(124,111,255,0.15); padding: 3px 8px; border-radius: 6px; align-self: flex-start;
+}
+.meta-banner-text { font-size: 11.5px; color: var(--text); line-height: 1.5; }
+.map-diagram-wrap { padding: 12px 14px 14px; }
+.map-diagram { width: 100%; max-width: 300px; display: block; margin: 0 auto 10px; }
+.map-diagram .mapt { font: 900 11px var(--hub-display); fill: #fff; }
+.map-diagram .mapl { font: 800 10px var(--hub-display); letter-spacing: 0.08em; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
+.map-legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted); }
+.map-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.map-watch-btn {
+  margin: 4px 14px 12px; padding: 9px 14px; width: calc(100% - 28px);
+  background: rgba(255,0,0,0.08); border: 1px solid rgba(255,60,60,0.3); color: var(--text);
+  border-radius: 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: var(--hub-body);
+}
+.map-watch-btn:active { background: rgba(255,0,0,0.16); }
+
 /* --- References View --- */
 .refs-category {
   background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
