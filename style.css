@@ -992,7 +992,6 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   color: var(--muted); font-family: var(--hub-display); font-size: 8px; font-weight: 700;
   letter-spacing: 0.08em; padding: 3px 7px; border-radius: 8px;
 }
-.game-tile-add { border-style: dashed; opacity: 0.35; cursor: default; }
 .mlbb-content-view {
   display: none; flex-direction: column; flex: 1; overflow: hidden;
   min-height: 0;
