@@ -17,6 +17,7 @@ const App = {
     reducedMotion: false,
     voiceEnabled: true, voiceRate: 1.0, voicePitch: 1.0, voiceName: '',
     voiceEngine: 'device', realisticVoice: 'autumn',
+    wakeWord: false,
     floatingAssistantEnabled: false,
     haptic: true,
     accentColor: '', accentColor2: '',
@@ -1446,6 +1447,21 @@ function setupVoice() {
   const nameSelect = document.getElementById('voice-name-select');
   const testBtn = document.getElementById('voice-test-btn');
 
+  const wakeToggle = document.getElementById('toggle-wake-word');
+  if (wakeToggle) {
+    wakeToggle.checked = !!App.settings.wakeWord;
+    wakeToggle.addEventListener('change', () => {
+      App.settings.wakeWord = wakeToggle.checked;
+      saveSettings();
+      if (wakeToggle.checked) {
+        appendMessage?.('system', '👂 Wake word on — say "Okay VOID" anytime to start talking.');
+        App.startWakeListening?.();
+      } else {
+        App.stopWakeListening?.();
+      }
+    });
+  }
+
   if (enabledToggle) {
     enabledToggle.checked = !!App.settings.voiceEnabled;
     enabledToggle.addEventListener('change', () => {
@@ -1667,6 +1683,7 @@ function setupChat() {
 
   async function startNativeListening() {
     if (listening) return;
+    App.stopWakeListening?.();
     try {
       if (!nativeSTTPermGranted) {
         const perm = await NativeSTT.requestPermissions();
@@ -1683,10 +1700,12 @@ function setupChat() {
       sendBtn.classList.remove('mic-active');
       updateSendMicBtn();
       handleHeardText(result?.matches?.[0]);
+      if (App.settings.wakeWord && !App.voiceConvo) setTimeout(() => App.startWakeListening?.(), 600);
     } catch (_) {
       listening = false;
       sendBtn.classList.remove('mic-active');
       updateSendMicBtn();
+      if (App.settings.wakeWord && !App.voiceConvo) setTimeout(() => App.startWakeListening?.(), 600);
     }
   }
 
@@ -1700,6 +1719,7 @@ function setupChat() {
       listening = false;
       sendBtn.classList.remove('mic-active');
       updateSendMicBtn();
+      if (App.settings.wakeWord && !App.voiceConvo) setTimeout(() => App.startWakeListening?.(), 500);
     });
     recognizer.addEventListener('error', () => {
       listening = false;
@@ -1748,6 +1768,7 @@ function setupChat() {
   App.startListening = () => {
     if (NativeSTT) { startNativeListening(); return; }
     if (!recognizer || listening) return;
+    App.stopWakeListening?.();
     try {
       recognizer.lang = getSTTLang();
       recognizer.start();
@@ -1764,14 +1785,88 @@ function setupChat() {
       convoBtn.classList.toggle('active', App.voiceConvo);
       document.getElementById('plus-btn')?.classList.toggle('active', App.voiceConvo);
       if (App.voiceConvo) {
+        App.stopWakeListening?.();
         appendMessage('system', '🎙 Live voice mode on — just talk. VOID answers out loud and listens again. Tap LIVE to stop.');
         App.startListening();
       } else {
         try { NativeSTT ? NativeSTT.stop() : recognizer?.stop(); } catch (_) {}
         stopSpeaking();
+        // Resume passive wake listening once the live conversation ends
+        setTimeout(() => App.startWakeListening?.(), 600);
       }
     });
   }
+
+  /* ===== Wake word: "Okay VOID" (like "Okay Google") ===== */
+  // A passive, always-on listener. When it hears "okay/hey void", it drops
+  // into hands-free Live voice mode — sending anything said in the same breath.
+  const WAKE_RE = /\b(?:ok(?:ay)?|hey|hi|yo)\s+void\b[\s,.:;!?-]*(.*)$/i;
+  let wakeRecognizer = null, wakeActive = false, wakeCooldown = false, nativeWakeStop = false;
+
+  function activateFromWake(rest) {
+    if (wakeCooldown) return;
+    wakeCooldown = true; setTimeout(() => { wakeCooldown = false; }, 2500);
+    App.stopWakeListening();
+    buzz(60);
+    if (!App.voiceConvo) {
+      App.voiceConvo = true;
+      convoBtn?.classList.add('active');
+      document.getElementById('plus-btn')?.classList.add('active');
+    }
+    const cmd = (rest || '').trim().replace(/[.?!]+$/, '').trim();
+    if (cmd.length >= 2) {
+      input.value = cmd; input.dispatchEvent(new Event('input'));
+      sendMessage(); // live mode resumes listening after the reply
+    } else {
+      appendMessage('system', '🎙 Yes? I\'m listening… (Live voice on — tap LIVE to stop)');
+      App.startListening();
+    }
+  }
+
+  async function startNativeWakeLoop() {
+    if (wakeActive) return;
+    nativeWakeStop = false; wakeActive = true;
+    try {
+      const perm = await NativeSTT.requestPermissions();
+      if (!(perm.speechRecognition === 'granted' || perm.speechRecognition === 'limited')) { wakeActive = false; return; }
+    } catch (_) { wakeActive = false; return; }
+    while (App.settings.wakeWord && !nativeWakeStop && !App.voiceConvo && !listening) {
+      try {
+        const result = await NativeSTT.start({ language: getSTTLang(), maxResults: 4, partialResults: false, popup: false });
+        const hit = (result?.matches || []).map(String).find(t => WAKE_RE.test(t));
+        if (hit) { activateFromWake(hit.match(WAKE_RE)[1]); break; }
+      } catch (_) { await new Promise(r => setTimeout(r, 700)); }
+    }
+    wakeActive = false;
+  }
+
+  App.startWakeListening = () => {
+    if (!App.settings.wakeWord || wakeActive || App.voiceConvo || listening) return;
+    if (NativeSTT) { startNativeWakeLoop(); return; }
+    if (!SpeechRecognition) return;
+    wakeActive = true;
+    wakeRecognizer = new SpeechRecognition();
+    wakeRecognizer.continuous = true;
+    wakeRecognizer.interimResults = true;
+    wakeRecognizer.lang = getSTTLang();
+    wakeRecognizer.addEventListener('result', (e) => {
+      const txt = Array.from(e.results).slice(-4).map(r => r[0].transcript).join(' ');
+      const m = txt.match(WAKE_RE);
+      if (m) activateFromWake(m[1]);
+    });
+    wakeRecognizer.addEventListener('error', () => {});
+    wakeRecognizer.addEventListener('end', () => {
+      wakeActive = false;
+      if (App.settings.wakeWord && !App.voiceConvo && !listening) setTimeout(() => App.startWakeListening(), 500);
+    });
+    try { wakeRecognizer.start(); } catch (_) { wakeActive = false; }
+  };
+
+  App.stopWakeListening = () => {
+    nativeWakeStop = true;
+    if (wakeRecognizer) { try { wakeRecognizer.onend = null; wakeRecognizer.stop(); } catch (_) {} wakeRecognizer = null; }
+    wakeActive = false;
+  };
 
   input.addEventListener('input', () => {
     input.style.height = 'auto';
@@ -1845,6 +1940,9 @@ function setupChat() {
 
   updateSendMicBtn();
   updateModelIndicator();
+
+  // Begin passive "Okay VOID" wake listening if the user has it enabled.
+  if (App.settings.wakeWord) setTimeout(() => App.startWakeListening?.(), 1500);
 }
 
 function clearPendingImage() {
