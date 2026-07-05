@@ -29,6 +29,9 @@ const App = {
   memoryFacts: [],   // auto-extracted facts about the user, persisted per account
   bookmarks: [],     // starred assistant messages
   documents: [],     // created/edited documents, per account
+  githubToken: '',   // user's GitHub PAT — device-only, never synced
+  githubUser: null,  // { login, ... } once connected
+  githubRepos: [],
   chatHistory: [],   // messages of the ACTIVE chat (reference into chats[].messages)
   chats: [],         // [{ id, title, messages:[], updatedAt }]
   currentChatId: null,
@@ -533,6 +536,8 @@ function bootApp() {
   setupMemoryPanel();
   setupDocFormatPicker();
   setupDocumentsPanel();
+  setupGitHubPanel();
+  setupGitHubPushSheet();
   setupStudyMode();
   setupNavDrawer();
   setupClonedPanels();
@@ -545,6 +550,7 @@ function bootApp() {
   loadMemoryFacts();
   loadBookmarks();
   loadDocuments();
+  loadGitHub();
   updateUserDisplay();
   initLiveContext();
   initQuoteWidget();
@@ -1203,6 +1209,9 @@ function openSettingsPanel(panelId) {
     renderBookmarks();
   } else if (panelId === 'panel-documents') {
     renderDocumentsList();
+  } else if (panelId === 'panel-github') {
+    renderGitHubState();
+    if (App.githubToken && !App.githubUser) ghVerify().catch(() => {});
   } else if (panelId === 'panel-billing') {
     hydrateBilling();
   } else if (panelId === 'panel-profile') {
@@ -2069,6 +2078,70 @@ async function sendMessage() {
     return;
   }
 
+  // /gh — GitHub actions from chat
+  if (text.toLowerCase() === '/gh' || text.toLowerCase().startsWith('/gh ')) {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    const parts = text.slice(3).trim().split(/\s+/);
+    const sub = (parts.shift() || 'help').toLowerCase();
+    if (!App.githubToken || !App.githubUser) {
+      if (sub !== 'help') { appendMessage('system', '🔗 Connect GitHub first: Settings → GitHub, paste a Personal Access Token.'); return; }
+    }
+    if (sub === 'help' || sub === '') {
+      appendMessage('system', [
+        '🐙 **GitHub commands**',
+        '`/gh repos` — list your repositories',
+        '`/gh new <name>` — create a new repo',
+        '`/gh push <owner/repo> <path>` — commit the last VOID reply to that file',
+        '',
+        App.githubUser ? `Connected as @${App.githubUser.login}.` : 'Not connected yet — Settings → GitHub.',
+      ].join('\n'));
+      return;
+    }
+    if (sub === 'repos') {
+      const typingId = appendTyping();
+      try {
+        const repos = await ghListRepos();
+        removeTyping(typingId);
+        appendMessage('system', repos.length
+          ? '📦 **Your repos**\n' + repos.slice(0, 25).map(r => `• ${r.full_name}${r.private ? ' 🔒' : ''}`).join('\n')
+          : 'No repositories found.');
+      } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+      return;
+    }
+    if (sub === 'new') {
+      const name = (parts[0] || '').replace(/\s+/g, '-');
+      if (!name) { appendMessage('system', 'Usage: /gh new my-repo-name'); return; }
+      const typingId = appendTyping();
+      try {
+        const repo = await ghCreateRepo(name, true);
+        removeTyping(typingId);
+        appendMessage('system', `✅ Created **${repo.full_name}** — ${repo.html_url}`);
+        ghListRepos().catch(() => {});
+      } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+      return;
+    }
+    if (sub === 'push') {
+      const full = parts[0] || '';
+      const path = parts[1] || '';
+      if (!full.includes('/') || !path) { appendMessage('system', 'Usage: /gh push owner/repo path/to/file.txt'); return; }
+      // Grab the most recent assistant text reply as the file content.
+      const lastAssistant = [...App.chatHistory].reverse().find(m => m.role === 'assistant');
+      const content = lastAssistant ? msgText(lastAssistant.content) : '';
+      if (!content) { appendMessage('system', 'No recent VOID reply to push. Ask something first, then /gh push.'); return; }
+      const [owner, repo] = full.split('/');
+      const typingId = appendTyping();
+      try {
+        const res = await ghPutFile(owner, repo, path, content, `Add ${path} via VOID`);
+        removeTyping(typingId);
+        appendMessage('system', `✅ Committed to **${full}** → ${res.content?.html_url || path}`);
+      } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+      return;
+    }
+    appendMessage('system', 'Unknown /gh command. Try /gh help');
+    return;
+  }
+
   // /convert command — "/convert 100 usd to eur"
   if (text.toLowerCase().startsWith('/convert ')) {
     const m = text.slice(9).trim().match(/^([\d.,]+)\s*([a-z]{3})\s*(?:to|in)\s*([a-z]{3})$/i);
@@ -2120,6 +2193,7 @@ async function sendMessage() {
       '`/brief` — daily briefing (weather, tasks, quote)',
       '`/image <prompt>` — generate an image (attach a photo first to edit/restyle it instead)',
       '`/doc <description>` — write a document, export as .txt / Word / .pdf',
+      '`/gh <repos|new|push>` — GitHub: list repos, create one, or commit a file',
       '`/define <word>` — dictionary lookup',
       '`/price <coin>` — crypto price',
       '`/convert 100 usd to eur` — currency',
@@ -3154,12 +3228,19 @@ function showDocumentMessage(title, content) {
           <span class="doc-card-title">${escapeHTML(title)}</span>
         </div>
         <div class="doc-card-body">${escapeHTML(content.slice(0, 500))}${content.length > 500 ? '…' : ''}</div>
-        <button class="doc-card-save" type="button">⬇ Save as file</button>
+        <div class="doc-card-btns">
+          <button class="doc-card-save" type="button">⬇ Save as file</button>
+          <button class="doc-card-gh" type="button">🐙 Push to GitHub</button>
+        </div>
       </div>
     </div>`;
   el.querySelector('.doc-card-save').addEventListener('click', (e) => {
     e.stopPropagation();
     openDocFormatPicker(title, content, e.currentTarget);
+  });
+  el.querySelector('.doc-card-gh').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openGitHubPush(content, safeFileName(title) + '.txt');
   });
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -3190,6 +3271,223 @@ function setupDocumentsPanel() {
     });
   }
   renderDocumentsList();
+}
+
+/* ============ GitHub: connect, create repos, commit files ============
+   Uses the user's own Personal Access Token, kept only in this device's
+   localStorage (never synced, never in code). All calls go straight from
+   the browser to api.github.com. */
+
+function loadGitHub() {
+  try { App.githubToken = localStorage.getItem(userKey('githubToken')) || ''; } catch (_) { App.githubToken = ''; }
+  if (App.githubToken) { ghVerify().catch(() => {}); }
+}
+function saveGitHubToken(tok) {
+  App.githubToken = tok || '';
+  try {
+    if (tok) localStorage.setItem(userKey('githubToken'), tok);
+    else localStorage.removeItem(userKey('githubToken'));
+  } catch (_) {}
+}
+
+function ghHeaders() {
+  return {
+    'Authorization': `Bearer ${App.githubToken}`,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+async function ghVerify() {
+  if (!App.githubToken) throw new Error('no token');
+  const r = await fetch('https://api.github.com/user', { headers: ghHeaders() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Invalid or expired token' : `GitHub error ${r.status}`);
+  App.githubUser = await r.json();
+  renderGitHubState();
+  return App.githubUser;
+}
+
+async function ghListRepos() {
+  const r = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner', { headers: ghHeaders() });
+  if (!r.ok) throw new Error(`GitHub error ${r.status}`);
+  App.githubRepos = await r.json();
+  return App.githubRepos;
+}
+
+async function ghCreateRepo(name, isPrivate) {
+  const r = await fetch('https://api.github.com/user/repos', {
+    method: 'POST', headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, private: !!isPrivate, auto_init: true }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
+  return d;
+}
+
+// base64 that survives UTF-8 (emoji, accents) — GitHub wants base64 content.
+function b64utf8(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+async function ghPutFile(owner, repo, path, content, message) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+  // If the file already exists we need its blob sha to update it.
+  let sha = null;
+  try {
+    const g = await fetch(url, { headers: ghHeaders() });
+    if (g.ok) { const gd = await g.json(); sha = gd.sha || null; }
+  } catch (_) {}
+  const r = await fetch(url, {
+    method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: message || `Add ${path} via VOID`, content: b64utf8(content), ...(sha ? { sha } : {}) }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
+  return d;
+}
+
+function renderGitHubState() {
+  const disc = document.getElementById('github-disconnected');
+  const conn = document.getElementById('github-connected');
+  const connected = !!(App.githubToken && App.githubUser);
+  if (disc) disc.style.display = connected ? 'none' : '';
+  if (conn) conn.style.display = connected ? '' : 'none';
+  if (connected) {
+    const name = document.getElementById('github-user-name');
+    const sub = document.getElementById('github-user-sub');
+    if (name) name.textContent = '@' + (App.githubUser.login || 'user');
+    if (sub) sub.textContent = App.githubUser.public_repos != null ? `${App.githubUser.public_repos} public repos` : 'Connected';
+    renderGitHubRepos();
+  }
+}
+
+function renderGitHubRepos() {
+  const list = document.getElementById('github-repos-list');
+  if (!list) return;
+  if (!App.githubRepos.length) { list.innerHTML = '<p class="muted small">Tap Refresh to load your repositories.</p>'; return; }
+  list.innerHTML = App.githubRepos.slice(0, 40).map(r => `
+    <div class="doc-item">
+      <div class="doc-item-title">${escapeHTML(r.name)} ${r.private ? '🔒' : ''}</div>
+      <div class="doc-item-preview">${escapeHTML(r.description || r.full_name)}</div>
+      <div class="doc-item-actions">
+        <a class="doc-mini-btn" href="${r.html_url}" target="_blank" rel="noopener noreferrer">Open ↗</a>
+      </div>
+    </div>`).join('');
+}
+
+function setupGitHubPanel() {
+  const connectBtn = document.getElementById('github-connect-btn');
+  const tokenInput = document.getElementById('github-token-input');
+  const connectStatus = document.getElementById('github-connect-status');
+  if (connectBtn && tokenInput) {
+    connectBtn.addEventListener('click', async () => {
+      const tok = tokenInput.value.trim();
+      if (!tok) { if (connectStatus) connectStatus.textContent = 'Paste a token first.'; return; }
+      connectBtn.disabled = true; connectBtn.textContent = 'Connecting…';
+      saveGitHubToken(tok);
+      try {
+        await ghVerify();
+        tokenInput.value = '';
+        if (connectStatus) connectStatus.textContent = '';
+        try { await ghListRepos(); renderGitHubRepos(); } catch (_) {}
+      } catch (e) {
+        saveGitHubToken('');
+        App.githubUser = null;
+        if (connectStatus) connectStatus.textContent = e.message || 'Could not connect.';
+        renderGitHubState();
+      } finally {
+        connectBtn.disabled = false; connectBtn.textContent = 'Connect';
+      }
+    });
+  }
+
+  const openSettings = document.getElementById('github-open-settings');
+  if (openSettings) openSettings.addEventListener('click', () => window.open('https://github.com/settings/tokens?type=beta', '_blank'));
+
+  const disconnectBtn = document.getElementById('github-disconnect-btn');
+  if (disconnectBtn) disconnectBtn.addEventListener('click', () => {
+    saveGitHubToken(''); App.githubUser = null; App.githubRepos = [];
+    renderGitHubState();
+  });
+
+  const newRepoBtn = document.getElementById('github-newrepo-btn');
+  const newRepoName = document.getElementById('github-newrepo-name');
+  const newRepoPrivate = document.getElementById('github-newrepo-private');
+  const newRepoStatus = document.getElementById('github-newrepo-status');
+  if (newRepoBtn && newRepoName) {
+    newRepoBtn.addEventListener('click', async () => {
+      const name = newRepoName.value.trim().replace(/\s+/g, '-');
+      if (!name) { if (newRepoStatus) newRepoStatus.textContent = 'Enter a name.'; return; }
+      newRepoBtn.disabled = true; newRepoBtn.textContent = 'Creating…';
+      try {
+        const repo = await ghCreateRepo(name, newRepoPrivate?.checked);
+        if (newRepoStatus) newRepoStatus.innerHTML = `Created ✓ <a href="${repo.html_url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">${escapeHTML(repo.full_name)}</a>`;
+        newRepoName.value = '';
+        await ghListRepos(); renderGitHubRepos();
+      } catch (e) {
+        if (newRepoStatus) newRepoStatus.textContent = e.message || 'Could not create repo.';
+      } finally {
+        newRepoBtn.disabled = false; newRepoBtn.textContent = 'Create repository';
+      }
+    });
+  }
+
+  const refreshBtn = document.getElementById('github-refresh-repos');
+  if (refreshBtn) refreshBtn.addEventListener('click', async () => {
+    refreshBtn.textContent = 'Loading…';
+    try { await ghListRepos(); renderGitHubRepos(); } catch (_) {}
+    refreshBtn.textContent = 'Refresh';
+  });
+}
+
+// Push-to-GitHub sheet: pick a repo + path, commit the pending content.
+let pendingGitHubPush = null;
+function openGitHubPush(content, suggestedPath) {
+  if (!App.githubToken || !App.githubUser) {
+    appendMessage('system', '🔗 Connect GitHub first: Settings → GitHub, paste a Personal Access Token.');
+    return;
+  }
+  pendingGitHubPush = { content };
+  const sheet = document.getElementById('gh-push-sheet');
+  if (!sheet) return;
+  if (sheet.parentElement !== document.body) document.body.appendChild(sheet);
+  const repoSel = document.getElementById('gh-push-repo');
+  const pathInput = document.getElementById('gh-push-path');
+  const status = document.getElementById('gh-push-status');
+  if (status) status.textContent = '';
+  if (pathInput && suggestedPath) pathInput.value = suggestedPath;
+  const fill = () => {
+    if (repoSel) repoSel.innerHTML = App.githubRepos.map(r => `<option value="${r.full_name}">${escapeHTML(r.full_name)}</option>`).join('');
+  };
+  if (!App.githubRepos.length) { ghListRepos().then(fill).catch(() => {}); } else { fill(); }
+  sheet.classList.add('open');
+  sheet.style.position = 'fixed';
+  sheet.style.left = '12px'; sheet.style.right = '12px';
+  sheet.style.bottom = '12px'; sheet.style.top = 'auto'; sheet.style.width = 'auto';
+}
+function setupGitHubPushSheet() {
+  const sheet = document.getElementById('gh-push-sheet');
+  if (!sheet) return;
+  const goBtn = document.getElementById('gh-push-go');
+  const status = document.getElementById('gh-push-status');
+  if (goBtn) goBtn.addEventListener('click', async () => {
+    const full = document.getElementById('gh-push-repo')?.value || '';
+    const path = (document.getElementById('gh-push-path')?.value || '').trim().replace(/^\/+/, '');
+    if (!full || !path || !pendingGitHubPush) { if (status) status.textContent = 'Pick a repo and path.'; return; }
+    const [owner, repo] = full.split('/');
+    goBtn.disabled = true; goBtn.textContent = 'Committing…';
+    try {
+      const res = await ghPutFile(owner, repo, path, pendingGitHubPush.content, `Add ${path} via VOID`);
+      if (status) status.innerHTML = `Committed ✓ <a href="${res.content?.html_url || '#'}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">view file</a>`;
+      buzz();
+    } catch (e) {
+      if (status) status.textContent = e.message || 'Commit failed.';
+    } finally {
+      goBtn.disabled = false; goBtn.textContent = 'Commit file';
+    }
+  });
+  document.addEventListener('click', (e) => { if (!sheet.contains(e.target)) sheet.classList.remove('open'); });
+  sheet.addEventListener('click', (e) => e.stopPropagation());
 }
 
 // Re-render the message area for the active chat.

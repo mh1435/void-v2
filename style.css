@@ -272,10 +272,17 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent);
   mask-image: linear-gradient(to bottom, black 70%, transparent);
 }
+.doc-card-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-card-save {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text);
   border: none; border-radius: 9px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer;
 }
+.doc-card-gh {
+  background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--glass-border);
+  border-radius: 9px; padding: 8px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.gh-push-sheet { position: fixed; z-index: 600; }
+.gh-push-sheet.open { display: block; }
 .doc-item {
   background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px;
   padding: 12px 13px; margin-bottom: 8px;

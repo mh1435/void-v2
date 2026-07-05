@@ -719,6 +719,10 @@ if ('serviceWorker' in navigator) {
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
           <div class="menu-label"><span>Documents</span><span class="menu-sub">Create &amp; export .txt · Word · .pdf</span></div>
         </div>
+        <div class="menu-item" data-open-panel="panel-github">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"></path></svg></div>
+          <div class="menu-label"><span>GitHub</span><span class="menu-sub">Publish code &amp; files to your repos</span></div>
+        </div>
       </div>
 
       <!-- Device -->
@@ -1088,6 +1092,66 @@ if ('serviceWorker' in navigator) {
       <div class="settings-section-label">YOUR DOCUMENTS</div>
       <div id="documents-list"></div>
       <p class="muted small" id="documents-empty">No documents yet — generate one above.</p>
+    </div>
+  </div>
+
+  <!-- GITHUB -->
+  <div class="settings-panel" id="panel-github">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <span>GitHub</span>
+    </div>
+    <div class="panel-content">
+      <div id="github-disconnected">
+        <div class="settings-section-label">CONNECT</div>
+        <p class="muted small" style="margin-bottom:10px;">Paste a GitHub <b>Personal Access Token</b> so VOID can create repos and commit files for you. It's stored only on this device and never leaves it except to call GitHub directly.</p>
+        <div class="setting-row stacked">
+          <div class="setting-label"><span>Personal Access Token</span></div>
+          <input type="password" class="text-input" id="github-token-input" placeholder="ghp_… or github_pat_…" autocomplete="off">
+        </div>
+        <button class="primary-btn full" id="github-connect-btn">Connect</button>
+        <p class="muted small" id="github-connect-status" style="margin-top:8px;"></p>
+        <div class="sheet-divider"></div>
+        <div class="settings-section-label">HOW TO GET A TOKEN</div>
+        <p class="muted small">1. Open <b>github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens</b><br>2. Generate a token with <b>Repository → Contents: Read &amp; Write</b> and <b>Administration: Read &amp; Write</b> (for creating repos)<br>3. Paste it above.</p>
+        <button class="ghost-btn full" id="github-open-settings" style="margin-top:8px;">Open GitHub token settings</button>
+      </div>
+
+      <div id="github-connected" style="display:none;">
+        <div class="settings-section-label">CONNECTED</div>
+        <div class="setting-row">
+          <div class="setting-label"><span id="github-user-name">@user</span><span class="setting-sub" id="github-user-sub">Connected</span></div>
+          <button class="ghost-btn" id="github-disconnect-btn" style="width:auto;padding:8px 14px;">Disconnect</button>
+        </div>
+        <div class="sheet-divider"></div>
+        <div class="settings-section-label">CREATE A REPO</div>
+        <div class="setting-row input-group">
+          <input type="text" class="text-input" id="github-newrepo-name" placeholder="repository-name">
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><span>Private</span><span class="setting-sub">Only you can see it</span></div>
+          <label class="switch"><input type="checkbox" id="github-newrepo-private" checked><span class="switch-track"><span class="switch-thumb"></span></span></label>
+        </div>
+        <button class="primary-btn full" id="github-newrepo-btn">Create repository</button>
+        <p class="muted small" id="github-newrepo-status" style="margin-top:8px;"></p>
+        <div class="sheet-divider"></div>
+        <div class="settings-section-label">YOUR REPOS</div>
+        <button class="ghost-btn full" id="github-refresh-repos" style="margin-bottom:8px;">Refresh</button>
+        <div id="github-repos-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Push-to-GitHub sheet -->
+  <div class="provider-picker gh-push-sheet" id="gh-push-sheet">
+    <div class="provider-picker-title">PUSH TO GITHUB</div>
+    <div style="padding:12px 14px;">
+      <select class="select-input" id="gh-push-repo" style="margin-bottom:8px;"></select>
+      <input type="text" class="text-input" id="gh-push-path" placeholder="path e.g. notes/readme.md" style="margin-bottom:8px;">
+      <button class="primary-btn full" id="gh-push-go">Commit file</button>
+      <p class="muted small" id="gh-push-status" style="margin-top:8px;"></p>
     </div>
   </div>
 
