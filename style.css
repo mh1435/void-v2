@@ -277,6 +277,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   background: rgba(0,0,0,0.28); border: 1px solid var(--glass-border); border-radius: 8px;
   padding: 10px; margin: 0 0 10px; max-height: 240px; overflow: auto; white-space: pre;
 }
+.proj-file-list { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+.proj-file { font-family: var(--hub-mono); font-size: 12px; color: var(--muted); padding: 5px 9px; background: rgba(0,0,0,0.2); border-radius: 6px; }
 .doc-card-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-card-save {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text);

@@ -2093,6 +2093,7 @@ async function sendMessage() {
         '🐙 **GitHub commands**',
         '`/gh repos` — list your repositories',
         '`/gh new <name>` — create a new repo',
+        '`/gh scaffold <owner/repo> <what to build>` — generate a whole project & commit it',
         '`/gh ls <owner/repo> [path]` — browse files in a repo',
         '`/gh get <owner/repo> <path>` — open a file to read/edit',
         '`/gh edit <instruction>` — VOID edits the open file',
@@ -2148,6 +2149,26 @@ async function sendMessage() {
         App.githubFile.content = out;
         showGitHubFileMessage(App.githubFile, true);
       } catch (e) { removeTyping(typingId); appendMessage('system', `Edit failed: ${e.message}`); }
+      return;
+    }
+    if (sub === 'scaffold') {
+      const full = parts.shift() || '';
+      const desc = parts.join(' ');
+      if (!full.includes('/') || !desc) { appendMessage('system', 'Usage: /gh scaffold owner/repo a flask todo api with tests'); return; }
+      const [owner, repo] = full.split('/');
+      const typingId = appendTyping();
+      try {
+        const reply = await quickAI(
+          'You are a senior engineer scaffolding a project. Output a complete, working multi-file project for the request. ' +
+          'Format EXACTLY as repeated blocks: a line "=== relative/path/file.ext ===" followed by that file\'s full contents. ' +
+          'No commentary before, between, or after the blocks. No markdown code fences. Include a README.md. Keep it to the essential files (aim for 3–8).',
+          desc);
+        removeTyping(typingId);
+        const files = parseMultiFile(reply || '');
+        if (!files.length) { appendMessage('system', 'Could not scaffold that — try rephrasing.'); return; }
+        pendingProject = { owner, repo, files };
+        showProjectMessage(owner, repo, files);
+      } catch (e) { removeTyping(typingId); appendMessage('system', `Error: ${e.message}`); }
       return;
     }
     if (sub === 'repos') {
@@ -3309,6 +3330,51 @@ function showDocumentMessage(title, content) {
   box.scrollTop = box.scrollHeight;
 }
 
+// A project card listing generated files, with one atomic "commit all" action.
+let pendingProject = null;
+function showProjectMessage(owner, repo, files) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+  clearFollowupChips();
+  App.msgCount++;
+  updateWelcomeStatsLine();
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `
+    <div class="bubble-meta">VOID // ${time}</div>
+    <div class="bubble-body bubble-ai">
+      <div class="doc-card">
+        <div class="doc-card-head">
+          <span class="doc-card-icon">📦</span>
+          <span class="doc-card-title">${escapeHTML(owner + '/' + repo)} · ${files.length} file${files.length > 1 ? 's' : ''}</span>
+        </div>
+        <div class="proj-file-list">${files.map(f => `<div class="proj-file">📄 ${escapeHTML(f.path)}</div>`).join('')}</div>
+        <div class="doc-card-btns">
+          <button class="doc-card-save proj-commit-btn" type="button">🚀 Commit ${files.length} file${files.length > 1 ? 's' : ''}</button>
+        </div>
+      </div>
+    </div>`;
+  const commitBtn = el.querySelector('.proj-commit-btn');
+  commitBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    commitBtn.disabled = true; commitBtn.textContent = 'Committing…';
+    try {
+      const res = await ghCommitFiles(owner, repo, files, 'Scaffold project via VOID');
+      commitBtn.textContent = '✅ Committed';
+      appendMessage('system', `✅ Committed ${files.length} files to **${owner}/${repo}** → ${res.url}`);
+      pendingProject = null;
+    } catch (err) {
+      commitBtn.disabled = false; commitBtn.textContent = `🚀 Commit ${files.length} files`;
+      appendMessage('system', `GitHub error: ${err.message}`);
+    }
+  });
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
 // A code-file card for a GitHub file that's been opened (or just edited).
 function showGitHubFileMessage(file, wasEdited) {
   const box = document.getElementById('messages-box');
@@ -3491,6 +3557,58 @@ async function ghListContents(owner, repo, path) {
   if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
   const arr = Array.isArray(d) ? d : [d];
   return arr.map(e => ({ name: e.name, type: e.type, path: e.path }));
+}
+
+// Commit MANY files in a single atomic commit via the Git Data API.
+// files: [{ path, content }]. Creates a tree on top of the current head
+// and moves the branch ref to a new commit — one clean commit, not N.
+async function ghCommitFiles(owner, repo, files, message) {
+  const base = `https://api.github.com/repos/${owner}/${repo}`;
+  const gh = async (path, opts) => {
+    const r = await fetch(base + path, { headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, ...opts });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
+    return d;
+  };
+  const repoInfo = await gh('');
+  const branch = repoInfo.default_branch || 'main';
+  const ref = await gh(`/git/ref/heads/${encodeURIComponent(branch)}`);
+  const headSha = ref.object.sha;
+  const headCommit = await gh(`/git/commits/${headSha}`);
+  const baseTree = headCommit.tree.sha;
+  const tree = await gh('/git/trees', {
+    method: 'POST',
+    body: JSON.stringify({
+      base_tree: baseTree,
+      tree: files.map(f => ({ path: f.path.replace(/^\/+/, ''), mode: '100644', type: 'blob', content: f.content })),
+    }),
+  });
+  const commit = await gh('/git/commits', {
+    method: 'POST',
+    body: JSON.stringify({ message: message || 'Add project via VOID', tree: tree.sha, parents: [headSha] }),
+  });
+  await gh(`/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: commit.sha }),
+  });
+  return { branch, commitSha: commit.sha, url: `${repoInfo.html_url}/tree/${branch}` };
+}
+
+// Parse VOID's multi-file output. Files are delimited by "=== path ===" lines.
+function parseMultiFile(text) {
+  const files = [];
+  const re = /^===\s*(.+?)\s*===\s*$/gm;
+  const marks = [];
+  let m;
+  while ((m = re.exec(text)) !== null) marks.push({ path: m[1].trim(), start: m.index, contentStart: re.lastIndex });
+  for (let i = 0; i < marks.length; i++) {
+    const end = i + 1 < marks.length ? marks[i + 1].start : text.length;
+    let content = text.slice(marks[i].contentStart, end).replace(/^\n/, '').replace(/\n+$/, '\n');
+    // strip accidental code fences around a file body
+    content = content.replace(/^```[\w-]*\n/, '').replace(/\n```\s*$/, '\n');
+    if (marks[i].path) files.push({ path: marks[i].path, content });
+  }
+  return files;
 }
 
 function renderGitHubState() {
