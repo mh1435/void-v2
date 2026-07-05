@@ -2122,6 +2122,22 @@ async function sendMessage() {
     return;
   }
 
+  // Deep Research — /research <topic>, or natural language ("research X",
+  // "do a deep dive on X", "deep research X")
+  const researchMatch = text.match(/^\/research\s+(.+)$/i)
+    || text.match(/^(?:deep\s+)?research(?:\s+(?:on|about|into))?\s+(.+)$/i)
+    || text.match(/^(?:do|run|give me)\s+(?:a\s+)?(?:deep\s+)?(?:research|deep dive|report)\s+(?:on|about|into)\s+(.+)$/i);
+  if (researchMatch) {
+    const topic = researchMatch[1].trim().replace(/[?.!]+$/, '').trim();
+    if (topic.length >= 3) {
+      appendMessage('user', text);
+      App.chatHistory.push({ role: 'user', content: text });
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      await runDeepResearch(topic);
+      return;
+    }
+  }
+
   // /doc — write a document from a description, save it, offer export
   if (text.toLowerCase().startsWith('/doc ')) {
     const req = text.slice(5).trim();
@@ -2357,6 +2373,8 @@ async function sendMessage() {
       '',
       '🎨 **Images** — "make me a logo of a wolf", "a neon city at night", or attach a photo and say "turn this into pixel art"',
       '📄 **Documents** — "write me a cover letter for a nurse job" → save as .txt / Word / PDF',
+      '🔬 **Deep research** — "research the history of coffee" → a sourced, structured report',
+      '✦ **Gems** — build your own named assistants in Settings → Gems, pick them from MODE',
       '🐙 **GitHub** — "/gh scaffold you/repo a flask todo api", "/gh get you/repo main.py", then "/gh edit …"',
       '🌦 **Ask anything** — weather, "who is …", news, math, translations — I pull real data automatically',
       '🚀 **Actions** — "open spotify", "navigate to Cairo", "play lofi on youtube"',
@@ -3374,6 +3392,112 @@ async function generateDocument(request) {
   return { title, content };
 }
 
+/* ============ Deep Research (Gemini-style) ============
+   Plans sub-questions, gathers real facts from free sources per question,
+   then synthesizes a structured, sourced report. */
+
+// Best-effort keyless lookup for one research question.
+async function researchLookup(q) {
+  try {
+    const s = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&origin=*&srlimit=1`);
+    if (s.ok) {
+      const sd = await s.json();
+      const hit = sd.query?.search?.[0];
+      if (hit) {
+        const sum = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hit.title.replace(/ /g, '_'))}`);
+        if (sum.ok) {
+          const d = await sum.json();
+          if (d.extract) return { text: d.extract, source: { label: 'Wikipedia: ' + hit.title, url: d.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(hit.title.replace(/ /g, '_'))}` } };
+        }
+      }
+    }
+  } catch (_) {}
+  try {
+    const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`);
+    if (r.ok) {
+      const d = await r.json();
+      const t = d.AbstractText || d.Answer || (d.RelatedTopics || []).map(x => x.Text).filter(Boolean).slice(0, 2).join(' | ');
+      if (t) {
+        let source = null;
+        if (d.AbstractURL) { try { source = { label: new URL(d.AbstractURL).hostname.replace(/^www\./, ''), url: d.AbstractURL }; } catch (_) {} }
+        return { text: t, source };
+      }
+    }
+  } catch (_) {}
+  return { text: '', source: null };
+}
+
+// Live-updating progress bubble for the research run.
+function showResearchProgress(topic) {
+  const box = document.getElementById('messages-box');
+  if (!box) return { update() {}, remove() {} };
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+  clearFollowupChips();
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `<div class="bubble-meta">VOID // RESEARCH</div>
+    <div class="bubble-body bubble-ai"><div class="research-progress">
+      <div class="research-title">🔬 Researching: ${escapeHTML(topic.slice(0, 80))}</div>
+      <div class="research-status"><span class="typing-dots"><span></span><span></span><span></span></span> <span class="research-step">Planning…</span></div>
+    </div></div>`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return {
+    update(txt) { const s = el.querySelector('.research-step'); if (s) s.textContent = txt; box.scrollTop = box.scrollHeight; },
+    remove() { el.remove(); },
+  };
+}
+
+let researchInFlight = false;
+async function runDeepResearch(topic) {
+  if (researchInFlight) { appendMessage('system', 'A research task is already running — one moment.'); return; }
+  researchInFlight = true;
+  const prog = showResearchProgress(topic);
+  try {
+    // 1) Plan sub-questions
+    const planRaw = await quickAI(
+      'Break this research topic into 4 focused, distinct sub-questions that together give a thorough understanding. Reply with ONLY the questions, one per line, no numbering or extra text.',
+      topic);
+    let questions = (planRaw || '').split('\n').map(q => q.trim().replace(/^[-*\d.)\s]+/, '')).filter(q => q.length > 6).slice(0, 4);
+    if (!questions.length) questions = [topic];
+
+    // 2) Gather findings per question
+    const findings = [];
+    const sources = [];
+    for (let i = 0; i < questions.length; i++) {
+      prog.update(`Researching angle ${i + 1} of ${questions.length}…`);
+      const r = await researchLookup(questions[i]);
+      findings.push(`Q: ${questions[i]}\nFindings: ${r.text || '(no external source found — rely on general knowledge)'}`);
+      if (r.source && !sources.some(s => s.url === r.source.url)) sources.push(r.source);
+    }
+
+    // 3) Synthesize a structured report
+    prog.update('Writing the report…');
+    const report = await quickAI(
+      'You are a research analyst. Using the research findings provided, write a clear, structured report on the topic. ' +
+      'Start with a one-line title, then a short intro, then 3–5 sections each with a short heading line, then a brief conclusion. ' +
+      'Plain text only — no markdown symbols like # or **. Be factual; where findings were thin, use well-established general knowledge but stay accurate.',
+      `TOPIC: ${topic}\n\n${findings.join('\n\n')}`);
+    prog.remove();
+
+    if (!report) { appendMessage('system', 'Research failed — please try again.'); return; }
+    const lines = report.trim().split('\n');
+    const title = (lines[0] || `Research: ${topic}`).replace(/^#+\s*/, '').trim().slice(0, 90);
+    const body = lines.slice(1).join('\n').trim() || report.trim();
+    storeDocument(title, body);
+    showDocumentMessage(title, body);
+    if (sources.length) {
+      const el = appendMessage('system', `📚 Based on ${sources.length} source${sources.length > 1 ? 's' : ''}:`, null, sources);
+    }
+  } catch (_) {
+    prog.remove();
+    appendMessage('system', 'Research failed — please try again.');
+  } finally {
+    researchInFlight = false;
+  }
+}
+
 function renderDocumentsList() {
   const list = document.getElementById('documents-list');
   const empty = document.getElementById('documents-empty');
@@ -4379,6 +4503,10 @@ function setupPlusMenu() {
         document.getElementById('provider-picker')?.classList.remove('open');
         document.getElementById('persona-picker')?.classList.remove('open');
         document.getElementById('image-style-picker')?.classList.add('open');
+      }
+      else if (act === 'research') {
+        const input = document.getElementById('chat-input');
+        if (input) { input.value = '/research '; input.focus(); input.setSelectionRange(input.value.length, input.value.length); updateSendMicBtn(); }
       }
       else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
       else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
