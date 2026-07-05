@@ -32,6 +32,7 @@ const App = {
   githubToken: '',   // user's GitHub PAT — device-only, never synced
   githubUser: null,  // { login, ... } once connected
   githubRepos: [],
+  githubFile: null,  // { owner, repo, path, sha, content } — the file currently open for editing
   chatHistory: [],   // messages of the ACTIVE chat (reference into chats[].messages)
   chats: [],         // [{ id, title, messages:[], updatedAt }]
   currentChatId: null,
@@ -2092,10 +2093,61 @@ async function sendMessage() {
         '🐙 **GitHub commands**',
         '`/gh repos` — list your repositories',
         '`/gh new <name>` — create a new repo',
-        '`/gh push <owner/repo> <path>` — commit the last VOID reply to that file',
+        '`/gh ls <owner/repo> [path]` — browse files in a repo',
+        '`/gh get <owner/repo> <path>` — open a file to read/edit',
+        '`/gh edit <instruction>` — VOID edits the open file',
+        '`/gh push <owner/repo> <path>` — commit the last VOID reply to a file',
         '',
+        App.githubFile ? `📂 Open: ${App.githubFile.owner}/${App.githubFile.repo}/${App.githubFile.path}` : '',
         App.githubUser ? `Connected as @${App.githubUser.login}.` : 'Not connected yet — Settings → GitHub.',
-      ].join('\n'));
+      ].filter(Boolean).join('\n'));
+      return;
+    }
+    if (sub === 'ls') {
+      const full = parts[0] || '';
+      const path = parts[1] || '';
+      if (!full.includes('/')) { appendMessage('system', 'Usage: /gh ls owner/repo [path]'); return; }
+      const [owner, repo] = full.split('/');
+      const typingId = appendTyping();
+      try {
+        const entries = await ghListContents(owner, repo, path);
+        removeTyping(typingId);
+        appendMessage('system', entries.length
+          ? `📂 **${full}${path ? '/' + path : ''}**\n` + entries.map(e => `${e.type === 'dir' ? '📁' : '📄'} ${e.name}`).join('\n')
+          : 'Empty folder.');
+      } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+      return;
+    }
+    if (sub === 'get') {
+      const full = parts[0] || '';
+      const path = parts.slice(1).join(' ');
+      if (!full.includes('/') || !path) { appendMessage('system', 'Usage: /gh get owner/repo path/to/file'); return; }
+      const [owner, repo] = full.split('/');
+      const typingId = appendTyping();
+      try {
+        const file = await ghGetFile(owner, repo, path);
+        App.githubFile = { owner, repo, path: file.path, sha: file.sha, content: file.content };
+        removeTyping(typingId);
+        showGitHubFileMessage(App.githubFile);
+      } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+      return;
+    }
+    if (sub === 'edit') {
+      const instruction = parts.join(' ');
+      if (!App.githubFile) { appendMessage('system', 'Open a file first: /gh get owner/repo path'); return; }
+      if (!instruction) { appendMessage('system', 'Tell me what to change, e.g. /gh edit add error handling to the fetch call'); return; }
+      const typingId = appendTyping();
+      try {
+        const revised = await quickAI(
+          'You are editing a source file. Apply the requested change and return ONLY the complete updated file contents — no markdown fences, no commentary, no explanation. Preserve everything not mentioned.',
+          `FILE: ${App.githubFile.path}\n\n${App.githubFile.content}\n\nCHANGE: ${instruction}`);
+        removeTyping(typingId);
+        if (!revised) { appendMessage('system', 'Could not edit — try again.'); return; }
+        // Strip accidental code fences if the model added them.
+        let out = revised.trim().replace(/^```[\w-]*\n?/, '').replace(/\n?```$/, '');
+        App.githubFile.content = out;
+        showGitHubFileMessage(App.githubFile, true);
+      } catch (e) { removeTyping(typingId); appendMessage('system', `Edit failed: ${e.message}`); }
       return;
     }
     if (sub === 'repos') {
@@ -2122,19 +2174,30 @@ async function sendMessage() {
       return;
     }
     if (sub === 'push') {
-      const full = parts[0] || '';
-      const path = parts[1] || '';
-      if (!full.includes('/') || !path) { appendMessage('system', 'Usage: /gh push owner/repo path/to/file.txt'); return; }
-      // Grab the most recent assistant text reply as the file content.
-      const lastAssistant = [...App.chatHistory].reverse().find(m => m.role === 'assistant');
-      const content = lastAssistant ? msgText(lastAssistant.content) : '';
-      if (!content) { appendMessage('system', 'No recent VOID reply to push. Ask something first, then /gh push.'); return; }
+      let full = parts[0] || '';
+      let path = parts[1] || '';
+      let content;
+      // Bare `/gh push` commits the currently-open (edited) file back to its own path.
+      if (!full && App.githubFile) {
+        full = `${App.githubFile.owner}/${App.githubFile.repo}`;
+        path = App.githubFile.path;
+        content = App.githubFile.content;
+      } else {
+        if (!full.includes('/') || !path) { appendMessage('system', 'Usage: /gh push owner/repo path/to/file — or just /gh push to save the open file'); return; }
+        const lastAssistant = [...App.chatHistory].reverse().find(m => m.role === 'assistant');
+        content = lastAssistant ? msgText(lastAssistant.content) : '';
+      }
+      if (!content) { appendMessage('system', 'Nothing to push. Ask something or open a file first.'); return; }
       const [owner, repo] = full.split('/');
       const typingId = appendTyping();
       try {
-        const res = await ghPutFile(owner, repo, path, content, `Add ${path} via VOID`);
+        const res = await ghPutFile(owner, repo, path, content, `Update ${path} via VOID`);
         removeTyping(typingId);
         appendMessage('system', `✅ Committed to **${full}** → ${res.content?.html_url || path}`);
+        // Refresh the open file's sha so a follow-up edit+push works.
+        if (App.githubFile && App.githubFile.owner === owner && App.githubFile.repo === repo && App.githubFile.path === path && res.content?.sha) {
+          App.githubFile.sha = res.content.sha;
+        }
       } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
       return;
     }
@@ -3246,6 +3309,64 @@ function showDocumentMessage(title, content) {
   box.scrollTop = box.scrollHeight;
 }
 
+// A code-file card for a GitHub file that's been opened (or just edited).
+function showGitHubFileMessage(file, wasEdited) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  const welcome = box.querySelector('.matrix-welcome');
+  if (welcome) welcome.remove();
+  clearFollowupChips();
+  App.msgCount++;
+  updateWelcomeStatsLine();
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `
+    <div class="bubble-meta">VOID // ${time}</div>
+    <div class="bubble-body bubble-ai">
+      <div class="doc-card">
+        <div class="doc-card-head">
+          <span class="doc-card-icon">${wasEdited ? '✏️' : '📂'}</span>
+          <span class="doc-card-title">${escapeHTML(file.owner + '/' + file.repo)} · ${escapeHTML(file.path)}</span>
+        </div>
+        <pre class="gh-file-body">${escapeHTML(file.content.slice(0, 900))}${file.content.length > 900 ? '\n…' : ''}</pre>
+        <div class="doc-card-btns">
+          ${wasEdited
+            ? `<button class="doc-card-save gh-commit-btn" type="button">✅ Commit changes</button>`
+            : `<button class="doc-card-save gh-edithint-btn" type="button">✏️ Edit with VOID</button>`}
+          <button class="doc-card-gh gh-download-btn" type="button">⬇ Save locally</button>
+        </div>
+      </div>
+    </div>`;
+  const commitBtn = el.querySelector('.gh-commit-btn');
+  if (commitBtn) commitBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    commitBtn.disabled = true; commitBtn.textContent = 'Committing…';
+    try {
+      const res = await ghPutFile(file.owner, file.repo, file.path, file.content, `Update ${file.path} via VOID`);
+      if (res.content?.sha && App.githubFile) App.githubFile.sha = res.content.sha;
+      commitBtn.textContent = '✅ Committed';
+      appendMessage('system', `✅ Committed to **${file.owner}/${file.repo}** → ${res.content?.html_url || file.path}`);
+    } catch (err) {
+      commitBtn.disabled = false; commitBtn.textContent = '✅ Commit changes';
+      appendMessage('system', `GitHub error: ${err.message}`);
+    }
+  });
+  const editHint = el.querySelector('.gh-edithint-btn');
+  if (editHint) editHint.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const input = document.getElementById('chat-input');
+    if (input) { input.value = '/gh edit '; input.focus(); updateSendMicBtn(); }
+  });
+  const dl = el.querySelector('.gh-download-btn');
+  if (dl) dl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveFileBlob(new Blob([file.content], { type: 'text/plain;charset=utf-8' }), file.path.split('/').pop() || 'file.txt');
+  });
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
 function setupDocumentsPanel() {
   const btn = document.getElementById('doc-create-btn');
   const input = document.getElementById('doc-create-input');
@@ -3344,6 +3465,32 @@ async function ghPutFile(owner, repo, path, content, message) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
   return d;
+}
+
+// base64 decode that survives UTF-8 — GitHub returns file content base64'd.
+function fromB64utf8(b64) {
+  return decodeURIComponent(escape(atob(String(b64).replace(/\s+/g, ''))));
+}
+
+// Read a single file's decoded content + its blob sha (needed to commit edits).
+async function ghGetFile(owner, repo, path) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+  const r = await fetch(url, { headers: ghHeaders() });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
+  if (Array.isArray(d)) throw new Error('That path is a folder — use /gh ls to list it.');
+  if (d.encoding !== 'base64' || d.content == null) throw new Error('File too large or not text.');
+  return { content: fromB64utf8(d.content), sha: d.sha, path: d.path };
+}
+
+// List a repo directory (root if no path).
+async function ghListContents(owner, repo, path) {
+  const p = path ? `/${path.split('/').map(encodeURIComponent).join('/')}` : '';
+  const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents${p}`, { headers: ghHeaders() });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message || `GitHub error ${r.status}`);
+  const arr = Array.isArray(d) ? d : [d];
+  return arr.map(e => ({ name: e.name, type: e.type, path: e.path }));
 }
 
 function renderGitHubState() {

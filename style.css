@@ -272,6 +272,11 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent);
   mask-image: linear-gradient(to bottom, black 70%, transparent);
 }
+.gh-file-body {
+  font-family: var(--hub-mono); font-size: 11px; line-height: 1.5; color: var(--text);
+  background: rgba(0,0,0,0.28); border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 10px; margin: 0 0 10px; max-height: 240px; overflow: auto; white-space: pre;
+}
 .doc-card-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-card-save {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text);
