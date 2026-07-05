@@ -244,6 +244,37 @@ async function classifyIntent(text) {
   return { type: 'chat' };
 }
 
+// GitHub-ish wording — only messages matching this get a GitHub-intent check,
+// and only when a GitHub account is connected.
+const GH_HINT = /\b(repo|repos|repositor|github|scaffold|commit|publish|push (?:this|it|that|the|to|my)|create (?:a |an |the )?(?:new )?repo|make (?:a |an |the )?(?:new )?repo)\b/i;
+
+// Turn a plain-language GitHub request into a structured action.
+async function classifyGitHubIntent(text) {
+  const repoList = App.githubRepos.map(r => r.full_name).slice(0, 30).join(', ');
+  const reply = await quickAI(
+    'You convert a message into ONE GitHub action. Reply with ONLY one line, one of:\n' +
+    'CREATE_REPO | <repo-name>\n' +
+    'SCAFFOLD | <owner/repo> | <what to build>\n' +
+    'PUSH | <owner/repo> | <file path>\n' +
+    'LIST\n' +
+    'NONE\n' +
+    (App.githubUser ? `The user is @${App.githubUser.login}; for "my repo X" or a bare repo name use ${App.githubUser.login}/X. ` : '') +
+    (repoList ? `Their existing repos: ${repoList}. ` : '') +
+    'Use SCAFFOLD when they want a whole project/app built. Use PUSH to commit the last reply to a file. ' +
+    'If it is not a GitHub request, reply NONE.',
+    text);
+  if (!reply) return { action: 'none' };
+  const line = reply.trim().split('\n')[0].trim();
+  let m = line.match(/^CREATE_REPO\s*\|\s*(.+)$/i);
+  if (m) return { action: 'create_repo', name: m[1].trim().replace(/\s+/g, '-') };
+  m = line.match(/^SCAFFOLD\s*\|\s*([^|]+?)\s*\|\s*(.+)$/i);
+  if (m) return { action: 'scaffold', repo: m[1].trim(), desc: m[2].trim() };
+  m = line.match(/^PUSH\s*\|\s*([^|]+?)\s*\|\s*(.+)$/i);
+  if (m) return { action: 'push', repo: m[1].trim(), path: m[2].trim().replace(/^\/+/, '') };
+  if (/^LIST/i.test(line)) return { action: 'list' };
+  return { action: 'none' };
+}
+
 // Web-search grounding for current-events style questions ("news about X",
 // "latest on X", "what's happening with X today"). Uses DuckDuckGo's free
 // Instant Answer API — no key. Best-effort: many queries return nothing,
@@ -2428,6 +2459,16 @@ async function sendMessage() {
     appendMessage('user', userContent, App.chatHistory.length - 1);
     saveChatHistory();
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+
+    // GitHub natural language — only when an account is connected and the
+    // wording is GitHub-ish. Account-changing actions confirm before running.
+    if (App.githubToken && App.githubUser && GH_HINT.test(text)) {
+      const ghTypingId = appendTyping();
+      const gh = await classifyGitHubIntent(text);
+      removeTyping(ghTypingId);
+      if (gh && gh.action && gh.action !== 'none') { await handleGitHubIntent(gh); return; }
+    }
+
     const typingId = appendTyping();
     const intent = await classifyIntent(text);
     removeTyping(typingId);
@@ -3395,6 +3436,96 @@ function showDocumentMessage(title, content) {
   });
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
+}
+
+// A confirm card in chat — used before any GitHub action that changes the
+// user's account (create repo / commit), so a misread never acts silently.
+function showGitHubConfirm(title, detail, confirmLabel, onConfirm) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  clearFollowupChips();
+  App.msgCount++;
+  updateWelcomeStatsLine();
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const el = document.createElement('div');
+  el.className = 'chat-bubble assistant';
+  el.innerHTML = `
+    <div class="bubble-meta">VOID // ${time}</div>
+    <div class="bubble-body bubble-ai">
+      <div class="doc-card gh-confirm">
+        <div class="doc-card-head"><span class="doc-card-icon">🐙</span><span class="doc-card-title">${escapeHTML(title)}</span></div>
+        <div class="doc-card-body" style="-webkit-mask-image:none;mask-image:none;max-height:none;">${escapeHTML(detail)}</div>
+        <div class="doc-card-btns">
+          <button class="doc-card-save gh-confirm-yes" type="button">${escapeHTML(confirmLabel)}</button>
+          <button class="doc-card-gh gh-confirm-no" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+  const yes = el.querySelector('.gh-confirm-yes');
+  const no = el.querySelector('.gh-confirm-no');
+  const disable = () => { yes.disabled = true; no.disabled = true; };
+  yes.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    disable(); yes.textContent = 'Working…';
+    try { await onConfirm(); yes.textContent = '✅ Done'; }
+    catch (err) { yes.textContent = confirmLabel; yes.disabled = false; no.disabled = false; appendMessage('system', `GitHub error: ${err.message}`); }
+  });
+  no.addEventListener('click', (e) => { e.stopPropagation(); disable(); no.textContent = 'Cancelled'; });
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+// Route a classified GitHub intent — read-only actions run immediately,
+// account-changing ones go through a confirm card first.
+async function handleGitHubIntent(gh) {
+  if (gh.action === 'list') {
+    const typingId = appendTyping();
+    try {
+      const repos = await ghListRepos();
+      removeTyping(typingId);
+      appendMessage('system', repos.length ? '📦 **Your repos**\n' + repos.slice(0, 25).map(r => `• ${r.full_name}${r.private ? ' 🔒' : ''}`).join('\n') : 'No repositories found.');
+    } catch (e) { removeTyping(typingId); appendMessage('system', `GitHub error: ${e.message}`); }
+    return;
+  }
+  if (gh.action === 'create_repo') {
+    if (!gh.name) { appendMessage('system', 'What should the repository be called?'); return; }
+    showGitHubConfirm('Create repository', `Create a new private repo "${gh.name}" on your GitHub account?`, 'Create repo', async () => {
+      const repo = await ghCreateRepo(gh.name, true);
+      appendMessage('system', `✅ Created **${repo.full_name}** → ${repo.html_url}`);
+      ghListRepos().catch(() => {});
+    });
+    return;
+  }
+  if (gh.action === 'scaffold') {
+    if (!gh.repo || !gh.repo.includes('/')) { appendMessage('system', 'Which repo should I build it into? e.g. "scaffold a todo api in my-repo".'); return; }
+    const [owner, repo] = gh.repo.split('/');
+    const typingId = appendTyping();
+    try {
+      const reply = await quickAI(
+        'You are a senior engineer scaffolding a project. Output a complete working multi-file project. ' +
+        'Format EXACTLY as repeated blocks: a line "=== relative/path/file.ext ===" then that file\'s full contents. ' +
+        'No commentary, no markdown fences. Include a README.md. Keep to the essential files (3–8).',
+        gh.desc);
+      removeTyping(typingId);
+      const files = parseMultiFile(reply || '');
+      if (!files.length) { appendMessage('system', 'Could not scaffold that — try rephrasing.'); return; }
+      // The project card already confirms via its "Commit N files" button.
+      showProjectMessage(owner, repo, files);
+    } catch (e) { removeTyping(typingId); appendMessage('system', `Error: ${e.message}`); }
+    return;
+  }
+  if (gh.action === 'push') {
+    if (!gh.repo || !gh.repo.includes('/') || !gh.path) { appendMessage('system', 'Which repo and file path should I commit to?'); return; }
+    const lastAssistant = [...App.chatHistory].reverse().find(m => m.role === 'assistant');
+    const content = lastAssistant ? msgText(lastAssistant.content) : '';
+    if (!content) { appendMessage('system', 'There is no recent reply to commit yet.'); return; }
+    const [owner, repo] = gh.repo.split('/');
+    showGitHubConfirm('Commit file', `Commit my last reply to ${owner}/${repo} → ${gh.path}?`, 'Commit', async () => {
+      const res = await ghPutFile(owner, repo, gh.path, content, `Add ${gh.path} via VOID`);
+      appendMessage('system', `✅ Committed to **${owner}/${repo}** → ${res.content?.html_url || gh.path}`);
+    });
+    return;
+  }
 }
 
 // A project card listing generated files, with one atomic "commit all" action.
