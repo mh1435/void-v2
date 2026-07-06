@@ -1801,7 +1801,14 @@ function setupChat() {
   // A passive, always-on listener. When it hears "okay/hey void", it drops
   // into hands-free Live voice mode — sending anything said in the same breath.
   const WAKE_RE = /\b(?:ok(?:ay)?|hey|hi|yo)\s+void\b[\s,.:;!?-]*(.*)$/i;
+  // Native app: an always-on background foreground service does the listening
+  // (works with the app closed / screen off). Web/PWA: a continuous in-page
+  // recognizer, which only listens while the tab is open.
+  const WakePlugin = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.WakeWord : null;
   let wakeRecognizer = null, wakeActive = false, wakeCooldown = false, nativeWakeStop = false;
+
+  // Called by the native service (via MainActivity) when it hears "Okay VOID".
+  window.__voidWake = (cmd) => { activateFromWake(cmd || ''); };
 
   function activateFromWake(rest) {
     if (wakeCooldown) return;
@@ -1841,7 +1848,10 @@ function setupChat() {
   }
 
   App.startWakeListening = () => {
-    if (!App.settings.wakeWord || wakeActive || App.voiceConvo || listening) return;
+    if (!App.settings.wakeWord) return;
+    // Native app → hand off to the always-on background service.
+    if (WakePlugin) { WakePlugin.start().catch(() => {}); return; }
+    if (wakeActive || App.voiceConvo || listening) return;
     if (NativeSTT) { startNativeWakeLoop(); return; }
     if (!SpeechRecognition) return;
     wakeActive = true;
@@ -1864,6 +1874,7 @@ function setupChat() {
 
   App.stopWakeListening = () => {
     nativeWakeStop = true;
+    if (WakePlugin) { WakePlugin.stop().catch(() => {}); }
     if (wakeRecognizer) { try { wakeRecognizer.onend = null; wakeRecognizer.stop(); } catch (_) {} wakeRecognizer = null; }
     wakeActive = false;
   };
