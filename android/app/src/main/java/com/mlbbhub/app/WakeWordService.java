@@ -5,51 +5,174 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.speech.RecognitionListener;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
 import androidx.core.app.NotificationCompat;
 
-import java.util.ArrayList;
+import org.json.JSONObject;
+import org.vosk.Model;
+import org.vosk.Recognizer;
+import org.vosk.android.RecognitionListener;
+import org.vosk.android.SpeechService;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
- * Always-on "Okay VOID" wake word. Runs as a foreground service (persistent
- * notification, as Android requires) so it keeps listening even when the app
- * is backgrounded or the screen is off. Uses the on-device SpeechRecognizer in
- * a restart loop — no API key, no model download. When it hears the wake
- * phrase it launches VOID and tells it to start listening.
+ * Always-on "Okay VOID" wake word using the Vosk offline speech engine — no
+ * API key, works fully offline, and keeps recognizing in the background. Runs
+ * as a foreground service (persistent notification, as Android requires). A
+ * ~40 MB voice model is downloaded once on first enable, then reused.
  */
 public class WakeWordService extends Service {
 
     private static final String CHANNEL_ID = "void_wake";
     private static final int NOTIF_ID = 3001;
+    private static final String MODEL_NAME = "vosk-model-small-en-us-0.15";
+    private static final String MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
+    // Only listen for these phrases (keyword grammar) — fast and accurate.
+    private static final String GRAMMAR = "[\"okay void\", \"ok void\", \"hey void\", \"hi void\", \"void\", \"[unk]\"]";
 
-    private SpeechRecognizer recognizer;
-    private Intent recognizerIntent;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean shouldListen = false;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private Model model;
+    private SpeechService speechService;
+    private volatile boolean running = false;
     private long lastWakeMs = 0;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createChannel();
-        startForegroundNotif();
+        startForegroundNotif("Starting…");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        shouldListen = true;
-        handler.post(this::startListening);
+        if (!running) {
+            running = true;
+            new Thread(this::prepareAndListen).start();
+        }
         return START_STICKY;
+    }
+
+    private void prepareAndListen() {
+        try {
+            File modelDir = new File(getFilesDir(), MODEL_NAME);
+            if (!isModelReady(modelDir)) {
+                setNotif("Downloading voice model (one time)…");
+                downloadAndUnzipModel(modelDir.getParentFile());
+            }
+            if (!isModelReady(modelDir)) { setNotif("Couldn't set up the voice model."); return; }
+            setNotif("Say \"Okay VOID\"");
+            model = new Model(modelDir.getAbsolutePath());
+            Recognizer rec = new Recognizer(model, 16000.0f, GRAMMAR);
+            speechService = new SpeechService(rec, 16000.0f);
+            speechService.startListening(listener);
+        } catch (Exception e) {
+            setNotif("Wake word error — tap to reopen VOID.");
+        }
+    }
+
+    private boolean isModelReady(File modelDir) {
+        // A loadable model has these sub-paths.
+        return new File(modelDir, "am/final.mdl").exists()
+            || new File(modelDir, "conf/model.conf").exists();
+    }
+
+    private void downloadAndUnzipModel(File destParent) {
+        File zip = new File(destParent, "model.zip");
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(MODEL_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(20000);
+            conn.setReadTimeout(30000);
+            conn.connect();
+            if (conn.getResponseCode() >= 300) return;
+            try (InputStream in = conn.getInputStream(); OutputStream out = new FileOutputStream(zip)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            }
+            // Unzip (entries are prefixed with the model folder name)
+            try (ZipInputStream zis = new ZipInputStream(new java.io.FileInputStream(zip))) {
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    File outFile = new File(destParent, entry.getName());
+                    if (entry.isDirectory()) {
+                        outFile.mkdirs();
+                    } else {
+                        File parent = outFile.getParentFile();
+                        if (parent != null) parent.mkdirs();
+                        try (OutputStream fo = new FileOutputStream(outFile)) {
+                            byte[] buf = new byte[8192];
+                            int n;
+                            while ((n = zis.read(buf)) != -1) fo.write(buf, 0, n);
+                        }
+                    }
+                    zis.closeEntry();
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (conn != null) conn.disconnect();
+            if (zip.exists()) zip.delete();
+        }
+    }
+
+    private final RecognitionListener listener = new RecognitionListener() {
+        @Override public void onPartialResult(String hypothesis) { check(hypothesis, "partial"); }
+        @Override public void onResult(String hypothesis) { check(hypothesis, "text"); }
+        @Override public void onFinalResult(String hypothesis) { check(hypothesis, "text"); }
+        @Override public void onError(Exception e) {}
+        @Override public void onTimeout() {}
+    };
+
+    private void check(String hypothesisJson, String key) {
+        if (hypothesisJson == null) return;
+        try {
+            String text = new JSONObject(hypothesisJson).optString(key, "").toLowerCase(Locale.ROOT).trim();
+            if (text.isEmpty()) return;
+            int idx = indexOfWake(text);
+            if (idx < 0) return;
+            long now = System.currentTimeMillis();
+            if (now - lastWakeMs < 3000) return;
+            lastWakeMs = now;
+            String rest = text.substring(idx)
+                .replaceFirst("^(?:ok(?:ay)?|hey|hi|yo)?\\s*void\\b[\\s,.:;!?-]*", "").trim();
+            fireWake(rest);
+        } catch (Exception ignored) {}
+    }
+
+    private int indexOfWake(String p) {
+        String[] words = {"okay void", "ok void", "hey void", "hi void", "void"};
+        int best = -1;
+        for (String w : words) {
+            int i = p.indexOf(w);
+            if (i >= 0 && (best < 0 || i < best)) best = i;
+        }
+        return best;
+    }
+
+    private void fireWake(final String rest) {
+        main.post(() -> {
+            Intent i = new Intent(this, MainActivity.class);
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            i.putExtra("void_wake", true);
+            if (rest != null && !rest.isEmpty()) i.putExtra("void_cmd", rest);
+            try { startActivity(i); } catch (Exception ignored) {}
+        });
     }
 
     private void createChannel() {
@@ -63,22 +186,24 @@ public class WakeWordService extends Service {
         }
     }
 
-    private void startForegroundNotif() {
+    private Notification buildNotif(String text) {
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, flags);
-
-        Notification notif = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("VOID is listening")
-            .setContentText("Say \"Okay VOID\" anytime")
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("VOID")
+            .setContentText(text)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pi)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build();
+    }
 
+    private void startForegroundNotif(String text) {
+        Notification notif = buildNotif(text);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
         } else {
@@ -86,104 +211,17 @@ public class WakeWordService extends Service {
         }
     }
 
-    private void startListening() {
-        if (!shouldListen) return;
-        try {
-            if (recognizer == null) {
-                if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
-                recognizer = SpeechRecognizer.createSpeechRecognizer(this);
-                recognizer.setRecognitionListener(listener);
-                recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-                recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-                recognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-                recognizerIntent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
-            }
-            recognizer.startListening(recognizerIntent);
-        } catch (Exception e) {
-            scheduleRestart(800);
-        }
+    private void setNotif(String text) {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(NOTIF_ID, buildNotif(text));
     }
-
-    private void scheduleRestart(long delayMs) {
-        if (!shouldListen) return;
-        handler.postDelayed(() -> {
-            try { if (recognizer != null) recognizer.cancel(); } catch (Exception ignored) {}
-            startListening();
-        }, delayMs);
-    }
-
-    private void checkForWake(Bundle results) {
-        if (results == null) return;
-        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-        if (matches == null) return;
-        for (String phrase : matches) {
-            if (phrase == null) continue;
-            String p = phrase.toLowerCase(Locale.ROOT);
-            int idx = indexOfWake(p);
-            if (idx >= 0) {
-                long now = System.currentTimeMillis();
-                if (now - lastWakeMs < 3000) return; // debounce repeat detections
-                lastWakeMs = now;
-                String rest = p.substring(idx).replaceFirst("^(?:ok(?:ay)?|hey|hi|yo)\\s+void\\b[\\s,.:;!?-]*", "").trim();
-                fireWake(rest);
-                return;
-            }
-        }
-    }
-
-    // Returns the start index of the wake phrase, or -1.
-    private int indexOfWake(String p) {
-        String[] prefixes = {"okay void", "ok void", "hey void", "hi void", "yo void"};
-        int best = -1;
-        for (String w : prefixes) {
-            int i = p.indexOf(w);
-            if (i >= 0 && (best < 0 || i < best)) best = i;
-        }
-        return best;
-    }
-
-    private void fireWake(String rest) {
-        Intent i = new Intent(this, MainActivity.class);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        i.putExtra("void_wake", true);
-        if (rest != null && !rest.isEmpty()) i.putExtra("void_cmd", rest);
-        try { startActivity(i); } catch (Exception ignored) {}
-    }
-
-    private final RecognitionListener listener = new RecognitionListener() {
-        @Override public void onReadyForSpeech(Bundle params) {}
-        @Override public void onBeginningOfSpeech() {}
-        @Override public void onRmsChanged(float rmsdB) {}
-        @Override public void onBufferReceived(byte[] buffer) {}
-        @Override public void onEndOfSpeech() {}
-
-        @Override public void onPartialResults(Bundle partialResults) {
-            checkForWake(partialResults);
-        }
-
-        @Override public void onResults(Bundle results) {
-            checkForWake(results);
-            scheduleRestart(300);
-        }
-
-        @Override public void onError(int error) {
-            // Busy / no-match / timeout are all normal in a continuous loop — just restart.
-            long delay = (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) ? 1000 : 500;
-            scheduleRestart(delay);
-        }
-
-        @Override public void onEvent(int eventType, Bundle params) {}
-    };
 
     @Override
     public void onDestroy() {
-        shouldListen = false;
-        handler.removeCallbacksAndMessages(null);
-        if (recognizer != null) {
-            try { recognizer.destroy(); } catch (Exception ignored) {}
-            recognizer = null;
-        }
+        running = false;
+        try { if (speechService != null) { speechService.stop(); speechService.shutdown(); } } catch (Exception ignored) {}
+        try { if (model != null) model.close(); } catch (Exception ignored) {}
+        speechService = null; model = null;
         super.onDestroy();
     }
 
