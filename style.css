@@ -25,7 +25,30 @@
   --glass-bg-strong: color-mix(in srgb, var(--bg) 78%, transparent);
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-blur: 22px;
+  --glass-saturate: 160%;
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Glass style: Liquid (Apple-like — brighter, more transparent, glossy) ── */
+:root[data-glass="liquid"] {
+  --glass-bg: color-mix(in srgb, var(--card) 38%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--bg) 62%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-blur: 18px;
+  --glass-saturate: 190%;
+  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+}
+:root[data-glass="liquid"][data-light] {
+  --glass-border: rgba(0, 0, 0, 0.10);
+}
+/* ── Glass style: Frozen (frosted — heavier blur, more opaque, matte) ── */
+:root[data-glass="frozen"] {
+  --glass-bg: color-mix(in srgb, var(--card) 78%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--bg) 88%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-blur: 34px;
+  --glass-saturate: 130%;
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
 
   /* Gaming hub tokens */
   --hub-display: 'Chakra Petch', var(--sans);
@@ -85,8 +108,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .hud-header {
   height: 54px;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 1px 0 rgba(124, 111, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.25);
   display: flex;
@@ -385,8 +408,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .chat-box {
   display: flex; flex-direction: column;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border);
   border-radius: 26px; padding: 12px 14px 10px;
   box-shadow: var(--glass-shadow);
@@ -471,8 +494,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   position: fixed; left: 10px; top: calc(var(--safe-top) + 58px);
   width: 220px; z-index: 95;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 14px;
   box-shadow: var(--glass-shadow); overflow: hidden;
   display: none;
@@ -533,8 +556,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .tour-card {
   position: fixed; z-index: 501; width: 232px;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid rgba(124,111,255,0.35); border-radius: 14px; padding: 14px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.5);
 }
@@ -606,25 +629,51 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .persona-item.persona-create .persona-name { color: var(--accent); }
 
 /* --- VOID tools sheet (the + menu) --- */
-.plus-sheet { padding-top: 10px; max-height: 72vh; overflow-y: auto; }
+.plus-sheet { padding-top: 8px; max-height: 74vh; overflow-y: auto; }
+.plus-grabber {
+  width: 38px; height: 4px; border-radius: 3px; margin: 2px auto 10px;
+  background: var(--muted); opacity: 0.4;
+}
 .plus-sheet-chips {
-  display: flex; gap: 8px; padding: 4px 12px 12px; border-bottom: 1px solid var(--glass-border);
+  display: flex; gap: 9px; padding: 2px 12px 12px; border-bottom: 1px solid var(--glass-border);
 }
 .plus-chip {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
-  padding: 12px 6px; border-radius: 14px; cursor: pointer;
-  background: var(--accent-soft); border: 1px solid var(--glass-border); color: var(--text);
-  font-size: 11px; font-weight: 600; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 15px 6px; border-radius: 16px; cursor: pointer;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid var(--glass-border); color: var(--text);
+  font-size: 12px; font-weight: 600; transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
-.plus-chip:active { background: color-mix(in srgb, var(--accent) 28%, transparent); border-color: var(--accent); transform: scale(0.96); }
-.plus-chip-ico { font-size: 20px; line-height: 1; }
+.plus-chip:active { background: var(--accent-soft); border-color: var(--accent); transform: scale(0.96); }
+.plus-chip-ico { display: grid; place-items: center; color: var(--text); opacity: 0.92; }
+.plus-chip-ico svg { width: 24px; height: 24px; }
 .plus-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.plus-title { color: var(--text); font-size: 13px; font-weight: 600; }
-.plus-desc { color: var(--muted); font-size: 11px; line-height: 1.3; }
-.plus-sheet .persona-emoji {
-  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
-  border-radius: 10px; background: var(--accent-soft); font-size: 17px;
+.plus-title { color: var(--text); font-size: 14px; font-weight: 600; }
+.plus-desc { color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+.plus-tool { padding: 13px 14px; }
+.plus-ico {
+  width: 38px; height: 38px; display: grid; place-items: center; flex-shrink: 0;
+  border-radius: 11px; background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text); opacity: 0.95;
 }
+.plus-tool:active .plus-ico { background: var(--accent-soft); color: var(--accent); opacity: 1; }
+.plus-ico svg { width: 21px; height: 21px; }
+
+/* Tool "mode" chip above the input (like a selected tool) */
+.mode-chip {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  margin: 2px 0 8px; padding: 6px 8px 6px 11px; border-radius: 16px;
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  font-size: 13px; font-weight: 600; color: var(--text); max-width: 100%;
+}
+.mode-chip-ico { display: grid; place-items: center; color: var(--accent); }
+.mode-chip-ico svg { width: 16px; height: 16px; }
+.mode-chip-x {
+  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 12%, transparent); border: none; color: var(--text);
+  font-size: 10px; cursor: pointer; line-height: 1; flex-shrink: 0;
+}
+.mode-chip-x:active { background: var(--accent); color: var(--accent-text); }
 .util-spacer { flex: 1; }
 .model-badge { font-size: 10px; color: var(--muted); opacity: 0.5; letter-spacing: 0.02em; }
 .chat-box-bar .model-badge { display: none; }  /* model shown in the pill itself */
@@ -685,8 +734,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .settings-grid { display: flex; flex-direction: column; gap: 16px; max-width: 600px; margin: 0 auto; }
 .settings-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border);
   border-radius: 18px; padding: 6px;
   box-shadow: var(--glass-shadow);
@@ -800,8 +849,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   padding: var(--safe-top) 10px 0;
   flex-shrink: 0; position: sticky; top: 0; z-index: 20;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 1px 0 rgba(124, 111, 255, 0.06);
 }
@@ -978,8 +1027,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; padding: 28px 16px;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 20px;
   cursor: pointer; transition: border-color 0.15s, transform 0.12s, background 0.15s, box-shadow 0.15s;
   font-family: var(--hub-display); text-align: center;
@@ -1019,8 +1068,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 .game-tile {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 16px;
   overflow: hidden; cursor: pointer; position: relative;
   transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
@@ -1064,8 +1113,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .gamehub-tabs {
   display: flex;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-bottom: 1px solid var(--glass-border);
   padding: 0 4px;
   overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-shrink: 0;
@@ -1167,8 +1216,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .hub-detail-header-card {
   display: flex; gap: 14px;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 14px; padding: 14px;
   box-shadow: var(--glass-shadow);
 }
@@ -1213,8 +1262,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 
 .hub-detail-desc-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 14px; padding: 14px;
   box-shadow: var(--glass-shadow);
 }
@@ -1324,8 +1373,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 
 .hd-section-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border); border-radius: 14px; padding: 14px;
   box-shadow: var(--glass-shadow);
 }
@@ -1637,8 +1686,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   position: fixed; top: 0; right: 0; height: 100%;
   width: 300px; max-width: 85vw; z-index: 90;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-left: 1px solid var(--glass-border);
   display: flex; flex-direction: column;
   transform: translateX(100%); transition: transform 0.24s cubic-bezier(0.16,1,0.3,1);

@@ -141,21 +141,32 @@ if ('serviceWorker' in navigator) {
             <div id="image-style-list"></div>
           </div>
           <div class="provider-picker plus-sheet" id="plus-menu">
+            <div class="plus-grabber" aria-hidden="true"></div>
             <div class="plus-sheet-chips">
-              <button class="plus-chip" data-plus="camera"><span class="plus-chip-ico">📷</span><span>Camera</span></button>
-              <button class="plus-chip" data-plus="attach"><span class="plus-chip-ico">🖼️</span><span>Gallery</span></button>
-              <button class="plus-chip" data-plus="voice"><span class="plus-chip-ico">🎤</span><span>Voice</span></button>
+              <button class="plus-chip" data-plus="attach">
+                <span class="plus-chip-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg></span>
+                <span>Photos</span>
+              </button>
+              <button class="plus-chip" data-plus="camera">
+                <span class="plus-chip-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.6"/></svg></span>
+                <span>Camera</span>
+              </button>
             </div>
             <div class="provider-picker-title">VOID TOOLS</div>
-            <div class="persona-item" data-plus="image"><span class="persona-emoji">🎨</span><span class="plus-text"><span class="plus-title">Imagine</span><span class="plus-desc">Create &amp; edit images</span></span></div>
-            <div class="persona-item" data-plus="research"><span class="persona-emoji">🔭</span><span class="plus-text"><span class="plus-title">Recon</span><span class="plus-desc">Deep research with sources</span></span></div>
-            <div class="persona-item" data-plus="draft"><span class="persona-emoji">📝</span><span class="plus-text"><span class="plus-title">Draft</span><span class="plus-desc">Docs, PDFs &amp; essays</span></span></div>
-            <div class="persona-item" data-plus="forge"><span class="persona-emoji">⚙️</span><span class="plus-text"><span class="plus-title">Forge</span><span class="plus-desc">GitHub &amp; code</span></span></div>
-            <div class="persona-item" data-plus="mode"><span class="persona-emoji">🌀</span><span class="plus-text"><span class="plus-title">Persona</span><span class="plus-desc" id="plus-mode-sub">Default</span></span></div>
-            <div class="persona-item" data-plus="live"><span class="persona-emoji">🎙</span><span class="plus-text"><span class="plus-title">Live voice</span><span class="plus-desc" id="plus-live-sub">Off</span></span></div>
-            <div class="persona-item" data-plus="provider"><span class="persona-emoji">⚡</span><span class="plus-text"><span class="plus-title">Core</span><span class="plus-desc">AI engine &amp; routing</span></span></div>
+            <div class="persona-item plus-tool" data-plus="image"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l2.3 6.2L20.5 11l-6.2 2.3L12 19.5l-2.3-6.2L3.5 11l6.2-2.3z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/></svg></span><span class="plus-text"><span class="plus-title">Imagine</span><span class="plus-desc">Create &amp; edit images</span></span></div>
+            <div class="persona-item plus-tool" data-plus="research"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(120 12 12)"/></svg></span><span class="plus-text"><span class="plus-title">Recon</span><span class="plus-desc">Deep research with sources</span></span></div>
+            <div class="persona-item plus-tool" data-plus="draft"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8.5 13h7"/><path d="M8.5 17h5"/></svg></span><span class="plus-text"><span class="plus-title">Draft</span><span class="plus-desc">Docs, PDFs &amp; essays</span></span></div>
+            <div class="persona-item plus-tool" data-plus="forge"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span><span class="plus-text"><span class="plus-title">Forge</span><span class="plus-desc">GitHub &amp; code</span></span></div>
+            <div class="persona-item plus-tool" data-plus="mode"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1.5" y1="14" x2="6.5" y2="14"/><line x1="9.5" y1="8" x2="14.5" y2="8"/><line x1="17.5" y1="16" x2="22.5" y2="16"/></svg></span><span class="plus-text"><span class="plus-title">Persona</span><span class="plus-desc" id="plus-mode-sub">Default</span></span></div>
+            <div class="persona-item plus-tool" data-plus="live"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 11v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span><span class="plus-text"><span class="plus-title">Live voice</span><span class="plus-desc" id="plus-live-sub">Off</span></span></div>
+            <div class="persona-item plus-tool" data-plus="provider"><span class="plus-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M15 2.5v3M9 18.5v3M15 18.5v3M2.5 9h3M2.5 15h3M18.5 9h3M18.5 15h3"/></svg></span><span class="plus-text"><span class="plus-title">Core</span><span class="plus-desc">AI engine &amp; routing</span></span></div>
           </div>
           <div class="chat-box">
+            <div class="mode-chip" id="mode-chip" style="display:none">
+              <span class="mode-chip-ico" id="mode-chip-ico"></span>
+              <span class="mode-chip-label" id="mode-chip-label"></span>
+              <button class="mode-chip-x" id="mode-chip-x" aria-label="Clear mode">✕</button>
+            </div>
             <div class="attach-preview" id="attach-preview" style="display:none">
               <img id="attach-preview-img" alt="attachment preview">
               <button id="attach-remove-btn" aria-label="Remove attachment">✕</button>
@@ -800,7 +811,7 @@ if ('serviceWorker' in navigator) {
         </div>
         <div class="menu-item" data-open-panel="panel-gems">
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"></path><path d="M11 3 8 9l4 12 4-12-3-6"></path><path d="M2 9h20"></path></svg></div>
-          <div class="menu-label"><span>Gems</span><span class="menu-sub">Build your own custom AI assistants</span></div>
+          <div class="menu-label"><span>Constructs</span><span class="menu-sub">Build your own custom AI assistants</span></div>
         </div>
       </div>
 
@@ -1186,10 +1197,10 @@ if ('serviceWorker' in navigator) {
       <button class="icon-btn back-btn" data-close-panel aria-label="Back">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
       </button>
-      <span>Gems</span>
+      <span>Constructs</span>
     </div>
     <div class="panel-content">
-      <div class="settings-section-label" id="gem-form-label">CREATE A GEM</div>
+      <div class="settings-section-label" id="gem-form-label">CREATE A CONSTRUCT</div>
       <p class="muted small" style="margin-bottom:10px;">Build a custom assistant with its own name and personality. Pick it from the chat MODE menu anytime.</p>
       <div class="setting-row input-group">
         <input type="text" class="text-input" id="gem-emoji-input" maxlength="2" placeholder="✦" style="width:56px;text-align:center;flex:0 0 auto;">
@@ -1199,13 +1210,13 @@ if ('serviceWorker' in navigator) {
         <div class="setting-label"><span>Instructions</span><span class="setting-sub">How should it behave? What's its expertise, tone, rules?</span></div>
         <textarea class="text-input" id="gem-instructions-input" rows="4" placeholder="e.g. You are an expert Mobile Legends coach. Give concise, practical advice on builds, rotations, and counters. Always be encouraging."></textarea>
       </div>
-      <button class="primary-btn full" id="gem-save-btn">Save Gem</button>
+      <button class="primary-btn full" id="gem-save-btn">Save Construct</button>
       <button class="ghost-btn full" id="gem-cancel-btn" style="margin-top:8px;display:none;">Cancel edit</button>
 
       <div class="sheet-divider"></div>
-      <div class="settings-section-label">YOUR GEMS</div>
+      <div class="settings-section-label">YOUR CONSTRUCTS</div>
       <div id="gems-list"></div>
-      <p class="muted small" id="gems-empty">No Gems yet — create one above.</p>
+      <p class="muted small" id="gems-empty">No Constructs yet — create one above.</p>
     </div>
   </div>
 
@@ -1388,6 +1399,13 @@ if ('serviceWorker' in navigator) {
         <button class="seg-btn" data-theme="frost">Dark</button>
         <button class="seg-btn" data-theme="light">Light</button>
       </div>
+      <div class="settings-section-label" style="margin-top:18px;">GLASS STYLE</div>
+      <div class="segmented" id="glass-seg">
+        <button class="seg-btn" data-glass="auto">Auto</button>
+        <button class="seg-btn" data-glass="liquid">Liquid</button>
+        <button class="seg-btn" data-glass="frozen">Frozen</button>
+      </div>
+      <p class="muted small" style="margin:8px 2px 0;">Auto matches your device — liquid, brighter glass on Apple devices; frosted glass elsewhere.</p>
       <div class="settings-section-label" style="margin-top:18px;">ALL THEMES</div>
       <div class="theme-select-grid">
         <button class="theme-swatch" data-theme="auto"><span class="swatch-color" style="background:linear-gradient(135deg,#0b0c10 50%,#ededf2 50%);border-color:#888;"></span><span class="swatch-name">Auto System</span></button>

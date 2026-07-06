@@ -593,6 +593,7 @@ function showOnboarding() {
 function bootApp() {
   loadSettings();
   applyTheme(App.settings.theme);
+  applyGlassStyle(App.settings.glass);
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
     if (App.settings.theme === 'auto') applyTheme('auto');
   });
@@ -778,6 +779,25 @@ function applyTheme(name) {
     d.classList.toggle('active', d.dataset.theme === name);
   });
   applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
+}
+
+// Apple devices get "liquid" glass (brighter, translucent, glossy — like iOS);
+// everything else gets "frozen" (frosted) glass. Users can override in Settings.
+function isApplePlatform() {
+  const ua = navigator.userAgent || '';
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  const mac = /Macintosh|Mac OS X/.test(ua);
+  return iOS || mac;
+}
+
+function applyGlassStyle(style) {
+  App.settings.glass = style || 'auto';
+  const resolved = App.settings.glass === 'auto'
+    ? (isApplePlatform() ? 'liquid' : 'frozen')
+    : App.settings.glass;
+  document.documentElement.setAttribute('data-glass', resolved);
+  document.querySelectorAll('#glass-seg .seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.glass === App.settings.glass));
 }
 
 // Lighten a hex color toward white by `amt` (0-1) — used to derive a matching
@@ -1252,6 +1272,11 @@ function setupClonedPanels() {
     applyTheme(b.dataset.theme); saveSettings(); syncColorModeSeg(); refreshSettingsSubvalues();
   }));
 
+  // Glass style segmented (auto / liquid / frozen)
+  document.querySelectorAll('#glass-seg .seg-btn').forEach(b => b.addEventListener('click', () => {
+    applyGlassStyle(b.dataset.glass); saveSettings();
+  }));
+
   // Font size segmented
   document.querySelectorAll('#fontsize-seg .seg-btn').forEach(b => b.addEventListener('click', () => {
     App.settings.fontSize = b.dataset.size; saveSettings(); applyFontSize(b.dataset.size); syncFontSizeSeg(); refreshSettingsSubvalues();
@@ -1308,6 +1333,7 @@ function openSettingsPanel(panelId) {
     refreshPermissions();
   } else if (panelId === 'panel-colormode') {
     syncColorModeSeg();
+    applyGlassStyle(App.settings.glass);
     applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
     syncFontSizeSeg();
   } else if (panelId === 'panel-notifications') {
@@ -2201,6 +2227,36 @@ async function sendMessage() {
   try {
   buzz();
 
+  // A tool "mode" is active (Recon/Draft/Forge chip) — route the typed text
+  // straight to that tool instead of a normal chat message.
+  if (App.toolMode) {
+    const mode = App.toolMode;
+    clearToolMode();
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    if (mode === 'research') {
+      App.chatHistory.push({ role: 'user', content: text });
+      await runDeepResearch(text.replace(/[?.!]+$/, '').trim());
+    } else if (mode === 'doc') {
+      const t = appendTyping();
+      const doc = await generateDocument(text);
+      removeTyping(t);
+      if (doc) { storeDocument(doc.title, doc.content); showDocumentMessage(doc.title, doc.content); }
+      else appendMessage('system', 'Could not generate that document — try again.');
+    } else if (mode === 'gh') {
+      if (!App.githubToken || !App.githubUser) {
+        appendMessage('system', '🔗 Connect GitHub first: Settings → GitHub, paste a Personal Access Token.');
+      } else {
+        const t = appendTyping();
+        const gh = await classifyGitHubIntent(text);
+        removeTyping(t);
+        if (gh && gh.action && gh.action !== 'none') await handleGitHubIntent(gh);
+        else appendMessage('system', 'Not sure which GitHub action you meant — try “list my repos” or “create a repo called notes-app”.');
+      }
+    }
+    return;
+  }
+
   // /price command
   if (text.toLowerCase().startsWith('/price ')) {
     const symbol = text.slice(7).trim().toLowerCase();
@@ -2499,7 +2555,7 @@ async function sendMessage() {
       '🎨 **Images** — "make me a logo of a wolf", "a neon city at night", or attach a photo and say "turn this into pixel art"',
       '📄 **Documents** — "write me a cover letter for a nurse job" → save as .txt / Word / PDF',
       '🔬 **Deep research** — "research the history of coffee" → a sourced, structured report',
-      '✦ **Gems** — build your own named assistants in Settings → Gems, pick them from MODE',
+      '✦ **Constructs** — build your own named assistants in Settings → Constructs, pick them from MODE',
       '🐙 **GitHub** — "/gh scaffold you/repo a flask todo api", "/gh get you/repo main.py", then "/gh edit …"',
       '🌦 **Ask anything** — weather, "who is …", news, math, translations — I pull real data automatically',
       '🚀 **Actions** — "open spotify", "navigate to Cairo", "play lofi on youtube"',
@@ -3921,9 +3977,9 @@ function startEditGem(gem) {
   if (emoji) emoji.value = gem.emoji || '';
   if (name) name.value = gem.name;
   if (instr) instr.value = gem.instructions;
-  if (label) label.textContent = 'EDIT GEM';
+  if (label) label.textContent = 'EDIT CONSTRUCT';
   if (cancel) cancel.style.display = '';
-  if (save) save.textContent = 'Update Gem';
+  if (save) save.textContent = 'Update Construct';
   document.querySelector('#panel-gems .panel-content')?.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -3933,9 +3989,9 @@ function resetGemForm() {
   const label = document.getElementById('gem-form-label');
   const cancel = document.getElementById('gem-cancel-btn');
   const save = document.getElementById('gem-save-btn');
-  if (label) label.textContent = 'CREATE A GEM';
+  if (label) label.textContent = 'CREATE A CONSTRUCT';
   if (cancel) cancel.style.display = 'none';
-  if (save) save.textContent = 'Save Gem';
+  if (save) save.textContent = 'Save Construct';
 }
 
 function setupGemsPanel() {
@@ -4456,13 +4512,13 @@ function setupPersonaPicker() {
         <span class="persona-name">${escapeHTML(p.label)}</span>
         ${cur === p.id ? '<span class="persona-check">✓</span>' : ''}
       </div>`).join('');
-    const gems = App.gems.length ? `<div class="persona-section-label">✦ MY GEMS</div>` + App.gems.map(g => `
+    const gems = App.gems.length ? `<div class="persona-section-label">✦ MY CONSTRUCTS</div>` + App.gems.map(g => `
       <div class="persona-item${cur === g.id ? ' active' : ''}" data-persona="${g.id}">
         <span class="persona-emoji">${g.emoji || '✦'}</span>
         <span class="persona-name">${escapeHTML(g.name)}</span>
         ${cur === g.id ? '<span class="persona-check">✓</span>' : ''}
       </div>`).join('') : '';
-    const createRow = `<div class="persona-item persona-create" data-persona-create="1"><span class="persona-emoji">➕</span><span class="persona-name">Create a Gem…</span></div>`;
+    const createRow = `<div class="persona-item persona-create" data-persona-create="1"><span class="persona-emoji">➕</span><span class="persona-name">Create a Construct…</span></div>`;
     list.innerHTML = builtins + gems + createRow;
     list.querySelectorAll('.persona-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -4567,16 +4623,6 @@ function setupPlusMenu() {
     else { syncRows(); menu.classList.add('open'); }
   });
 
-  const prefill = (text) => {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    input.value = text;
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-    input.dispatchEvent(new Event('input'));
-    updateSendMicBtn();
-  };
-
   const handleTool = (act) => {
     menu.classList.remove('open');
     if (act === 'camera') document.getElementById('camera-input')?.click();
@@ -4591,9 +4637,9 @@ function setupPlusMenu() {
       document.getElementById('persona-picker')?.classList.remove('open');
       document.getElementById('image-style-picker')?.classList.add('open');
     }
-    else if (act === 'research') prefill('/research ');
-    else if (act === 'draft') prefill('/doc ');
-    else if (act === 'forge') prefill('/gh ');
+    else if (act === 'research') setToolMode('research');
+    else if (act === 'draft') setToolMode('doc');
+    else if (act === 'forge') setToolMode('gh');
     else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
     else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
     else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
@@ -4606,8 +4652,49 @@ function setupPlusMenu() {
     });
   });
 
+  document.getElementById('mode-chip-x')?.addEventListener('click', (e) => { e.stopPropagation(); clearToolMode(); });
+
   document.addEventListener('click', () => menu.classList.remove('open'));
   menu.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// Selecting a tool sets a "mode" — shown as a removable chip above the input
+// (like Gemini's Research pill) instead of dumping a /command into the box.
+const TOOL_MODES = {
+  research: {
+    label: 'Recon', placeholder: 'What should I dig into?',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(120 12 12)"/></svg>',
+  },
+  doc: {
+    label: 'Draft', placeholder: 'Describe the document to write…',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8.5 13h7"/><path d="M8.5 17h5"/></svg>',
+  },
+  gh: {
+    label: 'Forge', placeholder: 'GitHub action — e.g. “list my repos”',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  },
+};
+
+function setToolMode(mode) {
+  const cfg = TOOL_MODES[mode];
+  if (!cfg) return;
+  App.toolMode = mode;
+  const chip = document.getElementById('mode-chip');
+  const ico = document.getElementById('mode-chip-ico');
+  const label = document.getElementById('mode-chip-label');
+  if (ico) ico.innerHTML = cfg.icon;
+  if (label) label.textContent = cfg.label;
+  if (chip) chip.style.display = '';
+  const input = document.getElementById('chat-input');
+  if (input) { input.placeholder = cfg.placeholder; input.focus(); }
+}
+
+function clearToolMode() {
+  App.toolMode = null;
+  const chip = document.getElementById('mode-chip');
+  if (chip) chip.style.display = 'none';
+  const input = document.getElementById('chat-input');
+  if (input) input.placeholder = 'Ask Void anything...';
 }
 
 function renderProviderPicker() {

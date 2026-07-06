@@ -14,6 +14,21 @@ const PROVIDERS = [
   { id: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', keyEnv: 'GEMINI_KEY' },
 ];
 
+// When a request includes an image, only vision-capable models can "see" it.
+// Route those to the right model per provider (text-only models silently
+// ignore images, which looks like "VOID can't see pictures").
+const VISION_MODELS = {
+  gemini:     'gemini-2.0-flash',
+  openrouter: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+  together:   'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo',
+  mistral:    'pixtral-12b-latest',
+};
+
+function messagesHaveImage(messages) {
+  return messages.some(m => Array.isArray(m.content)
+    && m.content.some(p => p && (p.type === 'image_url' || p.type === 'image' || p.image_url)));
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return cors(null, 204);
@@ -29,7 +44,18 @@ export default {
     const max_tokens = body.max_tokens || 1024;
     const wantStream = !!body.stream;
     const available = PROVIDERS.filter(p => env[p.keyEnv]);
-    const order = shuffle(available);
+
+    let order;
+    if (messagesHaveImage(messages)) {
+      // Vision request: only providers with a vision model, Gemini first (most reliable).
+      order = available
+        .filter(p => VISION_MODELS[p.id])
+        .map(p => ({ ...p, model: VISION_MODELS[p.id] }))
+        .sort((a, b) => (a.id === 'gemini' ? -1 : b.id === 'gemini' ? 1 : 0));
+    } else {
+      order = shuffle(available);
+    }
+
     for (const p of order) {
       try {
         const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env[p.keyEnv]}`, ...(p.extra || {}) };
