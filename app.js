@@ -2197,38 +2197,6 @@ async function sendMessage() {
   try {
   buzz();
 
-  // /define command
-  if (text.toLowerCase().startsWith('/define ')) {
-    const word = text.slice(8).trim();
-    if (word) {
-      appendMessage('user', text);
-      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-      try {
-        const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-        if (r.ok) {
-          const data = await r.json();
-          const entry = data[0];
-          const phonetic = entry.phonetic || '';
-          const meanings = entry.meanings || [];
-          let defText = `📖 ${entry.word.toUpperCase()}${phonetic ? '  ' + phonetic : ''}\n`;
-          meanings.slice(0, 2).forEach(m => {
-            defText += `\n[${m.partOfSpeech}]\n`;
-            (m.definitions || []).slice(0, 2).forEach((d, i) => {
-              defText += `${i + 1}. ${d.definition}\n`;
-              if (d.example) defText += `   e.g. "${d.example}"\n`;
-            });
-          });
-          appendMessage('system', defText.trim());
-        } else {
-          appendMessage('system', `No definition found for "${word}".`);
-        }
-      } catch(e) {
-        appendMessage('system', `Error fetching definition for "${word}".`);
-      }
-    }
-    return;
-  }
-
   // /price command
   if (text.toLowerCase().startsWith('/price ')) {
     const symbol = text.slice(7).trim().toLowerCase();
@@ -2532,24 +2500,9 @@ async function sendMessage() {
       '🌦 **Ask anything** — weather, "who is …", news, math, translations — I pull real data automatically',
       '🚀 **Actions** — "open spotify", "navigate to Cairo", "play lofi on youtube"',
       '',
-      'Handy shortcuts still work if you like them: `/brief` `/doc` `/image` `/gh` `/qr` `/roll` `/flip` `/pick` `/calc` `/convert` `/define` `/price` `/translate`',
+      'Handy shortcuts still work if you like them: `/brief` `/doc` `/research` `/image` `/gh` `/qr` `/convert` `/price`',
+      '(For math, definitions, translations, coin flips, etc. — just ask me directly.)',
     ].join('\n'));
-    return;
-  }
-
-  // /calc — safe local calculator
-  if (text.toLowerCase().startsWith('/calc ')) {
-    const expr = text.slice(6).trim();
-    appendMessage('user', text);
-    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    if (!/^[\d\s+\-*/().,%^eE]+$/.test(expr)) {
-      appendMessage('system', 'I can only calculate numbers and + − × ÷ ( ) % ^ here.');
-    } else {
-      try {
-        const result = Function('"use strict";return (' + expr.replace(/\^/g, '**').replace(/,/g, '') + ')')();
-        appendMessage('system', `🧮 ${expr} = **${Number.isFinite(result) ? +result.toPrecision(12) : result}**`);
-      } catch (_) { appendMessage('system', 'That expression didn\'t compute — check the syntax.'); }
-    }
     return;
   }
 
@@ -2561,48 +2514,6 @@ async function sendMessage() {
       input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
       appendImageMessage(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data)}`, 'QR code');
     }
-    return;
-  }
-
-  // /roll, /flip, /pick — quick decisions, all local
-  if (text.toLowerCase().trim() === '/flip') {
-    appendMessage('user', text);
-    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    appendMessage('system', `🪙 **${Math.random() < 0.5 ? 'Heads' : 'Tails'}**`);
-    return;
-  }
-  if (/^\/roll(\s|$)/i.test(text.trim())) {
-    appendMessage('user', text);
-    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    const m = text.trim().match(/^\/roll\s*(\d*)d?(\d+)?$/i);
-    const count = Math.min(20, parseInt(m?.[1] || '1', 10) || 1);
-    const sides = Math.min(1000, parseInt(m?.[2] || '6', 10) || 6);
-    const rolls = Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
-    appendMessage('system', `🎲 ${count}d${sides}: ${rolls.join(' + ')}${count > 1 ? ` = **${rolls.reduce((a, b) => a + b, 0)}**` : ''}`);
-    return;
-  }
-  if (text.toLowerCase().startsWith('/pick ')) {
-    const opts = text.slice(6).split(/[,;]| or /i).map(s => s.trim()).filter(Boolean);
-    appendMessage('user', text);
-    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    appendMessage('system', opts.length >= 2
-      ? `🎯 I pick: **${opts[Math.floor(Math.random() * opts.length)]}**`
-      : 'Give me at least two options, e.g. /pick pizza, sushi, tacos');
-    return;
-  }
-
-  // /translate <lang> <text> — routed through the AI so any language works
-  if (text.toLowerCase().startsWith('/translate ')) {
-    const m = text.slice(11).trim().match(/^(\S+)\s+([\s\S]+)$/);
-    appendMessage('user', text);
-    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    if (!m) { appendMessage('system', 'Usage: /translate spanish Hello, how are you?'); return; }
-    const typingId = appendTyping();
-    const reply = await quickAI(
-      `You are a translator. Translate the user's text into ${m[1]}. Output ONLY the translation, then if the script is non-Latin add one short pronunciation line.`,
-      m[2]);
-    removeTyping(typingId);
-    appendMessage('system', reply || 'Translation failed — try again.');
     return;
   }
 
