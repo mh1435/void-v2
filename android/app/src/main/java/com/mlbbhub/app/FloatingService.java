@@ -7,6 +7,12 @@ import android.content.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
 import android.os.*;
+import android.provider.Settings;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.TypedValue;
 import android.text.InputType;
 import android.view.*;
@@ -42,6 +48,9 @@ public class FloatingService extends Service {
     private static final int COL_USER_BG  = 0xFF2d2d42;
     private static final int COL_AI_BG    = 0xFF1c1c2e;
 
+    // Wake word ("Okay VOID") fires this to pop the compact voice pill.
+    public static final String ACTION_VOICE = "com.mlbbhub.app.FLOAT_VOICE";
+
     private WindowManager   wm;
     private View            floatRoot;
     private LinearLayout    chatLog;
@@ -51,6 +60,19 @@ public class FloatingService extends Service {
     private FrameLayout     orbView;
     private View            pulseRing;
     private Handler         pulseHandler;
+    private boolean         orbShown = false;
+
+    // Floating voice pill (Google-Assistant-style listening bar)
+    private View            voicePill;
+    private WindowManager.LayoutParams voiceParams;
+    private TextView        voiceStatus;
+    private LinearLayout     voiceDots;
+    private SpeechRecognizer voiceRecognizer;
+    private TextToSpeech     tts;
+    private boolean          ttsReady = false;
+    private boolean          voiceFinishing = false;
+    private final Handler    mainHandler = new Handler(Looper.getMainLooper());
+    private Runnable         dotAnim;
 
     private boolean dragging    = false;
     private boolean expanded    = false;
@@ -70,11 +92,20 @@ public class FloatingService extends Service {
         startForeground(NOTIF_ID, buildNotification());
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         pulseHandler = new Handler(Looper.getMainLooper());
-        buildWidget();
+        tts = new TextToSpeech(this, status -> ttsReady = (status == TextToSpeech.SUCCESS));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent != null ? intent.getAction() : null;
+        if (ACTION_VOICE.equals(action)) {
+            String hint = intent.getStringExtra("void_cmd");
+            showVoicePill(hint);
+        } else if (!orbShown) {
+            // Default: the persistent draggable orb assistant.
+            buildWidget();
+            orbShown = true;
+        }
         return START_STICKY;
     }
 
@@ -85,7 +116,11 @@ public class FloatingService extends Service {
     public void onDestroy() {
         super.onDestroy();
         pulseHandler.removeCallbacksAndMessages(null);
+        mainHandler.removeCallbacksAndMessages(null);
         if (floatRoot != null && floatRoot.isAttachedToWindow()) wm.removeView(floatRoot);
+        removeVoicePill();
+        try { if (voiceRecognizer != null) voiceRecognizer.destroy(); } catch (Exception ignored) {}
+        try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Exception ignored) {}
         executor.shutdown();
     }
 
@@ -398,6 +433,246 @@ public class FloatingService extends Service {
         lp.setMargins(isUser ? dp(36) : 0, dp(3), isUser ? 0 : dp(36), dp(3));
         lp.gravity = isUser ? Gravity.END : Gravity.START;
         chatLog.addView(b, lp);
+    }
+
+    /* ─── Floating voice pill ("Okay VOID") ─────────────────── */
+
+    private void showVoicePill(String hint) {
+        if (voicePill != null) return; // already up
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            setNotifText("Enable \"Draw over other apps\" for VOID voice.");
+            finishVoice();
+            return;
+        }
+        voiceFinishing = false;
+        buildVoicePill();
+        setVoiceState("Listening…", true);
+        startVoiceCapture(hint);
+    }
+
+    private void buildVoicePill() {
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+
+        LinearLayout pill = new LinearLayout(this);
+        pill.setOrientation(LinearLayout.HORIZONTAL);
+        pill.setGravity(Gravity.CENTER_VERTICAL);
+        pill.setPadding(dp(8), dp(8), dp(10), dp(8));
+        pill.setElevation(dp(14));
+        GradientDrawable pbg = new GradientDrawable();
+        pbg.setCornerRadius(dp(28));
+        pbg.setColor(0xF2_16161f);
+        pbg.setStroke(dp(1), 0x40_7c6fff);
+        pill.setBackground(pbg);
+
+        // Left orb (V)
+        FrameLayout orb = new FrameLayout(this);
+        GradientDrawable obg = new GradientDrawable();
+        obg.setShape(GradientDrawable.OVAL);
+        obg.setColors(new int[]{ 0xFF7c6fff, 0xFFb18cff });
+        obg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        obg.setOrientation(GradientDrawable.Orientation.TL_BR);
+        orb.setBackground(obg);
+        TextView v = new TextView(this);
+        v.setText("V"); v.setTextColor(0xFFFFFFFF); v.setTypeface(null, Typeface.BOLD);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); v.setGravity(Gravity.CENTER);
+        orb.addView(v, new FrameLayout.LayoutParams(dp(36), dp(36)));
+        LinearLayout.LayoutParams orbLp = new LinearLayout.LayoutParams(dp(36), dp(36));
+        orbLp.setMargins(dp(2), 0, dp(10), 0);
+        pill.addView(orb, orbLp);
+
+        // Center column: status text + animated listening dots
+        LinearLayout center = new LinearLayout(this);
+        center.setOrientation(LinearLayout.VERTICAL);
+        center.setGravity(Gravity.CENTER_VERTICAL);
+
+        voiceStatus = new TextView(this);
+        voiceStatus.setTextColor(COL_TEXT);
+        voiceStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        voiceStatus.setMaxLines(3);
+        voiceStatus.setText("Listening…");
+        center.addView(voiceStatus, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        voiceDots = new LinearLayout(this);
+        voiceDots.setOrientation(LinearLayout.HORIZONTAL);
+        voiceDots.setPadding(0, dp(6), 0, dp(2));
+        for (int i = 0; i < 5; i++) {
+            View dot = new View(this);
+            GradientDrawable dbg = new GradientDrawable();
+            dbg.setShape(GradientDrawable.OVAL);
+            dbg.setColor(COL_PURPLE);
+            dot.setBackground(dbg);
+            LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(dp(6), dp(6));
+            dLp.setMargins(0, 0, dp(6), 0);
+            voiceDots.addView(dot, dLp);
+        }
+        center.addView(voiceDots, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        pill.addView(center, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        // Right mic button (tap to dismiss)
+        FrameLayout mic = new FrameLayout(this);
+        GradientDrawable mbg = new GradientDrawable();
+        mbg.setShape(GradientDrawable.OVAL);
+        mbg.setColor(0x33_7c6fff);
+        mic.setBackground(mbg);
+        TextView micIco = new TextView(this);
+        micIco.setText("🎤"); micIco.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); micIco.setGravity(Gravity.CENTER);
+        mic.addView(micIco, new FrameLayout.LayoutParams(dp(40), dp(40)));
+        mic.setOnClickListener(x -> finishVoice());
+        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        micLp.setMargins(dp(8), 0, 0, 0);
+        pill.addView(mic, micLp);
+
+        voiceParams = new WindowManager.LayoutParams(
+            Math.min(screenW - dp(24), dp(380)),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        );
+        voiceParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        voiceParams.y = dp(80);
+
+        voicePill = pill;
+        pill.setAlpha(0f);
+        wm.addView(voicePill, voiceParams);
+        pill.animate().alpha(1f).setDuration(180).start();
+    }
+
+    private void setVoiceState(String text, boolean showDots) {
+        if (voiceStatus != null) voiceStatus.setText(text);
+        if (voiceDots != null) voiceDots.setVisibility(showDots ? View.VISIBLE : View.GONE);
+        if (showDots) startDots(); else stopDots();
+    }
+
+    private void startDots() {
+        stopDots();
+        dotAnim = new Runnable() {
+            int step = 0;
+            @Override public void run() {
+                if (voiceDots == null) return;
+                for (int i = 0; i < voiceDots.getChildCount(); i++) {
+                    View d = voiceDots.getChildAt(i);
+                    float phase = (float) Math.sin((step / 3.0) + i * 0.7);
+                    float s = 0.7f + 0.6f * (phase + 1f) / 2f;
+                    d.setScaleX(s); d.setScaleY(s);
+                    d.setAlpha(0.45f + 0.55f * (phase + 1f) / 2f);
+                }
+                step++;
+                mainHandler.postDelayed(this, 90);
+            }
+        };
+        mainHandler.post(dotAnim);
+    }
+
+    private void stopDots() {
+        if (dotAnim != null) { mainHandler.removeCallbacks(dotAnim); dotAnim = null; }
+    }
+
+    private void startVoiceCapture(String hint) {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            if (hint != null && hint.trim().length() >= 2) { onCommandRecognized(hint.trim()); return; }
+            setVoiceState("Speech recognition unavailable.", false);
+            mainHandler.postDelayed(this::finishVoice, 1800);
+            return;
+        }
+        try {
+            voiceRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+            Intent ri = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            ri.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            ri.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+            ri.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            voiceRecognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onReadyForSpeech(Bundle p) {}
+                @Override public void onBeginningOfSpeech() {}
+                @Override public void onRmsChanged(float rms) {}
+                @Override public void onBufferReceived(byte[] b) {}
+                @Override public void onEndOfSpeech() { setVoiceState("Thinking…", true); }
+                @Override public void onError(int err) {
+                    if (hint != null && hint.trim().length() >= 2) { onCommandRecognized(hint.trim()); return; }
+                    setVoiceState("Didn't catch that.", false);
+                    mainHandler.postDelayed(FloatingService.this::finishVoice, 1500);
+                }
+                @Override public void onResults(Bundle results) {
+                    java.util.ArrayList<String> m = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (m != null && !m.isEmpty() && m.get(0).trim().length() > 0) onCommandRecognized(m.get(0).trim());
+                    else if (hint != null && hint.trim().length() >= 2) onCommandRecognized(hint.trim());
+                    else { setVoiceState("Didn't catch that.", false); mainHandler.postDelayed(FloatingService.this::finishVoice, 1500); }
+                }
+                @Override public void onPartialResults(Bundle partial) {
+                    java.util.ArrayList<String> m = partial.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (m != null && !m.isEmpty() && voiceStatus != null) voiceStatus.setText(m.get(0));
+                }
+                @Override public void onEvent(int e, Bundle b) {}
+            });
+            voiceRecognizer.startListening(ri);
+        } catch (Exception e) {
+            if (hint != null && hint.trim().length() >= 2) onCommandRecognized(hint.trim());
+            else finishVoice();
+        }
+    }
+
+    private void onCommandRecognized(String text) {
+        setVoiceState(text, true);
+        history.add(new String[]{"user", text});
+        executor.execute(() -> {
+            String reply = callAPI();
+            history.add(new String[]{"assistant", reply});
+            mainHandler.post(() -> speakAndFinish(reply));
+        });
+    }
+
+    private void speakAndFinish(String reply) {
+        setVoiceState(reply, false);
+        long autoClose = 6000;
+        if (ttsReady && tts != null) {
+            try {
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) {}
+                    @Override public void onDone(String id) { mainHandler.post(FloatingService.this::finishVoice); }
+                    @Override public void onError(String id) { mainHandler.post(FloatingService.this::finishVoice); }
+                });
+                tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply");
+                autoClose = Math.min(20000, 3500 + reply.length() * 70L); // safety fallback
+            } catch (Exception ignored) {}
+        }
+        // Keep the reply on screen a bit even if TTS finishes fast / is silent.
+        mainHandler.postDelayed(this::finishVoice, autoClose);
+    }
+
+    private void removeVoicePill() {
+        stopDots();
+        if (voicePill != null && voicePill.isAttachedToWindow()) {
+            try { wm.removeView(voicePill); } catch (Exception ignored) {}
+        }
+        voicePill = null; voiceStatus = null; voiceDots = null;
+    }
+
+    private void finishVoice() {
+        if (voiceFinishing) return;
+        voiceFinishing = true;
+        try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); } } catch (Exception ignored) {}
+        voiceRecognizer = null;
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+        removeVoicePill();
+        // Give the mic back to the wake-word service.
+        WakeWordService.resumeListening(this);
+        // If we were only up for the voice pill (no orb), shut down.
+        if (!orbShown) stopSelf();
+    }
+
+    private void setNotifText(String text) {
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        Notification n = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("VOID").setContentText(text)
+            .setSmallIcon(android.R.drawable.star_on)
+            .setPriority(NotificationCompat.PRIORITY_LOW).setOngoing(true).build();
+        nm.notify(NOTIF_ID, n);
     }
 
     private String callAPI() {

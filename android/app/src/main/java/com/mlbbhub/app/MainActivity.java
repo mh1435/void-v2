@@ -7,6 +7,10 @@ import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
 
+    // True while the VOID app is on-screen. The wake-word service checks this so
+    // "Okay VOID" only pops the floating voice pill when the app is CLOSED.
+    public static volatile boolean IN_FOREGROUND = false;
+
     private String pendingSharedText = null;
     private boolean pendingWake = false;
     private String pendingWakeCmd = null;
@@ -32,8 +36,15 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        IN_FOREGROUND = true;
         attemptDeliverShare(0);
         attemptDeliverWake(0);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        IN_FOREGROUND = false;
     }
 
     private void captureWake(Intent intent) {

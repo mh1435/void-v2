@@ -43,26 +43,64 @@ public class WakeWordService extends Service {
     // Only listen for these phrases (keyword grammar) — fast and accurate.
     private static final String GRAMMAR = "[\"okay void\", \"ok void\", \"hey void\", \"hi void\", \"void\", \"[unk]\"]";
 
+    public static final String ACTION_RESUME = "com.mlbbhub.app.WAKE_RESUME";
+
+    // Singleton handle so the floating voice pill can resume listening when done.
+    private static WakeWordService INSTANCE;
+
     private final Handler main = new Handler(Looper.getMainLooper());
     private Model model;
     private SpeechService speechService;
     private volatile boolean running = false;
+    private volatile boolean pausedForVoice = false;
     private long lastWakeMs = 0;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        INSTANCE = this;
         createChannel();
         startForegroundNotif("Starting…");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_RESUME.equals(intent.getAction())) {
+            resumeListeningInternal();
+            return START_STICKY;
+        }
         if (!running) {
             running = true;
             new Thread(this::prepareAndListen).start();
         }
         return START_STICKY;
+    }
+
+    /** Called by FloatingService after the voice pill finishes with a command. */
+    public static void resumeListening(android.content.Context ctx) {
+        if (INSTANCE != null) {
+            INSTANCE.resumeListeningInternal();
+        } else {
+            Intent i = new Intent(ctx, WakeWordService.class);
+            i.setAction(ACTION_RESUME);
+            ctx.startService(i);
+        }
+    }
+
+    // Release the mic so the voice pill's speech recognizer can use it.
+    private void pauseForVoice() {
+        pausedForVoice = true;
+        try { if (speechService != null) speechService.stop(); } catch (Exception ignored) {}
+    }
+
+    private void resumeListeningInternal() {
+        if (!pausedForVoice) return;
+        pausedForVoice = false;
+        // Small delay so the recognizer has fully released the microphone.
+        main.postDelayed(() -> {
+            try { if (speechService != null) speechService.startListening(listener); } catch (Exception ignored) {}
+            setNotif("Say \"Okay VOID\"");
+        }, 400);
     }
 
     private void prepareAndListen() {
@@ -166,12 +204,22 @@ public class WakeWordService extends Service {
     }
 
     private void fireWake(final String rest) {
+        // Wake word only acts when the VOID app is CLOSED (not on-screen). When the
+        // app is open the user already has the full assistant in front of them.
+        if (MainActivity.IN_FOREGROUND) return;
         main.post(() -> {
-            Intent i = new Intent(this, MainActivity.class);
-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            i.putExtra("void_wake", true);
+            // Hand the mic to the floating voice pill, then show it — no full app.
+            pauseForVoice();
+            Intent i = new Intent(this, FloatingService.class);
+            i.setAction(FloatingService.ACTION_VOICE);
             if (rest != null && !rest.isEmpty()) i.putExtra("void_cmd", rest);
-            try { startActivity(i); } catch (Exception ignored) {}
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
+                else startService(i);
+            } catch (Exception e) {
+                // If the overlay can't start, don't strand the mic.
+                resumeListeningInternal();
+            }
         });
     }
 
@@ -219,6 +267,7 @@ public class WakeWordService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        if (INSTANCE == this) INSTANCE = null;
         try { if (speechService != null) { speechService.stop(); speechService.shutdown(); } } catch (Exception ignored) {}
         try { if (model != null) model.close(); } catch (Exception ignored) {}
         speechService = null; model = null;
