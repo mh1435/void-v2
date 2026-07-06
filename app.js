@@ -81,23 +81,26 @@ function applyPendingShare() {
   App.pendingShare = null;
 }
 
-/* Personas — selectable modes that reshape how VOID responds */
+/* Personas — selectable modes that reshape how VOID responds.
+   `icon` is a monochrome line SVG shown in pickers (professional look);
+   `emoji` is kept as a data fallback for anything older that reads it. */
+const PSVG = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 const PERSONAS = [
-  { id: '',          label: 'Default',    emoji: '🌀', prompt: '' },
-  { id: 'tutor',     label: 'Tutor',      emoji: '📚', prompt: 'PERSONA: You are in TUTOR mode. Explain step by step, check understanding, use simple examples, and encourage the user. Never just give the answer to homework-style questions — guide them to it.' },
-  { id: 'coder',     label: 'Coder',      emoji: '💻', prompt: 'PERSONA: You are in CODER mode. Be precise and technical. Prefer code examples over prose, mention edge cases, and keep explanations tight. Assume the user is a developer.' },
-  { id: 'translator',label: 'Translator', emoji: '🌐', prompt: 'PERSONA: You are in TRANSLATOR mode. When given text, translate it. If the target language is not specified, ask once, then remember it. Show only the translation plus a short pronunciation hint when useful.' },
-  { id: 'listener',  label: 'Listener',   emoji: '💙', prompt: 'PERSONA: You are in LISTENER mode. Be warm, calm, and supportive. Listen more than you advise. Never lecture. You are not a therapist and say so if things get serious, suggesting professional help.' },
-  { id: 'roast',     label: 'Roast',      emoji: '🔥', prompt: 'PERSONA: You are in ROAST mode. Be playfully savage and witty with the user — clever burns, never genuinely cruel, never slurs or attacks on protected traits. Keep it fun.' },
+  { id: '',          label: 'Default',    emoji: '🌀', icon: PSVG('<circle cx="12" cy="12" r="3"/><path d="M12 3a9 9 0 1 0 9 9"/>'), prompt: '' },
+  { id: 'tutor',     label: 'Tutor',      emoji: '📚', icon: PSVG('<path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12.5V17c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/>'), prompt: 'PERSONA: You are in TUTOR mode. Explain step by step, check understanding, use simple examples, and encourage the user. Never just give the answer to homework-style questions — guide them to it.' },
+  { id: 'coder',     label: 'Coder',      emoji: '💻', icon: PSVG('<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'), prompt: 'PERSONA: You are in CODER mode. Be precise and technical. Prefer code examples over prose, mention edge cases, and keep explanations tight. Assume the user is a developer.' },
+  { id: 'translator',label: 'Translator', emoji: '🌐', icon: PSVG('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'), prompt: 'PERSONA: You are in TRANSLATOR mode. When given text, translate it. If the target language is not specified, ask once, then remember it. Show only the translation plus a short pronunciation hint when useful.' },
+  { id: 'listener',  label: 'Listener',   emoji: '💙', icon: PSVG('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/>'), prompt: 'PERSONA: You are in LISTENER mode. Be warm, calm, and supportive. Listen more than you advise. Never lecture. You are not a therapist and say so if things get serious, suggesting professional help.' },
+  { id: 'roast',     label: 'Roast',      emoji: '🔥', icon: PSVG('<path d="M12 22c4 0 7-2.7 7-6.5 0-3-1.8-4.7-3-6.5-1.4-2-2-3.5-2-6-2.5 1.5-4 4-4 6.5-1-1-1.5-2-1.5-3.5C6.5 8.5 5 10.7 5 13.5 5 19.3 8 22 12 22z"/>'), prompt: 'PERSONA: You are in ROAST mode. Be playfully savage and witty with the user — clever burns, never genuinely cruel, never slurs or attacks on protected traits. Keep it fun.' },
 ];
 
 const IMAGE_STYLES = [
-  { id: '',                                                     emoji: '🎨', label: 'No style' },
-  { id: 'photorealistic, highly detailed, 8k',                  emoji: '📷', label: 'Realistic' },
-  { id: 'anime style, vibrant colors, studio quality',          emoji: '🌸', label: 'Anime' },
-  { id: '3d render, octane render, cinematic lighting',         emoji: '🧊', label: '3D Render' },
-  { id: 'pixel art, 16-bit, retro game style',                  emoji: '👾', label: 'Pixel Art' },
-  { id: 'cinematic still, dramatic lighting, film grain',       emoji: '🎬', label: 'Cinematic' },
+  { id: '',                                                     emoji: '🎨', icon: PSVG('<path d="M12 2a10 10 0 0 0 0 20c1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8h2.2A5.2 5.2 0 0 0 22 10.8C22 5.9 17.5 2 12 2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>'), label: 'No style' },
+  { id: 'photorealistic, highly detailed, 8k',                  emoji: '📷', icon: PSVG('<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.6"/>'), label: 'Realistic' },
+  { id: 'anime style, vibrant colors, studio quality',          emoji: '🌸', icon: PSVG('<circle cx="12" cy="12" r="2.5"/><path d="M12 2.5a3.5 3.5 0 0 1 3.4 4.3A3.5 3.5 0 0 1 20 10.9a3.5 3.5 0 0 1-2.1 5.7 3.5 3.5 0 0 1-4.4 4.6 3.5 3.5 0 0 1-6.6-1.5A3.5 3.5 0 0 1 4 13.4a3.5 3.5 0 0 1 1.3-6A3.5 3.5 0 0 1 12 2.5z"/>'), label: 'Anime' },
+  { id: '3d render, octane render, cinematic lighting',         emoji: '🧊', icon: PSVG('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/>'), label: '3D Render' },
+  { id: 'pixel art, 16-bit, retro game style',                  emoji: '👾', icon: PSVG('<path d="M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z"/>'), label: 'Pixel Art' },
+  { id: 'cinematic still, dramatic lighting, film grain',       emoji: '🎬', icon: PSVG('<rect x="2" y="2" width="20" height="20" rx="2.5"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/>'), label: 'Cinematic' },
 ];
 
 const LANG_NAMES = {
@@ -2227,11 +2230,25 @@ async function sendMessage() {
   try {
   buzz();
 
-  // A tool "mode" is active (Recon/Draft/Forge chip) — route the typed text
-  // straight to that tool instead of a normal chat message.
+  // A tool "mode" is active (Imagine/Recon/Draft/Forge chip) — route the typed
+  // text straight to that tool instead of a normal chat message.
   if (App.toolMode) {
     const mode = App.toolMode;
+    const imgStyle = App.toolModeStyle || '';
     clearToolMode();
+    if (mode === 'image') {
+      const refImage = App.pendingImage;
+      const userContent = refImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }] : text;
+      App.chatHistory.push({ role: 'user', content: userContent });
+      appendMessage('user', userContent, App.chatHistory.length - 1);
+      saveChatHistory();
+      clearPendingImage();
+      input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+      const prompt = imgStyle ? `${text}, ${imgStyle}` : text;
+      if (refImage) await runImageEdit(prompt, refImage);
+      else await runImageGeneration(prompt);
+      return;
+    }
     appendMessage('user', text);
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     if (mode === 'research') {
@@ -4327,10 +4344,10 @@ function renderActiveChat() {
       <div class="welcome-tag" id="welcome-tag">What's the move today?</div>
       <div class="void-quote" id="void-quote-line"></div>
       <div class="welcome-chips">
-        <button class="welcome-chip" data-chip="What can you do?">✦ What can you do?</button>
-        <button class="welcome-chip" data-chip="/brief">📋 Daily briefing</button>
-        <button class="welcome-chip" data-chip="make me an image of a neon city at night">🎨 Make an image</button>
-        <button class="welcome-chip" data-chip="/help">⌘ All commands</button>
+        <button class="welcome-chip" data-chip="What can you do?"><svg class="chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2 5.4L19.5 10l-5.5 1.6L12 17l-2-5.4L4.5 10 10 8.4z"/></svg>What can you do?</button>
+        <button class="welcome-chip" data-chip="/brief"><svg class="chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Daily briefing</button>
+        <button class="welcome-chip" data-chip="make me an image of a neon city at night"><svg class="chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg>Make an image</button>
+        <button class="welcome-chip" data-chip="/help"><svg class="chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>All commands</button>
       </div>
       <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div></div>`;
     initQuoteWidget();
@@ -4508,17 +4525,18 @@ function setupPersonaPicker() {
     const cur = App.settings.persona || '';
     const builtins = PERSONAS.map(p => `
       <div class="persona-item${cur === p.id ? ' active' : ''}" data-persona="${p.id}">
-        <span class="persona-emoji">${p.emoji}</span>
+        <span class="row-ico">${p.icon}</span>
         <span class="persona-name">${escapeHTML(p.label)}</span>
         ${cur === p.id ? '<span class="persona-check">✓</span>' : ''}
       </div>`).join('');
-    const gems = App.gems.length ? `<div class="persona-section-label">✦ MY CONSTRUCTS</div>` + App.gems.map(g => `
+    // Constructs keep the emoji the user chose for them — that's their identity.
+    const gems = App.gems.length ? `<div class="persona-section-label">MY CONSTRUCTS</div>` + App.gems.map(g => `
       <div class="persona-item${cur === g.id ? ' active' : ''}" data-persona="${g.id}">
         <span class="persona-emoji">${g.emoji || '✦'}</span>
         <span class="persona-name">${escapeHTML(g.name)}</span>
         ${cur === g.id ? '<span class="persona-check">✓</span>' : ''}
       </div>`).join('') : '';
-    const createRow = `<div class="persona-item persona-create" data-persona-create="1"><span class="persona-emoji">➕</span><span class="persona-name">Create a Construct…</span></div>`;
+    const createRow = `<div class="persona-item persona-create" data-persona-create="1"><span class="row-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span><span class="persona-name">Create a Construct…</span></div>`;
     list.innerHTML = builtins + gems + createRow;
     list.querySelectorAll('.persona-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -4559,7 +4577,7 @@ function setupImageStylePicker() {
 
   list.innerHTML = IMAGE_STYLES.map((s, i) => `
     <div class="persona-item" data-style-index="${i}">
-      <span class="persona-emoji">${s.emoji}</span>
+      <span class="row-ico">${s.icon}</span>
       <span class="persona-name">${s.label}</span>
     </div>`).join('');
 
@@ -4567,12 +4585,8 @@ function setupImageStylePicker() {
     item.addEventListener('click', () => {
       const style = IMAGE_STYLES[parseInt(item.dataset.styleIndex, 10)];
       picker.classList.remove('open');
-      const input = document.getElementById('chat-input');
-      if (!input) return;
-      input.value = style.id ? `/image ${style.id}, ` : '/image ';
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-      updateSendMicBtn();
+      // No visible /image command — set an Imagine mode chip instead.
+      setToolMode('image', style);
     });
   });
 
@@ -4654,6 +4668,42 @@ function setupPlusMenu() {
 
   document.getElementById('mode-chip-x')?.addEventListener('click', (e) => { e.stopPropagation(); clearToolMode(); });
 
+  // Drag-to-dismiss, like a native bottom sheet: the sheet follows your finger
+  // downward and closes past ~30% (or on a quick flick); otherwise springs back.
+  let dragStartY = 0, dragDelta = 0, dragStartT = 0, draggingSheet = false;
+  menu.addEventListener('touchstart', (e) => {
+    // Only start a sheet-drag from the sheet body, not while scrolling its list mid-scroll
+    if (menu.scrollTop > 0) return;
+    draggingSheet = true;
+    dragStartY = e.touches[0].clientY;
+    dragStartT = Date.now();
+    dragDelta = 0;
+    menu.style.transition = 'none';
+  }, { passive: true });
+  menu.addEventListener('touchmove', (e) => {
+    if (!draggingSheet) return;
+    dragDelta = Math.max(0, e.touches[0].clientY - dragStartY);
+    menu.style.transform = dragDelta ? `translateY(${dragDelta}px)` : '';
+  }, { passive: true });
+  menu.addEventListener('touchend', () => {
+    if (!draggingSheet) return;
+    draggingSheet = false;
+    const quickFlick = dragDelta > 40 && (Date.now() - dragStartT) < 260;
+    const farEnough = dragDelta > menu.offsetHeight * 0.3;
+    menu.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+    if (quickFlick || farEnough) {
+      menu.style.transform = `translateY(${menu.offsetHeight + 24}px)`;
+      menu.style.opacity = '0';
+      setTimeout(() => {
+        menu.classList.remove('open');
+        menu.style.transform = ''; menu.style.opacity = ''; menu.style.transition = '';
+      }, 220);
+    } else {
+      menu.style.transform = '';
+      setTimeout(() => { menu.style.transition = ''; }, 240);
+    }
+  });
+
   document.addEventListener('click', () => menu.classList.remove('open'));
   menu.addEventListener('click', (e) => e.stopPropagation());
 }
@@ -4673,17 +4723,22 @@ const TOOL_MODES = {
     label: 'Forge', placeholder: 'GitHub action — e.g. “list my repos”',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
   },
+  image: {
+    label: 'Imagine', placeholder: 'Describe the image to create…',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l2.3 6.2L20.5 11l-6.2 2.3L12 19.5l-2.3-6.2L3.5 11l6.2-2.3z"/></svg>',
+  },
 };
 
-function setToolMode(mode) {
+function setToolMode(mode, style) {
   const cfg = TOOL_MODES[mode];
   if (!cfg) return;
   App.toolMode = mode;
+  App.toolModeStyle = (mode === 'image' && style && style.id) ? style.id : '';
   const chip = document.getElementById('mode-chip');
   const ico = document.getElementById('mode-chip-ico');
   const label = document.getElementById('mode-chip-label');
   if (ico) ico.innerHTML = cfg.icon;
-  if (label) label.textContent = cfg.label;
+  if (label) label.textContent = cfg.label + (mode === 'image' && style && style.id ? ` · ${style.label}` : '');
   if (chip) chip.style.display = '';
   const input = document.getElementById('chat-input');
   if (input) { input.placeholder = cfg.placeholder; input.focus(); }
@@ -4691,6 +4746,7 @@ function setToolMode(mode) {
 
 function clearToolMode() {
   App.toolMode = null;
+  App.toolModeStyle = '';
   const chip = document.getElementById('mode-chip');
   if (chip) chip.style.display = 'none';
   const input = document.getElementById('chat-input');
