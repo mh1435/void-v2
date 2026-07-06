@@ -88,6 +88,22 @@ if ('serviceWorker' in navigator) {
     <div class="nav-chat-list" id="chat-list"></div>
   </aside>
 
+  <!-- Voice assistant overlay (Gemini / "Okay Google" style) -->
+  <div class="va-overlay" id="va-overlay" aria-hidden="true">
+    <button class="va-close" id="va-close" aria-label="Close">✕</button>
+    <div class="va-orb-wrap">
+      <div class="va-orb" id="va-orb">
+        <span class="va-ring"></span>
+        <span class="va-ring"></span>
+        <span class="va-ring"></span>
+        <span class="va-core"></span>
+      </div>
+    </div>
+    <div class="va-status" id="va-status">Listening…</div>
+    <div class="va-transcript" id="va-transcript"></div>
+    <div class="va-reply" id="va-reply"></div>
+  </div>
+
   <main class="content-frame">
     
     <div class="view-tab active" id="tab-chat">

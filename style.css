@@ -2535,3 +2535,66 @@ body.reduced-motion *::after {
   color: #ff5050;
 }
 .void-float-send:hover { background: rgba(124,111,255,0.38); }
+
+/* ============ Voice assistant overlay (Gemini "Okay Google" style) ============ */
+.va-overlay {
+  position: fixed; inset: 0; z-index: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 22px; padding: 40px 26px calc(60px + env(safe-area-inset-bottom));
+  background: radial-gradient(120% 90% at 50% 60%, rgba(30,22,60,0.72), rgba(6,6,12,0.92));
+  -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+  opacity: 0; visibility: hidden; transform: translateY(14px);
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.16,1,0.3,1), visibility 0.28s;
+}
+.va-overlay.open { opacity: 1; visibility: visible; transform: none; }
+.va-close {
+  position: absolute; top: calc(16px + env(safe-area-inset-top)); right: 18px;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  color: #d8d8ec; font-size: 16px; cursor: pointer;
+}
+.va-close:active { background: rgba(255,255,255,0.16); }
+
+.va-orb-wrap { position: relative; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; }
+.va-orb { position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; }
+.va-core {
+  width: 84px; height: 84px; border-radius: 50%;
+  background: conic-gradient(from 0deg, #7c6fff, #b18cff, #6ad2ff, #ff8ad0, #7c6fff);
+  filter: blur(2px) saturate(150%);
+  animation: vaSpin 6s linear infinite, vaBreathe 3.2s ease-in-out infinite;
+  box-shadow: 0 0 60px rgba(124,111,255,0.6), 0 0 120px rgba(177,140,255,0.35);
+}
+.va-ring {
+  position: absolute; inset: 0; margin: auto; width: 120px; height: 120px;
+  border-radius: 50%; border: 2px solid rgba(150,130,255,0.4);
+  animation: vaPulse 2.4s ease-out infinite; opacity: 0;
+}
+.va-ring:nth-child(2) { animation-delay: 0.8s; }
+.va-ring:nth-child(3) { animation-delay: 1.6s; }
+@keyframes vaSpin { to { transform: rotate(360deg); } }
+@keyframes vaBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes vaPulse { 0% { transform: scale(0.7); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
+
+/* Thinking: faster spin, dimmer rings. Speaking: stronger glow bounce. */
+.va-overlay[data-state="thinking"] .va-core { animation: vaSpin 1.6s linear infinite, vaBreathe 1s ease-in-out infinite; }
+.va-overlay[data-state="thinking"] .va-ring { animation-duration: 1.2s; }
+.va-overlay[data-state="speaking"] .va-core { animation: vaSpin 4s linear infinite, vaBounce 0.6s ease-in-out infinite; box-shadow: 0 0 80px rgba(124,111,255,0.8), 0 0 150px rgba(177,140,255,0.5); }
+@keyframes vaBounce { 0%,100% { transform: scale(1.02); } 50% { transform: scale(1.18); } }
+
+.va-status {
+  font-family: var(--hub-display); font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
+  color: #cfc8ff; text-align: center; min-height: 20px;
+}
+.va-transcript {
+  font-size: 20px; font-weight: 600; color: #fff; text-align: center; line-height: 1.4;
+  max-width: 560px; min-height: 24px;
+}
+.va-reply {
+  font-size: 15px; color: #c8c8dc; text-align: center; line-height: 1.6;
+  max-width: 560px; max-height: 34vh; overflow-y: auto;
+}
+:root[data-light] .va-overlay { background: radial-gradient(120% 90% at 50% 60%, rgba(220,214,255,0.85), rgba(240,240,250,0.95)); }
+:root[data-light] .va-status { color: #4a3fb0; }
+:root[data-light] .va-transcript { color: #14121f; }
+:root[data-light] .va-reply { color: #45454f; }
+:root[data-light] .va-close { background: rgba(0,0,0,0.06); color: #333; border-color: rgba(0,0,0,0.1); }

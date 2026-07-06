@@ -1651,6 +1651,40 @@ async function speakRealistic(text) {
   }
 }
 
+/* ============ Voice assistant overlay (Gemini "Okay Google" style) ============ */
+
+function setAssistantState(state, opts = {}) {
+  const ov = document.getElementById('va-overlay');
+  if (!ov) return;
+  ov.dataset.state = state;
+  const status = document.getElementById('va-status');
+  const transcript = document.getElementById('va-transcript');
+  const reply = document.getElementById('va-reply');
+  const defaultStatus = { listening: 'Listening…', thinking: 'Thinking…', speaking: '' }[state] || '';
+  if (status) status.textContent = opts.status !== undefined ? opts.status : defaultStatus;
+  if (transcript && opts.transcript !== undefined) transcript.textContent = opts.transcript;
+  if (reply && opts.reply !== undefined) reply.textContent = opts.reply;
+}
+
+function showAssistantOverlay() {
+  const ov = document.getElementById('va-overlay');
+  if (!ov) return;
+  App.vaActive = true;
+  const t = document.getElementById('va-transcript'); if (t) t.textContent = '';
+  const r = document.getElementById('va-reply'); if (r) r.textContent = '';
+  setAssistantState('listening');
+  ov.classList.add('open');
+  ov.setAttribute('aria-hidden', 'false');
+}
+
+function hideAssistantOverlay() {
+  const ov = document.getElementById('va-overlay');
+  if (!ov) return;
+  App.vaActive = false;
+  ov.classList.remove('open');
+  ov.setAttribute('aria-hidden', 'true');
+}
+
 /* ============ Chat ============ */
 
 function setupChat() {
@@ -1671,6 +1705,7 @@ function setupChat() {
     if (!text) return;
     if (App.voiceConvo) {
       // Live voice mode: send what was heard immediately, hands-free
+      if (App.vaActive) setAssistantState('thinking', { transcript: text });
       input.value = text;
       input.dispatchEvent(new Event('input'));
       sendMessage();
@@ -1766,6 +1801,7 @@ function setupChat() {
 
   // Shared entry point so speak()/generateAssistantReply can hand the mic back
   App.startListening = () => {
+    if (App.vaActive) setAssistantState('listening', { transcript: '' });
     if (NativeSTT) { startNativeListening(); return; }
     if (!recognizer || listening) return;
     App.stopWakeListening?.();
@@ -1786,16 +1822,23 @@ function setupChat() {
       document.getElementById('plus-btn')?.classList.toggle('active', App.voiceConvo);
       if (App.voiceConvo) {
         App.stopWakeListening?.();
-        appendMessage('system', '🎙 Live voice mode on — just talk. VOID answers out loud and listens again. Tap LIVE to stop.');
+        showAssistantOverlay();
         App.startListening();
       } else {
         try { NativeSTT ? NativeSTT.stop() : recognizer?.stop(); } catch (_) {}
         stopSpeaking();
+        hideAssistantOverlay();
         // Resume passive wake listening once the live conversation ends
         setTimeout(() => App.startWakeListening?.(), 600);
       }
     });
   }
+
+  // Overlay close button → exit live voice mode (reuses the toggle-off path)
+  document.getElementById('va-close')?.addEventListener('click', () => {
+    hideAssistantOverlay();
+    if (App.voiceConvo && convoBtn) convoBtn.click();
+  });
 
   /* ===== Wake word: "Okay VOID" (like "Okay Google") ===== */
   // A passive, always-on listener. When it hears "okay/hey void", it drops
@@ -1820,12 +1863,13 @@ function setupChat() {
       convoBtn?.classList.add('active');
       document.getElementById('plus-btn')?.classList.add('active');
     }
+    showAssistantOverlay(); // Gemini-style listening UI
     const cmd = (rest || '').trim().replace(/[.?!]+$/, '').trim();
     if (cmd.length >= 2) {
+      setAssistantState('thinking', { transcript: cmd });
       input.value = cmd; input.dispatchEvent(new Event('input'));
       sendMessage(); // live mode resumes listening after the reply
     } else {
-      appendMessage('system', '🎙 Yes? I\'m listening… (Live voice on — tap LIVE to stop)');
       App.startListening();
     }
   }
@@ -2754,6 +2798,7 @@ async function generateAssistantReply(triggerText) {
     }
     if (App.voiceConvo) {
       App.voiceTriggered = false;
+      if (App.vaActive) setAssistantState('speaking', { status: '', reply });
       if (App.settings.voiceEnabled) speak(reply);           // speak() resumes listening when done
       else setTimeout(() => App.startListening?.(), 400);    // voice off — jump straight back to mic
     } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
