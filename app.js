@@ -635,6 +635,7 @@ function bootApp() {
   updateUserDisplay();
   initLiveContext();
   initQuoteWidget();
+  renderWelcomeGreeting();
   checkForAppUpdate();
   applyPendingShare();
   maybeStartTour();
@@ -1968,30 +1969,33 @@ function setupChat() {
   const attachInput = document.getElementById('attach-input');
   const preview = document.getElementById('attach-preview');
   const previewImg = document.getElementById('attach-preview-img');
+  const cameraInput = document.getElementById('camera-input');
+  const ingestImageFile = (input) => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1024;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      App.pendingImage = canvas.toDataURL('image/jpeg', 0.85);
+      URL.revokeObjectURL(img.src);
+      if (previewImg) previewImg.src = App.pendingImage;
+      if (preview) preview.style.display = '';
+      attachBtn?.classList.add('active');
+    };
+    img.src = URL.createObjectURL(file);
+  };
   if (attachBtn && attachInput) {
     attachBtn.addEventListener('click', () => attachInput.click());
-    attachInput.addEventListener('change', () => {
-      const file = attachInput.files?.[0];
-      attachInput.value = '';
-      if (!file) return;
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1024;
-        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        App.pendingImage = canvas.toDataURL('image/jpeg', 0.85);
-        URL.revokeObjectURL(img.src);
-        if (previewImg) previewImg.src = App.pendingImage;
-        if (preview) preview.style.display = '';
-        attachBtn.classList.add('active');
-      };
-      img.src = URL.createObjectURL(file);
-    });
+    attachInput.addEventListener('change', () => ingestImageFile(attachInput));
     document.getElementById('attach-remove-btn')?.addEventListener('click', clearPendingImage);
   }
+  if (cameraInput) cameraInput.addEventListener('change', () => ingestImageFile(cameraInput));
 
   updateSendMicBtn();
   updateModelIndicator();
@@ -4261,15 +4265,20 @@ function renderActiveChat() {
   if (App.chatHistory.length) {
     App.chatHistory.forEach((msg, i) => appendMessage(msg.role === 'user' ? 'user' : 'system', msg.content, i, msg.sources || []));
   } else {
-    box.innerHTML = `<div class="matrix-welcome"><div class="welcome-logo">VOID</div>
-      <p>AI assistant &amp; game companion. Ask anything — MLBB heroes, builds, strategy, or general questions.</p>
+    box.innerHTML = `<div class="matrix-welcome">
+      <div class="welcome-orb" aria-hidden="true"><span class="welcome-orb-core"></span></div>
+      <div class="welcome-greet" id="welcome-greet">Hey there</div>
+      <div class="welcome-tag" id="welcome-tag">What's the move today?</div>
+      <div class="void-quote" id="void-quote-line"></div>
       <div class="welcome-chips">
-        <button class="welcome-chip" data-chip="What can you do?">What can you do?</button>
+        <button class="welcome-chip" data-chip="What can you do?">✦ What can you do?</button>
         <button class="welcome-chip" data-chip="/brief">📋 Daily briefing</button>
-        <button class="welcome-chip" data-chip="/image a neon city at night">🎨 Make an image</button>
-        <button class="welcome-chip" data-chip="/help">All commands</button>
+        <button class="welcome-chip" data-chip="make me an image of a neon city at night">🎨 Make an image</button>
+        <button class="welcome-chip" data-chip="/help">⌘ All commands</button>
       </div>
       <div class="welcome-stats monospace" id="welcome-stats-line">INT::0 | MSG::0</div></div>`;
+    initQuoteWidget();
+    renderWelcomeGreeting();
   }
 }
 
@@ -4558,24 +4567,42 @@ function setupPlusMenu() {
     else { syncRows(); menu.classList.add('open'); }
   });
 
-  menu.querySelectorAll('.persona-item').forEach(row => {
+  const prefill = (text) => {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value = text;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.dispatchEvent(new Event('input'));
+    updateSendMicBtn();
+  };
+
+  const handleTool = (act) => {
+    menu.classList.remove('open');
+    if (act === 'camera') document.getElementById('camera-input')?.click();
+    else if (act === 'attach') document.getElementById('attach-btn')?.click();
+    else if (act === 'voice') {
+      // Trigger dictation via the send button while it's in mic mode
+      const sb = document.getElementById('send-msg-btn');
+      if (sb && sb.dataset.mode !== 'send' && sb.dataset.mode !== 'stop') sb.click();
+    }
+    else if (act === 'image') {
+      document.getElementById('provider-picker')?.classList.remove('open');
+      document.getElementById('persona-picker')?.classList.remove('open');
+      document.getElementById('image-style-picker')?.classList.add('open');
+    }
+    else if (act === 'research') prefill('/research ');
+    else if (act === 'draft') prefill('/doc ');
+    else if (act === 'forge') prefill('/gh ');
+    else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
+    else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
+    else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
+  };
+
+  menu.querySelectorAll('.persona-item, .plus-chip').forEach(row => {
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      menu.classList.remove('open');
-      const act = row.dataset.plus;
-      if (act === 'attach') document.getElementById('attach-btn')?.click();
-      else if (act === 'image') {
-        document.getElementById('provider-picker')?.classList.remove('open');
-        document.getElementById('persona-picker')?.classList.remove('open');
-        document.getElementById('image-style-picker')?.classList.add('open');
-      }
-      else if (act === 'research') {
-        const input = document.getElementById('chat-input');
-        if (input) { input.value = '/research '; input.focus(); input.setSelectionRange(input.value.length, input.value.length); updateSendMicBtn(); }
-      }
-      else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
-      else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
-      else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
+      handleTool(row.dataset.plus);
     });
   });
 
@@ -6282,6 +6309,40 @@ function initQuoteWidget() {
   const now = new Date();
   const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
   el.textContent = quotes[dayOfYear % quotes.length];
+}
+
+// Friendly first name for greetings (profile name → email handle → fallback).
+function getUserFirstName() {
+  const prof = getUserProfile();
+  let name = (prof && (prof.name || prof.callsign)) || '';
+  if (!name && App.currentUser) name = App.currentUser.split('@')[0];
+  if (!name) return '';
+  // First token only, cleaned up and capitalized.
+  name = String(name).trim().split(/[\s._-]+/)[0].replace(/[^A-Za-z0-9]/g, '');
+  if (!name) return '';
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// Personalize the welcome screen — time-aware greeting + rotating prompt line.
+function renderWelcomeGreeting() {
+  const greetEl = document.getElementById('welcome-greet');
+  const tagEl = document.getElementById('welcome-tag');
+  const name = getUserFirstName();
+  const hr = new Date().getHours();
+  const partOfDay = hr < 5 ? 'Still up' : hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : hr < 22 ? 'Good evening' : 'Late night';
+  const openers = name
+    ? [`Hey ${name}`, `${partOfDay}, ${name}`, `Welcome back, ${name}`, `Ready when you are, ${name}`]
+    : [`Hey there`, partOfDay, `Welcome to VOID`, `Ready when you are`];
+  const tags = [
+    `What's the move today?`,
+    `What are we building?`,
+    `Ask me anything — or tap + for tools.`,
+    `Type it, say "Okay VOID", or pick a tool below.`,
+    `Where should we start?`,
+  ];
+  const seed = new Date().getDate() + new Date().getHours();
+  if (greetEl) greetEl.textContent = openers[seed % openers.length];
+  if (tagEl) tagEl.textContent = tags[seed % tags.length];
 }
 
 /* ================================================================

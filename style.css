@@ -210,7 +210,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 
 .matrix-welcome {
-  margin: auto; max-width: 280px; text-align: center; padding: 40px 10px;
+  margin: auto; max-width: 320px; text-align: center; padding: 36px 12px;
 }
 .welcome-logo {
   font-family: var(--hub-display); font-size: 38px; font-weight: 700;
@@ -221,6 +221,30 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 .matrix-welcome p { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0 0 12px 0; }
 .welcome-stats { font-size: 10px; color: var(--accent); opacity: 0.4; letter-spacing: 0.06em; }
+
+/* Personalized welcome — VOID orb + time-aware greeting */
+.welcome-orb {
+  width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 50%;
+  display: grid; place-items: center; position: relative;
+  background: conic-gradient(from 0deg, var(--accent), var(--accent-2), #6ee7ff, var(--accent));
+  animation: welcomeOrbSpin 8s linear infinite;
+  box-shadow: 0 0 34px -6px var(--accent), inset 0 0 12px rgba(0,0,0,0.35);
+}
+.welcome-orb-core {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--card) 60%, transparent), var(--bg) 92%);
+  box-shadow: inset 0 0 14px rgba(124,111,255,0.35);
+  animation: welcomeOrbBreathe 3.4s ease-in-out infinite;
+}
+@keyframes welcomeOrbSpin { to { transform: rotate(360deg); } }
+@keyframes welcomeOrbBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(0.9); } }
+.welcome-greet {
+  font-family: var(--hub-display); font-size: 26px; font-weight: 700; line-height: 1.2;
+  letter-spacing: 0.01em; margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--text) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.welcome-tag { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
 
 .chat-bubble { display: flex; flex-direction: column; max-width: 85%; animation: bubbleUp 0.2s ease-out; }
 @keyframes bubbleUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -580,6 +604,27 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   color: var(--muted); padding: 9px 14px 5px; border-top: 1px solid var(--border);
 }
 .persona-item.persona-create .persona-name { color: var(--accent); }
+
+/* --- VOID tools sheet (the + menu) --- */
+.plus-sheet { padding-top: 10px; max-height: 72vh; overflow-y: auto; }
+.plus-sheet-chips {
+  display: flex; gap: 8px; padding: 4px 12px 12px; border-bottom: 1px solid var(--glass-border);
+}
+.plus-chip {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 12px 6px; border-radius: 14px; cursor: pointer;
+  background: var(--accent-soft); border: 1px solid var(--glass-border); color: var(--text);
+  font-size: 11px; font-weight: 600; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.plus-chip:active { background: color-mix(in srgb, var(--accent) 28%, transparent); border-color: var(--accent); transform: scale(0.96); }
+.plus-chip-ico { font-size: 20px; line-height: 1; }
+.plus-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.plus-title { color: var(--text); font-size: 13px; font-weight: 600; }
+.plus-desc { color: var(--muted); font-size: 11px; line-height: 1.3; }
+.plus-sheet .persona-emoji {
+  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
+  border-radius: 10px; background: var(--accent-soft); font-size: 17px;
+}
 .util-spacer { flex: 1; }
 .model-badge { font-size: 10px; color: var(--muted); opacity: 0.5; letter-spacing: 0.02em; }
 .chat-box-bar .model-badge { display: none; }  /* model shown in the pill itself */
