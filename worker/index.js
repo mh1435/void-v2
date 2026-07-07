@@ -49,11 +49,15 @@ export default {
 
     let order;
     if (messagesHaveImage(messages)) {
-      // Vision request: only providers with a vision model, Gemini first (most reliable).
+      // Vision request: Gemini's NATIVE endpoint first — same endpoint + key the
+      // /image-edit route already uses successfully, unlike the OpenAI-compat
+      // layer which rejects these payloads.
+      if (env.GEMINI_KEY) {
+        try { return await handleVisionGemini(messages, max_tokens, env); } catch {}
+      }
       order = available
-        .filter(p => VISION_MODELS[p.id])
-        .map(p => ({ ...p, model: VISION_MODELS[p.id] }))
-        .sort((a, b) => (a.id === 'gemini' ? -1 : b.id === 'gemini' ? 1 : 0));
+        .filter(p => VISION_MODELS[p.id] && p.id !== 'gemini')
+        .map(p => ({ ...p, model: VISION_MODELS[p.id] }));
     } else {
       order = shuffle(available);
     }
@@ -150,6 +154,51 @@ async function handleImageEdit(request, env) {
   } catch (e) {
     return cors(JSON.stringify({ error: String(e) }), 500);
   }
+}
+
+/* ── Vision via Gemini's native API ──────────────────────────────────
+   Converts OpenAI-style messages (text + image_url data URIs) into Gemini
+   contents and returns an OpenAI-shaped completion. The client's streaming
+   reader already falls back to plain JSON when the response isn't SSE. */
+async function handleVisionGemini(messages, max_tokens, env) {
+  const contents = [];
+  let systemText = '';
+  for (const m of messages) {
+    if (m.role === 'system') {
+      systemText += (typeof m.content === 'string' ? m.content : '') + '\n';
+      continue;
+    }
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    const parts = [];
+    if (Array.isArray(m.content)) {
+      for (const p of m.content) {
+        if (p.type === 'image_url') {
+          const u = p.image_url?.url || '';
+          const b64 = u.split(',')[1] || '';
+          const mime = (u.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
+          if (b64) parts.push({ inline_data: { mime_type: mime, data: b64 } });
+        } else if (p.type === 'text' && p.text) {
+          parts.push({ text: p.text });
+        }
+      }
+    } else if (m.content != null && String(m.content).length) {
+      parts.push({ text: String(m.content) });
+    }
+    if (parts.length) contents.push({ role, parts });
+  }
+  const body = { contents, generationConfig: { maxOutputTokens: max_tokens } };
+  if (systemText.trim()) body.system_instruction = { parts: [{ text: systemText.trim() }] };
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', {
+    method: 'POST',
+    headers: { 'x-goog-api-key': env.GEMINI_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!res.ok) throw new Error('gemini vision ' + res.status);
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+  if (!text) throw new Error('gemini vision empty');
+  return cors(JSON.stringify({ choices: [{ message: { role: 'assistant', content: text } }] }));
 }
 
 /* ── Song recognition (Shazam-style, fully in-app) ───────────────────
