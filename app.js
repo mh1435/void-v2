@@ -8626,8 +8626,9 @@ function openPageAiMenu(page, anchorEl) {
   menu.className = 'pg-ai-menu';
   menu.innerHTML = `
     <div class="pg-ai-section">ADD LECTURE</div>
+    <button data-act="lecture-record">🔴 Record lecture now</button>
     <button data-act="lecture-photo">📸 Photo of notes/board</button>
-    <button data-act="lecture-audio">🎙 Voice / recording</button>
+    <button data-act="lecture-audio">🎙 Upload recording</button>
     <div class="pg-ai-section">STUDY</div>
     <button data-act="summarize">✨ Summarize page</button>
     <button data-act="cheatsheet">📋 Make a cheat sheet</button>
@@ -8644,6 +8645,7 @@ function openPageAiMenu(page, anchorEl) {
     if (!act) return;
     menu.remove();
     if (act === 'translate') { openTranslateLangMenu(page, anchorEl); return; }
+    if (act === 'lecture-record') { openLectureRecorder(page); return; }
     if (act === 'lecture-photo') { addLectureToPage(page, 'photo'); return; }
     if (act === 'lecture-audio') { addLectureToPage(page, 'audio'); return; }
     if (act === 'quiz') { generatePageStudy(page, 'quiz'); return; }
@@ -8653,8 +8655,8 @@ function openPageAiMenu(page, anchorEl) {
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
     const prompt = act === 'summarize'
-      ? 'Summarize this page in 3-5 concise sentences.'
-      : 'List the concrete action items / to-dos implied by this page as short bullet points. If there are none, say so briefly.';
+      ? 'Summarize this page in 3-5 concise sentences. Reply in the SAME language as the material.'
+      : 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.';
     const banner = appendPageAiPending(page);
     const result = await quickAI(prompt, text);
     removePageAiPending(banner);
@@ -8676,6 +8678,103 @@ function appendPageAiToast(page, msg) {
 // Add a lecture to the current page: a photo of notes/board (vision OCR) or a
 // voice recording (Whisper transcription) becomes real text blocks you can
 // then Summarize / quiz / cheat-sheet.
+// Record a lecture live inside VOID, then transcribe it into the page.
+// Whisper auto-detects the spoken language, so Arabic/Syrian lectures (or any
+// language) transcribe without any setting to change.
+let lectureRec = null;
+function openLectureRecorder(page) {
+  if (!(navigator.mediaDevices?.getUserMedia) || !window.MediaRecorder) {
+    appendPageAiToast(page, 'Recording needs microphone access — grant it in your phone settings and reopen VOID.');
+    return;
+  }
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal pg-rec-modal">
+      <div class="pg-modal-title">Record lecture</div>
+      <div class="pg-rec-visual"><span class="pg-rec-dot"></span></div>
+      <div class="pg-rec-timer" id="pg-rec-timer">0:00</div>
+      <div class="pg-rec-hint" id="pg-rec-hint">Tap start, put your phone near the teacher. Any language works.</div>
+      <div class="pg-rec-controls">
+        <button class="primary-btn full" id="pg-rec-start">● Start recording</button>
+        <button class="primary-btn full" id="pg-rec-stop" style="display:none;background:var(--danger)">■ Stop &amp; transcribe</button>
+      </div>
+      <button class="ghost-btn full pg-modal-cancel" id="pg-rec-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+
+  let stream = null, chunks = [], startTs = 0, timerInt = null;
+  const timerEl = modal.querySelector('#pg-rec-timer');
+  const hintEl = modal.querySelector('#pg-rec-hint');
+  const visual = modal.querySelector('.pg-rec-visual');
+  const startBtn = modal.querySelector('#pg-rec-start');
+  const stopBtn = modal.querySelector('#pg-rec-stop');
+
+  const cleanup = () => {
+    if (timerInt) clearInterval(timerInt);
+    try { stream?.getTracks().forEach(t => t.stop()); } catch (_) {}
+    try { if (lectureRec && lectureRec.state !== 'inactive') lectureRec.stop(); } catch (_) {}
+    lectureRec = null;
+  };
+
+  startBtn.addEventListener('click', async () => {
+    try {
+      App.stopWakeListening?.();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (_) {
+      hintEl.textContent = 'Microphone blocked. Enable it for VOID in Settings → Apps → VOID → Permissions.';
+      return;
+    }
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    lectureRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    chunks = [];
+    lectureRec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
+    lectureRec.start(1000);
+    startTs = Date.now();
+    visual.classList.add('pg-rec-live');
+    startBtn.style.display = 'none';
+    stopBtn.style.display = '';
+    hintEl.textContent = 'Recording… keep VOID open. Tap Stop when the lecture ends.';
+    timerInt = setInterval(() => {
+      const s = Math.floor((Date.now() - startTs) / 1000);
+      timerEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }, 500);
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    const rec = lectureRec;
+    if (!rec) { modal.remove(); return; }
+    const stopped = new Promise(res => { rec.onstop = res; });
+    try { rec.stop(); } catch (_) {}
+    await stopped;
+    if (timerInt) clearInterval(timerInt);
+    try { stream?.getTracks().forEach(t => t.stop()); } catch (_) {}
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    modal.remove();
+    if (App.settings.wakeWord) setTimeout(() => App.startWakeListening?.(), 800);
+    if (blob.size < 2000) { appendPageAiToast(page, 'That recording was too short.'); return; }
+    const banner = appendPageAiPending(page);
+    if (banner) banner.textContent = 'Transcribing the lecture… (long ones take a minute)';
+    let text = '';
+    try { text = await lectureAudioToText(new File([blob], 'lecture.webm', { type: blob.type })); } catch (_) {}
+    removePageAiPending(banner);
+    if (!text || !text.trim()) { appendPageAiToast(page, "Couldn't transcribe that — check your connection and try again."); return; }
+    page.blocks.push({ ...blankBlock('heading3'), text: `Lecture — ${new Date().toLocaleDateString()}` });
+    text.trim().split(/\n{2,}/).forEach(para => { if (para.trim()) page.blocks.push({ ...blankBlock('paragraph'), text: para.trim() }); });
+    touchPage(page);
+    rerenderBlocks(page);
+    appendPageAiToast(page, 'Transcribed. Tap ✦ AI to summarize, make a quiz, or a cheat sheet.');
+  });
+
+  modal.querySelector('#pg-rec-cancel').addEventListener('click', () => {
+    cleanup();
+    modal.remove();
+    if (App.settings.wakeWord) setTimeout(() => App.startWakeListening?.(), 800);
+  });
+}
+
 function addLectureToPage(page, kind) {
   const input = document.createElement('input');
   input.type = 'file';
@@ -8752,9 +8851,11 @@ async function generatePageStudy(page, kind) {
   const banner = appendPageAiPending(page);
   if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : 'Making a cheat sheet…';
 
+  const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes.';
+
   if (kind === 'cheatsheet') {
     const out = await quickAI(
-      'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.',
+      'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.' + LANG_RULE,
       material);
     removePageAiPending(banner);
     if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
@@ -8772,7 +8873,7 @@ async function generatePageStudy(page, kind) {
 
   if (kind === 'quiz') {
     const raw = await quickAI(
-      'Create a multiple-choice quiz that tests understanding of the material. Return ONLY valid JSON (no markdown fences, no prose): an array of 5-8 objects, each exactly {"q":"question text","options":["A","B","C","D"],"answer":0,"explain":"one short sentence why"}. "answer" is the 0-based index of the correct option.',
+      'Create a multiple-choice quiz that tests understanding of the material. Return ONLY valid JSON (no markdown fences, no prose): an array of 5-8 objects, each exactly {"q":"question text","options":["A","B","C","D"],"answer":0,"explain":"one short sentence why"}. "answer" is the 0-based index of the correct option.' + LANG_RULE + ' The q, options and explain text must be in the material\'s language.',
       material);
     removePageAiPending(banner);
     const questions = parseJsonLoose(raw);
@@ -8788,7 +8889,7 @@ async function generatePageStudy(page, kind) {
 
   if (kind === 'flashcards') {
     const raw = await quickAI(
-      'Create active-recall study flashcards from the material. Return ONLY valid JSON (no markdown, no prose): an array of 8-15 objects, each exactly {"front":"term or question","back":"concise answer"}.',
+      'Create active-recall study flashcards from the material. Return ONLY valid JSON (no markdown, no prose): an array of 8-15 objects, each exactly {"front":"term or question","back":"concise answer"}.' + LANG_RULE + ' The front and back text must be in the material\'s language.',
       material);
     removePageAiPending(banner);
     const cards = parseJsonLoose(raw);
