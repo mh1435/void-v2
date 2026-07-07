@@ -729,6 +729,10 @@ public class FloatingService extends Service {
             ri.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             ri.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             ri.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            // Listen in the language chosen in VOID's settings (synced from the app)
+            String lang = SystemPlugin.getLang(this);
+            ri.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
+            ri.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang);
             voiceRecognizer.setRecognitionListener(new RecognitionListener() {
                 @Override public void onReadyForSpeech(Bundle p) {}
                 @Override public void onBeginningOfSpeech() {}
@@ -769,6 +773,8 @@ public class FloatingService extends Service {
 
     private void onCommandRecognized(String text) {
         setVoiceState(text, true);
+        // "Hey VOID, guess the song" → listen to the music right here in the pill.
+        if (SystemPlugin.isSongQuery(text)) { runPillSongId(); return; }
         // Device commands ("open spotify", "open wifi settings") are handled
         // natively — actually launching the thing — never sent to the LLM,
         // which would just pretend it did.
@@ -787,6 +793,87 @@ public class FloatingService extends Service {
         });
     }
 
+    /* ── In-pill song recognition: record ~10 s and identify via VOID CORE ── */
+
+    private void runPillSongId() {
+        setVoiceState("Listening to the music…", true);
+        executor.execute(() -> {
+            String reply = recognizeSongBlocking();
+            mainHandler.post(() -> speakAndFinish(reply));
+        });
+    }
+
+    private String recognizeSongBlocking() {
+        final int RATE = 16000, SECONDS = 10;
+        byte[] pcm;
+        android.media.AudioRecord rec = null;
+        try {
+            int minBuf = android.media.AudioRecord.getMinBufferSize(RATE,
+                android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT);
+            rec = new android.media.AudioRecord(android.media.MediaRecorder.AudioSource.MIC, RATE,
+                android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuf, RATE * 2));
+            pcm = new byte[RATE * 2 * SECONDS];
+            rec.startRecording();
+            int off = 0;
+            while (off < pcm.length) {
+                int n = rec.read(pcm, off, pcm.length - off);
+                if (n <= 0) break;
+                off += n;
+            }
+        } catch (Exception e) {
+            return "I couldn't reach the microphone to listen.";
+        } finally {
+            try { if (rec != null) { rec.stop(); rec.release(); } } catch (Exception ignored) {}
+        }
+        try {
+            byte[] wav = pcmToWav(pcm, RATE);
+            String b64 = android.util.Base64.encodeToString(wav, android.util.Base64.NO_WRAP);
+            URL url = new URL(API_URL + "/song-id");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(30000);
+            JSONObject body = new JSONObject();
+            body.put("audio", b64);
+            body.put("mimeType", "audio/wav");
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int code = conn.getResponseCode();
+            InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                String ln;
+                while ((ln = br.readLine()) != null) sb.append(ln);
+            }
+            JSONObject data = new JSONObject(sb.toString());
+            if (data.optBoolean("found")) {
+                String title = data.optString("title", ""), artist = data.optString("artist", "");
+                // "open the song in google for me" — jump straight to the result
+                SystemPlugin.viewUrl(this, "https://www.google.com/search?q=" +
+                    java.net.URLEncoder.encode(title + " " + artist, "UTF-8"));
+                return "That's " + title + " by " + artist + ". Opening it for you.";
+            }
+            if (data.has("found")) return "I heard it, but couldn't recognize that song — get closer to the speaker and try again.";
+        } catch (Exception ignored) {}
+        // Recognition service unavailable → hand off to Google's listener / Shazam
+        String via = SystemPlugin.startMusicSearch(this);
+        if (via != null) return "Listening via " + via + "…";
+        return "Song detection isn't set up yet — add the free AudD token to VOID CORE.";
+    }
+
+    private static byte[] pcmToWav(byte[] pcm, int rate) {
+        int dataLen = pcm.length, byteRate = rate * 2;
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate(44 + dataLen).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        b.put("RIFF".getBytes()).putInt(36 + dataLen).put("WAVE".getBytes()).put("fmt ".getBytes());
+        b.putInt(16).putShort((short) 1).putShort((short) 1).putInt(rate).putInt(byteRate)
+         .putShort((short) 2).putShort((short) 16).put("data".getBytes()).putInt(dataLen).put(pcm);
+        return b.array();
+    }
+
     // Show + speak the reply. The pill does NOT auto-close — it stays until
     // the user taps outside it. Wake listening resumes only AFTER the spoken
     // reply finishes, so VOID can't mis-hear its own voice as the wake word
@@ -796,6 +883,11 @@ public class FloatingService extends Service {
         boolean speaking = false;
         if (ttsReady && tts != null) {
             try {
+                // Speak in the app's configured language when the device supports it
+                try {
+                    java.util.Locale loc = java.util.Locale.forLanguageTag(SystemPlugin.getLang(this).replace('_', '-'));
+                    if (tts.isLanguageAvailable(loc) >= TextToSpeech.LANG_AVAILABLE) tts.setLanguage(loc);
+                } catch (Exception ignored) {}
                 tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
                     @Override public void onStart(String id) {}
                     @Override public void onDone(String id) { WakeWordService.resumeListening(FloatingService.this); }

@@ -169,6 +169,33 @@ public class SystemPlugin extends Plugin {
         return null;
     }
 
+    /* ── Language bridge: the web app pushes its language setting here so the
+       native voice pill can listen (STT) and speak (TTS) in it too. */
+    @PluginMethod
+    public void setLang(PluginCall call) {
+        String lang = call.getString("lang", "en-US");
+        getContext().getSharedPreferences("void_prefs", 0).edit().putString("stt_lang", lang).apply();
+        call.resolve();
+    }
+
+    public static String getLang(android.content.Context ctx) {
+        return ctx.getSharedPreferences("void_prefs", 0).getString("stt_lang", "en-US");
+    }
+
+    /** "what song is this", "guess the song", "what's playing", "shazam this"… */
+    public static boolean isSongQuery(String text) {
+        if (text == null) return false;
+        String t = text.toLowerCase(Locale.ROOT).trim().replaceAll("[.?!]+$", "").trim();
+        return t.matches("^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?" +
+            "|what song is (?:this|that|playing)" +
+            "|what(?:'s| is) playing(?: right now)?" +
+            "|which song is (?:this|that|playing)" +
+            "|(?:identify|detect|guess|name|find|search)(?: me)? (?:this |that |the )?song" +
+            "|guess (?:what(?:'s| is) playing|the music)" +
+            "|song id" +
+            "|shazam(?: (?:this|it))?)$");
+    }
+
     /* ── Voice-pill hook: handle "open X" / "open X settings" natively ─────
        Used by FloatingService so "Okay VOID, open spotify" from the home
        screen actually launches the app instead of asking the LLM. Returns a

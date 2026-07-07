@@ -125,6 +125,29 @@ function getSTTLang() {
   return STT_LANG_MAP[getActiveLang()] || 'en-US';
 }
 
+// Push the language choice into Android SharedPreferences so the native
+// voice pill listens and speaks in it too.
+function syncNativeLang() {
+  const N = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
+  if (N?.setLang) N.setLang({ lang: getSTTLang() }).catch(() => {});
+}
+
+// Script sniffing: replies in non-Latin scripts get a matching TTS voice even
+// in "auto" language mode. Latin-script languages are indistinguishable by
+// script, so those rely on the explicit language setting instead.
+function detectTextLang(text) {
+  const scripts = [
+    [/[؀-ۿ]/g, 'ar-SA'], [/[一-鿿]/g, 'zh-CN'],
+    [/[぀-ヿ]/g, 'ja-JP'], [/[가-힯]/g, 'ko-KR'],
+    [/[Ѐ-ӿ]/g, 'ru-RU'], [/[฀-๿]/g, 'th-TH'],
+  ];
+  for (const [re, tag] of scripts) {
+    const m = text.match(re);
+    if (m && m.length > Math.min(10, text.length * 0.15)) return tag;
+  }
+  return null;
+}
+
 function getActiveLang() {
   const s = App.settings.lang;
   if (!s || s === 'auto') return 'en';
@@ -382,8 +405,8 @@ function detectAppAction(text) {
     const u = m[1].match(/^https?:\/\//i) ? m[1] : 'https://' + m[1];
     return { type: 'url', label: `Opening ${m[1]}`, url: u };
   }
-  // Song detection — "what song is this", "shazam this"
-  if (/^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?|what song is (?:this|that|playing)|identify (?:this |the )?song|detect (?:this |the )?song|name (?:this|that) song|shazam(?: (?:this|it))?)[.?!]?$/i.test(t)) {
+  // Song detection — "what song is this", "guess the song", "what's playing"
+  if (/^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?|what song is (?:this|that|playing)|what(?:'s| is) playing(?: right now)?|which song is (?:this|that|playing)|(?:identify|detect|guess|name|find|search)(?: me)? (?:this |that |the )?song|guess (?:what(?:'s| is) playing|the music)|song id|shazam(?: (?:this|it))?)[.?!]?$/i.test(t)) {
     return { type: 'music' };
   }
 
@@ -946,6 +969,7 @@ function bootApp() {
   loadSettings();
   applyTheme(App.settings.theme);
   applyGlassStyle(App.settings.glass);
+  syncNativeLang();
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
     if (App.settings.theme === 'auto') applyTheme('auto');
   });
@@ -1733,7 +1757,7 @@ function setupPreferencesPanel() {
   }
   if (langSel) {
     langSel.value = App.settings.lang;
-    langSel.addEventListener('change', () => { App.settings.lang = langSel.value; saveSettings(); });
+    langSel.addEventListener('change', () => { App.settings.lang = langSel.value; saveSettings(); syncNativeLang(); });
   }
   document.querySelectorAll('.accent-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
@@ -1963,12 +1987,24 @@ function stopSpeaking() {
 function speak(text) {
   if (!App.settings.voiceEnabled) return;
   stopSpeaking();
-  if (App.settings.voiceEngine === 'realistic') { speakRealistic(text); return; }
-  if (!window.speechSynthesis) return;
+  // Multi-language: detect the reply's script (or use the language setting).
+  // The realistic voices are English-only, so non-English speech falls back
+  // to a device voice in the right language instead of mangling it.
+  const targetLang = detectTextLang(text) || (getActiveLang() !== 'en' ? getSTTLang() : null);
+  if (App.settings.voiceEngine === 'realistic' && !targetLang) { speakRealistic(text); return; }
+  if (!window.speechSynthesis) {
+    if (App.settings.voiceEngine === 'realistic') speakRealistic(text);
+    return;
+  }
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = App.settings.voiceRate;
   utter.pitch = App.settings.voicePitch;
-  if (App.settings.voiceName) {
+  if (targetLang) {
+    utter.lang = targetLang;
+    const prefix = targetLang.slice(0, 2).toLowerCase();
+    const voice = window.speechSynthesis.getVoices().find(v => (v.lang || '').toLowerCase().startsWith(prefix));
+    if (voice) utter.voice = voice;
+  } else if (App.settings.voiceName) {
     const voice = window.speechSynthesis.getVoices().find(v => v.name === App.settings.voiceName);
     if (voice) utter.voice = voice;
   }
