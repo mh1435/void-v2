@@ -14,14 +14,17 @@ const PROVIDERS = [
   { id: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', keyEnv: 'GEMINI_KEY' },
 ];
 
+const WORKER_VERSION = 'v8-vision-groq';
+
 // When a request includes an image, only vision-capable models can "see" it.
 // Route those to the right model per provider (text-only models silently
 // ignore images, which looks like "VOID can't see pictures").
+// Groq's Llama-4 Scout is the workhorse fallback when Gemini is rate-limited.
 const VISION_MODELS = {
-  gemini:     'gemini-2.0-flash',
-  openrouter: 'meta-llama/llama-3.2-11b-vision-instruct:free',
-  together:   'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo',
-  mistral:    'pixtral-12b-latest',
+  groq:       'meta-llama/llama-4-scout-17b-16e-instruct',
+  openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+  mistral:    'pixtral-12b-2409',
+  together:   'meta-llama/Llama-4-Scout-17B-16E-Instruct',
 };
 
 function messagesHaveImage(messages) {
@@ -33,6 +36,7 @@ export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return cors(null, 204);
     const url = new URL(request.url);
+    if (url.pathname === '/health') return cors(JSON.stringify({ ok: true, v: WORKER_VERSION }));
     if (url.pathname.startsWith('/pay')) return handlePay(request, env, url);
     if (url.pathname.startsWith('/sync')) return handleSync(request, env, url);
     if (url.pathname.startsWith('/tts')) return handleTTS(request, env);
@@ -55,9 +59,11 @@ export default {
       if (env.GEMINI_KEY) {
         try { return await handleVisionGemini(messages, max_tokens, env); } catch {}
       }
+      // Gemini down/rate-limited → Groq's multimodal Scout first, then the rest.
       order = available
         .filter(p => VISION_MODELS[p.id] && p.id !== 'gemini')
-        .map(p => ({ ...p, model: VISION_MODELS[p.id] }));
+        .map(p => ({ ...p, model: VISION_MODELS[p.id] }))
+        .sort((a, b) => (a.id === 'groq' ? -1 : b.id === 'groq' ? 1 : 0));
     } else {
       order = shuffle(available);
     }
