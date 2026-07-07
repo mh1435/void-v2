@@ -58,6 +58,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
 - Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
+- Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 
 Rules:
 - You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
@@ -426,6 +427,61 @@ function detectAppAction(text) {
     }
   }
   return null;
+}
+
+/* ============ Learn mode — Notion-AI-style study coach with voice ============ */
+
+// Simplify a topic into a compact lesson, read it aloud with the configured
+// VOID voice, and offer study follow-ups (quiz / simpler / example / deeper).
+async function runLearnSession(topic) {
+  if (!topic || topic.length < 2) { appendMessage('system', 'Tell me what to break down, e.g. “photosynthesis”.'); return; }
+  App.chatHistory.push({ role: 'user', content: `Teach me: ${topic}` });
+  const typingId = appendTyping();
+  const lesson = await quickAI(
+    "You are VOID's study coach. Simplify the topic so a smart beginner gets it fast — plain words, zero jargon. Use EXACTLY this markdown structure:\n" +
+    '**<topic> — made simple**\n2-3 sentence plain-language explanation.\n\n' +
+    '**Think of it like this:** one relatable analogy, 1-2 sentences.\n\n' +
+    '**The 3 things to remember:**\n- point one\n- point two\n- point three\n\n' +
+    'Then ONE short question checking they understood, on its own line.',
+    `Topic: ${topic}`);
+  removeTyping(typingId);
+  if (!lesson) { appendMessage('system', 'Couldn\'t build that lesson — try again in a moment.'); return; }
+  App.chatHistory.push({ role: 'assistant', content: lesson });
+  saveChatHistory();
+  appendMessage('assistant', lesson, App.chatHistory.length - 1);
+  // Voice-first: read the lesson aloud with the user's chosen VOID voice,
+  // even if auto-read of normal replies is switched off.
+  const spoken = lesson.replace(/[*#_`>]/g, '').replace(/\n{2,}/g, '. ').replace(/\n/g, ' ');
+  const wasEnabled = App.settings.voiceEnabled;
+  App.settings.voiceEnabled = true;
+  try { speak(spoken); } finally { App.settings.voiceEnabled = wasEnabled; }
+  renderStudyChips(topic);
+}
+
+function renderStudyChips(topic) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  clearFollowupChips();
+  const chips = [
+    { label: 'Quiz me on this', prompt: `Quiz me on ${topic} — ask ONE question at a time, wait for my answer, tell me if I'm right, then ask the next. Keep score.` },
+    { label: 'Explain it even simpler', prompt: `Explain ${topic} even more simply, like I'm 12.` },
+    { label: 'Real-world example', prompt: `Give me a real-world example of ${topic}.` },
+    { label: 'Go deeper', prompt: `Go one level deeper on ${topic} — what should I learn next?` },
+  ];
+  const wrap = document.createElement('div');
+  wrap.className = 'followup-chips';
+  wrap.innerHTML = chips.map(c => `<button class="followup-chip" type="button" data-prompt="${escapeHTML(c.prompt)}">${escapeHTML(c.label)}</button>`).join('');
+  wrap.querySelectorAll('.followup-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById('chat-input');
+      if (!input) return;
+      input.value = btn.dataset.prompt;
+      input.dispatchEvent(new Event('input'));
+      sendMessage();
+    });
+  });
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
 }
 
 // Open a URL through the system resolver on Android (deep-links straight into
@@ -2395,6 +2451,8 @@ async function sendMessage() {
     if (mode === 'research') {
       App.chatHistory.push({ role: 'user', content: text });
       await runDeepResearch(text.replace(/[?.!]+$/, '').trim());
+    } else if (mode === 'learn') {
+      await runLearnSession(text.replace(/[?.!]+$/, '').trim());
     } else if (mode === 'doc') {
       const t = appendTyping();
       const doc = await generateDocument(text);
@@ -2412,6 +2470,15 @@ async function sendMessage() {
         else appendMessage('system', 'Not sure which GitHub action you meant — try “list my repos” or “create a repo called notes-app”.');
       }
     }
+    return;
+  }
+
+  // Learn mode by natural language — "teach me photosynthesis", "help me study X"
+  const learnMatch = text.match(/^(?:help me (?:study|learn|understand)|teach me(?: about)?|study with me(?: on)?)\s+(.+)$/i);
+  if (learnMatch && learnMatch[1].trim().length >= 2) {
+    appendMessage('user', text);
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runLearnSession(learnMatch[1].trim().replace(/[?.!]+$/, ''));
     return;
   }
 
@@ -4860,6 +4927,7 @@ function setupPlusMenu() {
       document.getElementById('image-style-picker')?.classList.add('open');
     }
     else if (act === 'song') runSongDetection();
+    else if (act === 'learn') setToolMode('learn');
     else if (act === 'research') setToolMode('research');
     else if (act === 'draft') setToolMode('doc');
     else if (act === 'forge') setToolMode('gh');
@@ -4942,6 +5010,10 @@ const TOOL_MODES = {
   image: {
     label: 'Imagine', placeholder: 'Describe the image to create…',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l2.3 6.2L20.5 11l-6.2 2.3L12 19.5l-2.3-6.2L3.5 11l6.2-2.3z"/></svg>',
+  },
+  learn: {
+    label: 'Learn', placeholder: 'What topic should we break down?',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
   },
 };
 
