@@ -37,6 +37,8 @@ export default {
     if (url.pathname.startsWith('/sync')) return handleSync(request, env, url);
     if (url.pathname.startsWith('/tts')) return handleTTS(request, env);
     if (url.pathname.startsWith('/image-edit')) return handleImageEdit(request, env);
+    if (url.pathname.startsWith('/song-id')) return handleSongId(request, env);
+    if (url.pathname.startsWith('/transcribe')) return handleTranscribe(request, env);
     if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
     let body;
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
@@ -145,6 +147,78 @@ async function handleImageEdit(request, env) {
     const inline = imgPart?.inline_data || imgPart?.inlineData;
     if (!inline?.data) return cors(JSON.stringify({ error: 'no image returned' }), 502);
     return cors(JSON.stringify({ mimeType: inline.mime_type || inline.mimeType || 'image/png', data: inline.data }));
+  } catch (e) {
+    return cors(JSON.stringify({ error: String(e) }), 500);
+  }
+}
+
+/* ── Song recognition (Shazam-style, fully in-app) ───────────────────
+   The app records ~10 s of audio and sends it here; we forward it to
+   AudD's recognition API. Set an AUDD_TOKEN secret (free key from
+   audd.io) for reliable use — without one AudD allows a small number of
+   trial requests. */
+async function handleSongId(request, env) {
+  if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
+  let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
+  const audioB64 = (body.audio || '').toString();
+  if (!audioB64) return cors(JSON.stringify({ error: 'audio required' }), 400);
+  if (audioB64.length > 4_000_000) return cors(JSON.stringify({ error: 'audio too large' }), 413);
+  try {
+    const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+    const form = new FormData();
+    form.set('file', new Blob([bytes], { type: body.mimeType || 'audio/webm' }), 'clip.webm');
+    if (env.AUDD_TOKEN) form.set('api_token', env.AUDD_TOKEN);
+    form.set('return', 'spotify');
+    const res = await fetch('https://api.audd.io/', { method: 'POST', body: form, signal: AbortSignal.timeout(25000) });
+    const data = await res.json().catch(() => null);
+    if (!data) return cors(JSON.stringify({ error: 'recognition failed' }), 502);
+    if (data.status === 'success' && data.result) {
+      return cors(JSON.stringify({
+        found: true,
+        title: data.result.title || '',
+        artist: data.result.artist || '',
+        album: data.result.album || '',
+        link: data.result.song_link || '',
+      }));
+    }
+    if (data.status === 'error') {
+      return cors(JSON.stringify({ found: false, error: data.error?.error_message || 'recognition error' }));
+    }
+    return cors(JSON.stringify({ found: false }));
+  } catch (e) {
+    return cors(JSON.stringify({ error: String(e) }), 500);
+  }
+}
+
+/* ── Audio transcription (lectures / voice notes) ────────────────────
+   Reuses GROQ_KEY: Whisper large v3 turns a recording into text the app
+   can summarize, quiz on, or turn into a cheat sheet. */
+async function handleTranscribe(request, env) {
+  if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
+  if (!env.GROQ_KEY) return cors(JSON.stringify({ error: 'transcription not configured' }), 503);
+  let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
+  const audioB64 = (body.audio || '').toString();
+  if (!audioB64) return cors(JSON.stringify({ error: 'audio required' }), 400);
+  if (audioB64.length > 33_000_000) return cors(JSON.stringify({ error: 'audio too large (24 MB max)' }), 413);
+  try {
+    const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+    const name = (body.name || 'audio.m4a').toString().replace(/[^\w.-]/g, '_');
+    const form = new FormData();
+    form.set('file', new Blob([bytes], { type: body.mimeType || 'audio/mp4' }), name);
+    form.set('model', 'whisper-large-v3');
+    form.set('response_format', 'json');
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.GROQ_KEY}` },
+      body: form,
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return cors(JSON.stringify({ error: 'transcription provider error', detail: detail.slice(0, 300) }), 502);
+    }
+    const data = await res.json();
+    return cors(JSON.stringify({ text: (data.text || '').trim() }));
   } catch (e) {
     return cors(JSON.stringify({ error: String(e) }), 500);
   }

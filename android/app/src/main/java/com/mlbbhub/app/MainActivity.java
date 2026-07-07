@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     private boolean pendingWake = false;
     private String pendingWakeCmd = null;
     private String pendingAttach = null;
+    private boolean pendingSong = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -36,6 +37,7 @@ public class MainActivity extends BridgeActivity {
         attemptDeliverShare(0);
         attemptDeliverWake(0);
         attemptDeliverAttach(0);
+        attemptDeliverSong(0);
     }
 
     @Override
@@ -45,12 +47,28 @@ public class MainActivity extends BridgeActivity {
         attemptDeliverShare(0);
         attemptDeliverWake(0);
         attemptDeliverAttach(0);
+        attemptDeliverSong(0);
     }
 
     private void captureAttach(Intent intent) {
         if (intent == null) return;
         String kind = intent.getStringExtra("void_attach");
         if (kind != null && !kind.isEmpty()) pendingAttach = kind;
+        if (intent.getBooleanExtra("void_song", false)) pendingSong = true;
+    }
+
+    // Voice pill song request → run VOID's in-app listener.
+    private void attemptDeliverSong(final int attempt) {
+        if (!pendingSong || bridge == null) return;
+        bridge.getWebView().evaluateJavascript(
+            "window.__voidSongId?(window.__voidSongId(),'ok'):'no'",
+            value -> {
+                if ("\"ok\"".equals(value)) {
+                    pendingSong = false;
+                } else if (attempt < 20) {
+                    bridge.getWebView().postDelayed(() -> attemptDeliverSong(attempt + 1), 800);
+                }
+            });
     }
 
     // Voice pill "+" → open the app straight into the right attach picker.

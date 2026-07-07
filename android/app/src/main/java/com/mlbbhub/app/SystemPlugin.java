@@ -136,6 +136,14 @@ public class SystemPlugin extends Plugin {
     }
 
     public static String startMusicSearch(android.content.Context ctx) {
+        // Explicit package first — several OEM ROMs refuse the implicit form.
+        try {
+            Intent i = new Intent("com.google.android.googlequicksearchbox.MUSIC_SEARCH");
+            i.setPackage("com.google.android.googlequicksearchbox");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "Google";
+        } catch (Exception ignored) {}
         try {
             Intent i = new Intent("com.google.android.googlequicksearchbox.MUSIC_SEARCH");
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -180,8 +188,17 @@ public class SystemPlugin extends Plugin {
         // Song detection — "what song is this", "shazam this"
         if (t.matches("^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?|what song is (?:this|that|playing)|identify (?:this |the )?song|detect (?:this |the )?song|name (?:this|that) song|shazam(?: (?:this|it))?)$")) {
             String via = startMusicSearch(ctx);
-            return via != null ? "Listening via " + via + "…"
-                : "You'll need the Google app or Shazam installed to identify songs.";
+            if (via != null) return "Listening via " + via + "…";
+            // No Google/Shazam — open VOID itself, which records and recognizes in-app.
+            try {
+                Intent i = new Intent(ctx, MainActivity.class);
+                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                i.putExtra("void_song", true);
+                ctx.startActivity(i);
+                return "Opening VOID to listen…";
+            } catch (Exception e) {
+                return "I couldn't start song detection on this device.";
+            }
         }
 
         m = java.util.regex.Pattern.compile("^(?:please )?(?:open|show|launch|go to|take me to)\\s+(?:the |my )?(.+?)\\s+settings?$").matcher(t);

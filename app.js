@@ -59,6 +59,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
+- Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
 
 Rules:
 - You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
@@ -458,6 +459,119 @@ async function runLearnSession(topic) {
   renderStudyChips(topic);
 }
 
+/* ── Study Hub: lecture recordings, whiteboard photos & notes → study material ── */
+
+// Whatever the user last fed VOID to study from (transcript, photo text, notes).
+// Study actions (cheat sheet / flashcards / summary / quiz) all draw from this.
+async function transcribeStudyAudio(file) {
+  if (file.size > 24 * 1024 * 1024) {
+    appendMessage('system', `“${file.name}” is too large — recordings up to 24 MB work.`);
+    return;
+  }
+  appendMessage('system', `🎙 Transcribing “${file.name}”…`);
+  const typingId = appendTyping();
+  try {
+    const b64 = await blobToB64(file);
+    const res = await fetch(`${VOID_CORE_API.url}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio: b64, mimeType: file.type || 'audio/mp4', name: file.name }),
+    });
+    const data = await res.json().catch(() => null);
+    removeTyping(typingId);
+    if (!data?.text) {
+      appendMessage('system', 'Couldn\'t transcribe that recording — make sure VOID CORE is up to date and try again.');
+      return;
+    }
+    App.studyContext = { source: file.name, text: data.text };
+    const preview = data.text.length > 900 ? data.text.slice(0, 900) + '…' : data.text;
+    const msg = `**Transcript — ${file.name}**\n\n${preview}`;
+    App.chatHistory.push({ role: 'assistant', content: msg });
+    saveChatHistory();
+    appendMessage('assistant', msg, App.chatHistory.length - 1);
+    renderStudyActionChips();
+  } catch (_) {
+    removeTyping(typingId);
+    appendMessage('system', 'Transcription failed — check your connection and try again.');
+  }
+}
+
+function renderStudyActionChips() {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  clearFollowupChips();
+  const actions = [
+    { label: 'Make a cheat sheet', act: 'cheatsheet' },
+    { label: 'Flashcards', act: 'flashcards' },
+    { label: 'Summarize it', act: 'summary' },
+    { label: 'Quiz me on it', act: 'quiz' },
+  ];
+  const wrap = document.createElement('div');
+  wrap.className = 'followup-chips';
+  wrap.innerHTML = actions.map(a => `<button class="followup-chip" type="button" data-act="${a.act}">${a.label}</button>`).join('');
+  wrap.querySelectorAll('.followup-chip').forEach(btn => {
+    btn.addEventListener('click', () => runStudyAction(btn.dataset.act));
+  });
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function runStudyAction(action) {
+  const ctx = App.studyContext;
+  if (!ctx?.text) { appendMessage('system', 'Attach a recording, whiteboard photo, or notes file first.'); return; }
+  const material = ctx.text.slice(0, 12000);
+  if (action === 'quiz') {
+    const prompt = `Quiz me on this material — ask ONE question at a time, wait for my answer, tell me if I'm right, then ask the next. Keep score.\n\nMATERIAL (${ctx.source}):\n${material}`;
+    App.chatHistory.push({ role: 'user', content: prompt });
+    appendMessage('user', `Quiz me on ${ctx.source}`);
+    await generateAssistantReply(prompt);
+    return;
+  }
+  const specs = {
+    cheatsheet: {
+      title: `Cheat sheet — ${ctx.source}`,
+      sys: 'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates — dense bullet points grouped under short headings. No filler, no intro. Plain text.',
+    },
+    flashcards: {
+      title: `Flashcards — ${ctx.source}`,
+      sys: 'Turn the material into 12–20 study flashcards covering the most testable points. Format each exactly as:\nQ: <question>\nA: <answer>\nwith a blank line between cards. Nothing else.',
+    },
+    summary: {
+      title: `Summary — ${ctx.source}`,
+      sys: 'Write a clear structured summary of the material: a 2-sentence overview, then the main points as short sections with headings. Plain text.',
+    },
+  };
+  const spec = specs[action];
+  if (!spec) return;
+  appendMessage('user', spec.title);
+  const typingId = appendTyping();
+  const out = await quickAI(spec.sys, `MATERIAL (${ctx.source}):\n${material}`);
+  removeTyping(typingId);
+  if (!out) { appendMessage('system', 'Couldn\'t generate that — try again in a moment.'); return; }
+  storeDocument(spec.title, out);
+  showDocumentMessage(spec.title, out);
+  renderStudyActionChips();
+}
+
+// Whiteboard/lecture-slide photo + "make a cheat sheet" → vision reads the
+// board, then the result becomes study material + an exportable document.
+async function runWhiteboardStudy(text, refImage) {
+  const typingId = appendTyping();
+  const messages = [
+    { role: 'system', content: 'The user sends a photo of a whiteboard, blackboard, slide, or textbook page. First read EVERYTHING on it accurately (formulas, diagrams described in words, lists). Then do what they asked (cheat sheet, notes, flashcards, summary...). Output plain text, dense and exam-ready.' },
+    { role: 'user', content: [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }] },
+  ];
+  let out = null;
+  try { out = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch (_) {}
+  removeTyping(typingId);
+  if (!out) { appendMessage('system', 'Couldn\'t read that photo — make sure the board is sharp and well-lit, then try again.'); return; }
+  App.studyContext = { source: 'whiteboard photo', text: out };
+  const title = `Study notes — ${new Date().toLocaleDateString()}`;
+  storeDocument(title, out);
+  showDocumentMessage(title, out);
+  renderStudyActionChips();
+}
+
 function renderStudyChips(topic) {
   const box = document.getElementById('messages-box');
   if (!box) return;
@@ -494,22 +608,105 @@ async function openLink(url) {
   window.open(url, '_blank');
 }
 
-// Shazam-style song detection: hands off to Google's "Search a song"
-// listener (or Shazam/SoundHound) via the native plugin.
+// Shazam-style song detection — VOID listens ITSELF: records ~10 s from the
+// mic and recognizes it through the worker (AudD). Falls back to Google's
+// song search / Shazam handoff only if in-app listening isn't possible.
+function blobToB64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+let songIdInFlight = false;
 async function runSongDetection() {
-  const Native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
-  if (!Native) {
-    appendMessage('system', '🎵 Song detection needs the VOID Android app — in the browser I can\'t listen to what\'s playing.');
-    return;
-  }
+  if (songIdInFlight) return;
+  songIdInFlight = true;
   try {
-    const r = await Native.detectMusic();
-    if (r?.ok) {
-      appendMessage('system', `🎵 Listening via ${r.via} — hold your phone near the music.`);
-      return;
+    if (navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) { /* mic denied — fall through to native handoff */ }
+      if (stream) {
+        App.stopWakeListening?.(); // don't fight over the mic
+        try {
+          const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+          const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          const parts = [];
+          rec.ondataavailable = e => { if (e.data?.size) parts.push(e.data); };
+          const stopped = new Promise(res => { rec.onstop = res; });
+          appendMessage('system', '🎵 Listening for 10 seconds — hold the phone near the music…');
+          rec.start();
+          await new Promise(r => setTimeout(r, 10000));
+          try { rec.stop(); } catch (_) {}
+          await stopped;
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(parts, { type: mime || 'audio/webm' });
+          if (blob.size > 20000) {
+            const typingId = appendTyping();
+            const res = await fetch(`${VOID_CORE_API.url}/song-id`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audio: await blobToB64(blob), mimeType: blob.type }),
+            });
+            const data = await res.json().catch(() => null);
+            removeTyping(typingId);
+            if (data?.found) {
+              const line = `🎵 That's **“${data.title}”** by **${data.artist}**${data.album ? ` — album *${data.album}*` : ''}.`;
+              App.chatHistory.push({ role: 'assistant', content: line });
+              saveChatHistory();
+              appendMessage('assistant', line, App.chatHistory.length - 1);
+              renderSongResultChips(data);
+              return;
+            }
+            if (data && data.found === false && !data.error) {
+              appendMessage('system', "🎵 Couldn't recognize that one — get closer to the speaker and try again.");
+              return;
+            }
+            // recognition service unavailable (e.g. no AudD token yet) → try native handoff below
+          }
+        } catch (_) {
+          try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        }
+      }
     }
-  } catch (_) {}
-  appendMessage('system', 'To identify songs, install the Google app or Shazam and try again.');
+    // Native handoff: Google's "Search a song" or Shazam/SoundHound
+    const Native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
+    if (Native) {
+      try {
+        const r = await Native.detectMusic();
+        if (r?.ok) { appendMessage('system', `🎵 Listening via ${r.via} — hold your phone near the music.`); return; }
+      } catch (_) {}
+    }
+    appendMessage('system', '🎵 I couldn\'t listen here. Built-in recognition needs the AudD token on VOID CORE (free at audd.io) — or install the Google app / Shazam.');
+  } finally {
+    songIdInFlight = false;
+    if (App.settings.wakeWord) setTimeout(() => App.startWakeListening?.(), 800);
+  }
+}
+
+// Result actions: jump to the song on YouTube / Google / its song page.
+function renderSongResultChips(data) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  clearFollowupChips();
+  const q = encodeURIComponent(`${data.title} ${data.artist}`);
+  const chips = [
+    { label: '▶ Play on YouTube', url: `https://www.youtube.com/results?search_query=${q}` },
+    { label: 'Search on Google', url: `https://www.google.com/search?q=${q}` },
+  ];
+  if (data.link) chips.push({ label: 'Song page', url: data.link });
+  const wrap = document.createElement('div');
+  wrap.className = 'followup-chips';
+  wrap.innerHTML = chips.map(c => `<button class="followup-chip" type="button" data-url="${escapeHTML(c.url)}">${escapeHTML(c.label)}</button>`).join('');
+  wrap.querySelectorAll('.followup-chip').forEach(btn => {
+    btn.addEventListener('click', () => openLink(btn.dataset.url));
+  });
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
 }
 
 async function initLiveContext() {
@@ -1815,7 +2012,18 @@ async function speakRealistic(text) {
       if (myGen !== realisticGen) return;
       await new Promise((resolve, reject) => {
         const audio = new Audio(URL.createObjectURL(blob));
-        audio.playbackRate = App.settings.voiceRate || 1.0;
+        // Speed honors the slider with natural pitch; a non-neutral Pitch
+        // slider deliberately disables pitch-preservation so the voice
+        // actually shifts higher/lower (speeds up/down slightly with it).
+        const rate = App.settings.voiceRate || 1.0;
+        const pitch = App.settings.voicePitch || 1.0;
+        if (Math.abs(pitch - 1) > 0.05) {
+          try { audio.preservesPitch = false; } catch (_) {}
+          audio.playbackRate = rate * pitch;
+        } else {
+          try { audio.preservesPitch = true; } catch (_) {}
+          audio.playbackRate = rate;
+        }
         realisticAudioEl = audio;
         audio.onended = resolve;
         audio.onerror = () => reject(new Error('playback failed'));
@@ -2187,10 +2395,16 @@ function setupChat() {
     const file = fileInput.files?.[0];
     if (!file) { fileInput.value = ''; return; }
     if ((file.type || '').startsWith('image/')) { ingestImageFile(fileInput); return; }
+    // Lecture recordings / voice notes → transcription + study actions
+    if ((file.type || '').startsWith('audio/') || /\.(mp3|m4a|wav|ogg|opus|aac|flac|webm|amr|3gp)$/i.test(file.name)) {
+      transcribeStudyAudio(file);
+      fileInput.value = '';
+      return;
+    }
     const textLike = (file.type || '').startsWith('text/')
       || /\.(txt|md|markdown|csv|json|log|xml|yml|yaml|html|css|js|ts|jsx|tsx|py|java|kt|c|cpp|h|sh|sql|ini|conf|toml)$/i.test(file.name);
     if (!textLike) {
-      appendMessage('system', `I can read images and text files — “${file.name}” is neither.`);
+      appendMessage('system', `I can read images, audio recordings, and text files — “${file.name}” is none of those.`);
       fileInput.value = '';
       return;
     }
@@ -2212,6 +2426,12 @@ function setupChat() {
     };
     reader.readAsText(file);
   });
+
+  // Voice pill "what song is this" (no Google/Shazam) → in-app recognition.
+  window.__voidSongId = () => {
+    try { switchTab('tab-chat'); } catch (_) {}
+    setTimeout(() => runSongDetection(), 400);
+  };
 
   // Voice pill "+" → land in the app with the right picker already opening.
   window.__voidAttach = (kind) => {
@@ -2470,6 +2690,19 @@ async function sendMessage() {
         else appendMessage('system', 'Not sure which GitHub action you meant — try “list my repos” or “create a repo called notes-app”.');
       }
     }
+    return;
+  }
+
+  // Whiteboard/slide photo + a study request → read the board, make the material
+  if (App.pendingImage && /cheat ?sheet|flash ?cards|study notes|summari[sz]e|make notes|revision|study this/i.test(text)) {
+    const refImage = App.pendingImage;
+    const userContent = [{ type: 'text', text }, { type: 'image_url', image_url: { url: refImage } }];
+    App.chatHistory.push({ role: 'user', content: userContent });
+    appendMessage('user', userContent, App.chatHistory.length - 1);
+    saveChatHistory();
+    clearPendingImage();
+    input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runWhiteboardStudy(text, refImage);
     return;
   }
 
