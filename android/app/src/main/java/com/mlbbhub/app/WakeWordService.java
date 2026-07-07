@@ -77,6 +77,11 @@ public class WakeWordService extends Service {
         return START_STICKY;
     }
 
+    /** Called by FloatingService when the pill's mic takes over the microphone. */
+    public static void pauseListening(android.content.Context ctx) {
+        if (INSTANCE != null) INSTANCE.pauseForVoice();
+    }
+
     /** Called by FloatingService after the voice pill finishes with a command. */
     public static void resumeListening(android.content.Context ctx) {
         if (INSTANCE != null) {

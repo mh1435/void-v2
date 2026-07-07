@@ -12,7 +12,6 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import android.util.TypedValue;
 import android.text.InputType;
 import android.view.*;
@@ -69,7 +68,6 @@ public class FloatingService extends Service {
     private LinearLayout     voiceDots;
     private EditText         voiceField;
     private LinearLayout     attachRow;
-    private Runnable         autoCloseRun;
     private SpeechRecognizer voiceRecognizer;
     private TextToSpeech     tts;
     private boolean          ttsReady = false;
@@ -441,7 +439,12 @@ public class FloatingService extends Service {
     /* ─── Floating voice pill ("Okay VOID") ─────────────────── */
 
     private void showVoicePill(String hint) {
-        if (voicePill != null) return; // already up
+        if (voicePill != null) {
+            // Pill already on screen (e.g. showing the last reply) and the wake
+            // word fired again — just start a fresh listen in place.
+            restartListening();
+            return;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             setNotifText("Enable \"Draw over other apps\" for VOID voice.");
             finishVoice();
@@ -481,7 +484,6 @@ public class FloatingService extends Service {
         plusBg.setColor(0x14_ffffff);
         plusBtn.setBackground(plusBg);
         plusBtn.setOnClickListener(x -> {
-            cancelAutoClose();
             if (attachRow != null) attachRow.setVisibility(
                 attachRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
         });
@@ -589,7 +591,6 @@ public class FloatingService extends Service {
         // The overlay window starts NOT_FOCUSABLE so it never steals the
         // keyboard; first tap on the field makes it focusable and opens IME.
         voiceField.setOnTouchListener((v2, ev) -> {
-            cancelAutoClose();
             makePillFocusable();
             return false;
         });
@@ -648,7 +649,6 @@ public class FloatingService extends Service {
         String t = voiceField.getText().toString().trim();
         if (t.isEmpty()) return;
         voiceField.setText("");
-        cancelAutoClose();
         try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); voiceRecognizer = null; } } catch (Exception ignored) {}
         try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
         InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -657,15 +657,12 @@ public class FloatingService extends Service {
     }
 
     private void restartListening() {
-        cancelAutoClose();
         try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
         try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); voiceRecognizer = null; } } catch (Exception ignored) {}
+        // Take the mic back from the wake-word service while we capture.
+        WakeWordService.pauseListening(this);
         setVoiceState("Listening…", true);
         startVoiceCapture(null);
-    }
-
-    private void cancelAutoClose() {
-        if (autoCloseRun != null) { mainHandler.removeCallbacks(autoCloseRun); autoCloseRun = null; }
     }
 
     private void openAppForAttach(String kind) {
@@ -709,8 +706,8 @@ public class FloatingService extends Service {
     private void startVoiceCapture(String hint) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             if (hint != null && hint.trim().length() >= 2) { onCommandRecognized(hint.trim()); return; }
-            setVoiceState("Speech recognition unavailable.", false);
-            mainHandler.postDelayed(this::finishVoice, 1800);
+            setVoiceState("Voice input unavailable — type below instead.", false);
+            WakeWordService.resumeListening(this);
             return;
         }
         try {
@@ -727,14 +724,17 @@ public class FloatingService extends Service {
                 @Override public void onEndOfSpeech() { setVoiceState("Thinking…", true); }
                 @Override public void onError(int err) {
                     if (hint != null && hint.trim().length() >= 2) { onCommandRecognized(hint.trim()); return; }
-                    setVoiceState("Didn't catch that.", false);
-                    mainHandler.postDelayed(FloatingService.this::finishVoice, 1500);
+                    setVoiceState("Didn't catch that — tap the mic or type.", false);
+                    WakeWordService.resumeListening(FloatingService.this);
                 }
                 @Override public void onResults(Bundle results) {
                     java.util.ArrayList<String> m = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                     if (m != null && !m.isEmpty() && m.get(0).trim().length() > 0) onCommandRecognized(m.get(0).trim());
                     else if (hint != null && hint.trim().length() >= 2) onCommandRecognized(hint.trim());
-                    else { setVoiceState("Didn't catch that.", false); mainHandler.postDelayed(FloatingService.this::finishVoice, 1500); }
+                    else {
+                        setVoiceState("Didn't catch that — tap the mic or type.", false);
+                        WakeWordService.resumeListening(FloatingService.this);
+                    }
                 }
                 @Override public void onPartialResults(Bundle partial) {
                     java.util.ArrayList<String> m = partial.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
@@ -750,7 +750,6 @@ public class FloatingService extends Service {
     }
 
     private void onCommandRecognized(String text) {
-        cancelAutoClose();
         setVoiceState(text, true);
         // Device commands ("open spotify", "open wifi settings") are handled
         // natively — actually launching the thing — never sent to the LLM,
@@ -770,28 +769,16 @@ public class FloatingService extends Service {
         });
     }
 
+    // Show + speak the reply. The pill does NOT auto-close — it stays until
+    // the user taps outside it. Wake listening resumes immediately (the mic
+    // is free once recognition is done), so "Hey VOID" keeps working even
+    // while the reply is on screen.
     private void speakAndFinish(String reply) {
         setVoiceState(reply, false);
-        long autoClose = 8000;
+        WakeWordService.resumeListening(this);
         if (ttsReady && tts != null) {
-            try {
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) {}
-                    @Override public void onDone(String id) { mainHandler.post(() -> scheduleAutoClose(2500)); }
-                    @Override public void onError(String id) { mainHandler.post(() -> scheduleAutoClose(2500)); }
-                });
-                tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply");
-                autoClose = Math.min(22000, 4500 + reply.length() * 70L); // safety fallback
-            } catch (Exception ignored) {}
+            try { tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply"); } catch (Exception ignored) {}
         }
-        // Keep the reply on screen a while; any interaction cancels this.
-        scheduleAutoClose(autoClose);
-    }
-
-    private void scheduleAutoClose(long delayMs) {
-        cancelAutoClose();
-        autoCloseRun = this::finishVoice;
-        mainHandler.postDelayed(autoCloseRun, delayMs);
     }
 
     private void removeVoicePill() {
@@ -809,7 +796,6 @@ public class FloatingService extends Service {
     private void finishVoice() {
         if (voiceFinishing) return;
         voiceFinishing = true;
-        cancelAutoClose();
         try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); } } catch (Exception ignored) {}
         voiceRecognizer = null;
         try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
