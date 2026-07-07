@@ -14,7 +14,7 @@ const PROVIDERS = [
   { id: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', keyEnv: 'GEMINI_KEY' },
 ];
 
-const WORKER_VERSION = 'v8-vision-groq';
+const WORKER_VERSION = 'v9-vision-debug';
 
 // When a request includes an image, only vision-capable models can "see" it.
 // Route those to the right model per provider (text-only models silently
@@ -51,23 +51,31 @@ export default {
     const wantStream = !!body.stream;
     const available = PROVIDERS.filter(p => env[p.keyEnv]);
 
-    let order;
+    // Vision requests get their own path: only vision-capable models may answer
+    // (a text model would bluff "I can't see images"), with error details
+    // returned when every one of them fails so problems are diagnosable.
     if (messagesHaveImage(messages)) {
-      // Vision request: Gemini's NATIVE endpoint first — same endpoint + key the
-      // /image-edit route already uses successfully, unlike the OpenAI-compat
-      // layer which rejects these payloads.
+      const verr = [];
       if (env.GEMINI_KEY) {
-        try { return await handleVisionGemini(messages, max_tokens, env); } catch {}
+        try { return await handleVisionGemini(messages, max_tokens, env); }
+        catch (e) { verr.push('gemini-native: ' + String(e).slice(0, 120)); }
       }
-      // Gemini down/rate-limited → Groq's multimodal Scout first, then the rest.
-      order = available
+      const vorder = available
         .filter(p => VISION_MODELS[p.id] && p.id !== 'gemini')
         .map(p => ({ ...p, model: VISION_MODELS[p.id] }))
         .sort((a, b) => (a.id === 'groq' ? -1 : b.id === 'groq' ? 1 : 0));
-    } else {
-      order = shuffle(available);
+      for (const p of vorder) {
+        try {
+          const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env[p.keyEnv]}`, ...(p.extra || {}) };
+          const res = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify({ model: p.model, messages, max_tokens }), signal: AbortSignal.timeout(60000) });
+          if (res.ok) return cors(await res.text());
+          verr.push(p.id + ': ' + res.status + ' ' + (await res.text().catch(() => '')).slice(0, 160));
+        } catch (e) { verr.push(p.id + ': ' + String(e).slice(0, 120)); }
+      }
+      return cors(JSON.stringify({ error: 'vision providers failed', detail: verr }), 502);
     }
 
+    const order = shuffle(available);
     for (const p of order) {
       try {
         const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env[p.keyEnv]}`, ...(p.extra || {}) };
