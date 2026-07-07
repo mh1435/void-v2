@@ -15,6 +15,10 @@
     <!-- Notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Device utilities: see installed apps so "open <any app>" can launch them.
+         Fine for a sideloaded APK (Play Store restricts this permission). -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <!-- Microphone / Voice -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />

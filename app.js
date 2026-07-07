@@ -56,9 +56,10 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Custom commands and task lists
 - Knowledge lookups: "who is X" / "what is X" / "tell me about X" pull a real Wikipedia summary, injected as a KNOWLEDGE LOOKUP block below
 - /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
-- Opening other apps/sites on request ("open spotify", "navigate to X", "play X on youtube")
+- Device utilities (Android app): open ANY installed app by name and any Settings screen ("open proton vpn", "open wifi settings")
 
 Rules:
+- You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
 - NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
 - Match your response length to the question — short question = short answer, complex question = detailed answer
 - If asked what you can do, describe the capabilities above naturally
@@ -335,26 +336,77 @@ const APP_LAUNCH_MAP = [
   { keys: ['amazon'],                       url: 'https://amazon.com',                label: 'Amazon' },
 ];
 
+// Android Settings screens VOID can jump to (native app only).
+const SETTINGS_MAP = [
+  { re: /wi-?fi|wireless/,            screen: 'wifi',          label: 'Wi-Fi' },
+  { re: /bluetooth/,                  screen: 'bluetooth',     label: 'Bluetooth' },
+  { re: /hotspot|tether/,             screen: 'hotspot',       label: 'Hotspot' },
+  { re: /airplane|flight mode/,       screen: 'airplane',      label: 'Airplane mode' },
+  { re: /mobile data|data usage|data saver/, screen: 'data',   label: 'Data usage' },
+  { re: /vpn/,                        screen: 'vpn',           label: 'VPN' },
+  { re: /battery|power sav/,          screen: 'battery',       label: 'Battery' },
+  { re: /display|brightness|screen timeout|dark mode/, screen: 'display', label: 'Display' },
+  { re: /sound|volume|ringtone|vibrat/, screen: 'sound',       label: 'Sound' },
+  { re: /notification/,               screen: 'notifications', label: 'Notification' },
+  { re: /storage/,                    screen: 'storage',       label: 'Storage' },
+  { re: /security|lock screen|fingerprint/, screen: 'security', label: 'Security' },
+  { re: /location|gps/,               screen: 'location',      label: 'Location' },
+  { re: /language|locale/,            screen: 'language',      label: 'Language' },
+  { re: /date|time|clock/,            screen: 'datetime',      label: 'Date & time' },
+  { re: /developer/,                  screen: 'developer',     label: 'Developer options' },
+  { re: /accessibility/,              screen: 'accessibility', label: 'Accessibility' },
+  { re: /nfc/,                        screen: 'nfc',           label: 'NFC' },
+  { re: /wallpaper/,                  screen: 'wallpaper',     label: 'Wallpaper' },
+  { re: /keyboard|input method/,      screen: 'keyboard',      label: 'Keyboard' },
+  { re: /account|sync/,               screen: 'accounts',      label: 'Accounts' },
+  { re: /\bapps?\b|application/,      screen: 'apps',          label: 'Apps' },
+];
+
+// Words after "open …" that mean something in-app, never a device app.
+const APP_OPEN_STOPWORDS = /^(a |an |the )?(new )?(chat|conversation|settings?|menu|image|picture|photo|doc|document|file|research|tool|mode|persona|construct|workspace|it|this|that|link|url)s?$/;
+
 function detectAppAction(text) {
   const t = text.trim();
   let m;
 
   if ((m = t.match(/\b(?:play|search)\s+(.+?)\s+on\s+youtube\b/i))) {
-    return { label: `YouTube search: ${m[1]}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}` };
+    return { type: 'url', label: `YouTube search: ${m[1]}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}` };
   }
   if ((m = t.match(/\b(?:navigate|directions?)\s+to\s+(.+)/i))) {
-    return { label: `Directions to ${m[1]}`, url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m[1])}` };
+    return { type: 'url', label: `Directions to ${m[1]}`, url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m[1])}` };
   }
   if ((m = t.match(/\bfind\s+(.+?)\s+near me\b/i))) {
-    return { label: `${m[1]} near you`, url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m[1] + ' near me')}` };
+    return { type: 'url', label: `${m[1]} near you`, url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m[1] + ' near me')}` };
   }
   if ((m = t.match(/^google\s+(.{2,80})$/i))) {
-    return { label: `Google search: ${m[1]}`, url: `https://www.google.com/search?q=${encodeURIComponent(m[1])}` };
+    return { type: 'url', label: `Google search: ${m[1]}`, url: `https://www.google.com/search?q=${encodeURIComponent(m[1])}` };
   }
-  if ((m = t.match(/\b(?:open|launch|start)\s+(?:the\s+)?([a-z0-9 .]{2,30}?)(?:\s+app)?[.?!]?$/i))) {
-    const q = m[1].trim().toLowerCase();
-    for (const entry of APP_LAUNCH_MAP) {
-      if (entry.keys.some(k => q.includes(k))) return { label: `Opening ${entry.label}`, url: entry.url };
+
+  const tl = t.toLowerCase().replace(/[.?!]+$/, '').trim();
+
+  // Device Settings — "open wifi settings", "open settings", "turn on bluetooth"
+  if ((m = tl.match(/^(?:please\s+)?(?:open|show|launch|go to|take me to)\s+(?:the\s+|my\s+)?(.+?)\s+settings?$/))) {
+    const what = m[1];
+    for (const s of SETTINGS_MAP) if (s.re.test(what)) return { type: 'setting', screen: s.screen, label: `${s.label} settings` };
+    return { type: 'setting', screen: 'home', label: 'Settings' };
+  }
+  if (/^(?:please\s+)?(?:open|show|launch|go to|take me to)\s+(?:the\s+|my\s+|phone\s+|device\s+|system\s+)*settings?$/.test(tl)) {
+    return { type: 'setting', screen: 'home', label: 'Settings' };
+  }
+  if ((m = tl.match(/^(?:turn (?:on|off)|enable|disable|toggle)\s+(?:the\s+|my\s+)?(wi-?fi|bluetooth|hotspot|tethering|airplane(?: mode)?|flight mode|mobile data|data saver|vpn|nfc|location|gps|dark mode)$/))) {
+    for (const s of SETTINGS_MAP) if (s.re.test(m[1])) return { type: 'setting', screen: s.screen, label: `${s.label} settings`, toggle: true };
+  }
+
+  // Any app — "open proton vpn", "launch mobile legends"
+  if ((m = tl.match(/^(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?([a-z0-9 .&+-]{2,40}?)(?:\s+app)?$/))) {
+    const q = m[1].trim();
+    if (!APP_OPEN_STOPWORDS.test(q)) {
+      // Known web fallback (used on PWA where there's no native launcher)
+      let url = null, label = null;
+      for (const entry of APP_LAUNCH_MAP) {
+        if (entry.keys.some(k => q.includes(k))) { url = entry.url; label = entry.label; break; }
+      }
+      return { type: 'app', query: q, url, label };
     }
   }
   return null;
@@ -2596,13 +2648,54 @@ async function sendMessage() {
     return;
   }
 
-  // Natural-language app opening ("open spotify", "navigate to X", "play X on youtube"...)
+  // Natural-language device actions — open any app, any settings screen, or a
+  // link ("open proton vpn", "open wifi settings", "play lo-fi on youtube").
   const appAction = detectAppAction(text);
   if (appAction) {
+    const NativeSystem = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
     appendMessage('user', text);
     input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
-    appendMessage('system', `🚀 ${appAction.label}`);
-    window.open(appAction.url, '_blank');
+
+    if (appAction.type === 'url') {
+      appendMessage('system', `🚀 ${appAction.label}`);
+      window.open(appAction.url, '_blank');
+      return;
+    }
+
+    if (appAction.type === 'setting') {
+      if (NativeSystem) {
+        try {
+          const r = await NativeSystem.openSetting({ screen: appAction.screen });
+          if (r?.ok) {
+            appendMessage('system', appAction.toggle
+              ? `⚙️ Opening ${appAction.label} — flip it there. (Android doesn't let apps toggle this directly.)`
+              : `⚙️ Opening ${appAction.label}…`);
+            return;
+          }
+        } catch (_) {}
+        appendMessage('system', `Couldn't open ${appAction.label} on this device.`);
+      } else {
+        appendMessage('system', `⚙️ Opening device settings needs the VOID Android app — in the browser I can't reach them.`);
+      }
+      return;
+    }
+
+    // type === 'app' — launch ANY installed app by name via the native launcher
+    if (NativeSystem) {
+      try {
+        const r = await NativeSystem.openApp({ query: appAction.query });
+        if (r?.ok) { appendMessage('system', `🚀 Opening ${r.label}…`); return; }
+      } catch (_) {}
+      appendMessage('system', `I couldn't find an app called “${appAction.query}” on this device.`);
+      return;
+    }
+    // Web/PWA fallback: only the known link-openable apps work here
+    if (appAction.url) {
+      appendMessage('system', `🚀 Opening ${appAction.label}`);
+      window.open(appAction.url, '_blank');
+    } else {
+      appendMessage('system', `In the browser I can only open apps with web links. “${appAction.query}” needs the VOID Android app.`);
+    }
     return;
   }
 

@@ -19,6 +19,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(FloatingPlugin.class);
         registerPlugin(WakeWordPlugin.class);
+        registerPlugin(SystemPlugin.class);
         super.onCreate(savedInstanceState);
         captureShare(getIntent());
         captureWake(getIntent());

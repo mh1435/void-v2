@@ -618,6 +618,16 @@ public class FloatingService extends Service {
 
     private void onCommandRecognized(String text) {
         setVoiceState(text, true);
+        // Device commands ("open spotify", "open wifi settings") are handled
+        // natively — actually launching the thing — never sent to the LLM,
+        // which would just pretend it did.
+        String device = SystemPlugin.tryHandleCommand(this, text);
+        if (device != null) {
+            history.add(new String[]{"user", text});
+            history.add(new String[]{"assistant", device});
+            speakAndFinish(device);
+            return;
+        }
         history.add(new String[]{"user", text});
         executor.execute(() -> {
             String reply = callAPI();
