@@ -610,6 +610,19 @@ public class FloatingService extends Service {
 
         pill.addView(row2, row2Lp);
 
+        // Tiny build tag so it's obvious which APK is actually installed.
+        TextView buildTag = new TextView(this);
+        String ver = "?";
+        try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) {}
+        buildTag.setText("v" + ver);
+        buildTag.setTextColor(COL_MUTED);
+        buildTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        buildTag.setAlpha(0.6f);
+        buildTag.setGravity(Gravity.END);
+        buildTag.setPadding(0, dp(4), dp(6), 0);
+        pill.addView(buildTag, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         voiceParams = new WindowManager.LayoutParams(
             Math.min(screenW - dp(24), dp(380)),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -745,7 +758,12 @@ public class FloatingService extends Service {
             voiceRecognizer.startListening(ri);
         } catch (Exception e) {
             if (hint != null && hint.trim().length() >= 2) onCommandRecognized(hint.trim());
-            else finishVoice();
+            else {
+                // Mic busy or recognizer failed — keep the pill up so the user
+                // can retry via the mic button or type instead.
+                setVoiceState("Mic is busy — tap the mic to retry, or type.", false);
+                WakeWordService.resumeListening(this);
+            }
         }
     }
 
@@ -770,15 +788,24 @@ public class FloatingService extends Service {
     }
 
     // Show + speak the reply. The pill does NOT auto-close — it stays until
-    // the user taps outside it. Wake listening resumes immediately (the mic
-    // is free once recognition is done), so "Hey VOID" keeps working even
-    // while the reply is on screen.
+    // the user taps outside it. Wake listening resumes only AFTER the spoken
+    // reply finishes, so VOID can't mis-hear its own voice as the wake word
+    // and wipe the reply with a fresh "Listening…".
     private void speakAndFinish(String reply) {
         setVoiceState(reply, false);
-        WakeWordService.resumeListening(this);
+        boolean speaking = false;
         if (ttsReady && tts != null) {
-            try { tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply"); } catch (Exception ignored) {}
+            try {
+                tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                    @Override public void onStart(String id) {}
+                    @Override public void onDone(String id) { WakeWordService.resumeListening(FloatingService.this); }
+                    @Override public void onError(String id) { WakeWordService.resumeListening(FloatingService.this); }
+                });
+                tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply");
+                speaking = true;
+            } catch (Exception ignored) {}
         }
+        if (!speaking) WakeWordService.resumeListening(this);
     }
 
     private void removeVoicePill() {
