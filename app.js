@@ -487,27 +487,35 @@ async function runLearnSession(topic) {
 // Whatever the user last fed VOID to study from (transcript, photo text, notes).
 // Study actions (cheat sheet / flashcards / summary / quiz) all draw from this.
 async function transcribeStudyAudio(file) {
-  if (file.size > 24 * 1024 * 1024) {
-    appendMessage('system', `“${file.name}” is too large — recordings up to 24 MB work.`);
+  const MB = 1024 * 1024;
+  if (file.size > 150 * MB) {
+    appendMessage('system', `“${file.name}” is ${Math.round(file.size / MB)} MB — recordings up to ~150 MB work. Split it and send the parts.`);
     return;
   }
-  appendMessage('system', `🎙 Transcribing “${file.name}”…`);
+  appendMessage('system', `🎙 Transcribing “${file.name}”${file.size > 23 * MB ? ' — long recording, this takes a couple of minutes…' : '…'}`);
   const typingId = appendTyping();
   try {
-    const b64 = await blobToB64(file);
-    const res = await fetch(`${VOID_CORE_API.url}/transcribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audio: b64, mimeType: file.type || 'audio/mp4', name: file.name }),
-    });
-    const data = await res.json().catch(() => null);
+    let text;
+    if (file.size <= 23 * MB) {
+      // Fits the transcription API directly, whatever the format.
+      text = await transcribeBlob(file, file.type || 'audio/mp4', file.name);
+    } else {
+      // Too big to send whole: decode it (any audio/video the phone can play),
+      // downsample to 16 kHz mono, and transcribe in 10-minute parts.
+      const chunks = await audioFileToWavChunks(file, 16000, 600);
+      const parts = [];
+      for (let i = 0; i < chunks.length; i++) {
+        parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
+      }
+      text = parts.filter(Boolean).join('\n').trim();
+    }
     removeTyping(typingId);
-    if (!data?.text) {
+    if (!text) {
       appendMessage('system', 'Couldn\'t transcribe that recording — make sure VOID CORE is up to date and try again.');
       return;
     }
-    App.studyContext = { source: file.name, text: data.text };
-    const preview = data.text.length > 900 ? data.text.slice(0, 900) + '…' : data.text;
+    App.studyContext = { source: file.name, text };
+    const preview = text.length > 900 ? text.slice(0, 900) + '…' : text;
     const msg = `**Transcript — ${file.name}**\n\n${preview}`;
     App.chatHistory.push({ role: 'assistant', content: msg });
     saveChatHistory();
@@ -515,8 +523,58 @@ async function transcribeStudyAudio(file) {
     renderStudyActionChips();
   } catch (_) {
     removeTyping(typingId);
-    appendMessage('system', 'Transcription failed — check your connection and try again.');
+    appendMessage('system', `Couldn't process “${file.name}” — a very long recording can exceed the phone's memory. Try a shorter section.`);
   }
+}
+
+async function transcribeBlob(blob, mime, name) {
+  const res = await fetch(`${VOID_CORE_API.url}/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audio: await blobToB64(blob), mimeType: mime, name }),
+  });
+  const data = await res.json().catch(() => null);
+  return (data?.text || '').trim();
+}
+
+// Decode any audio (or the audio track of a video), downsample to 16 kHz
+// mono, and return WAV blobs of at most `chunkSec` seconds each.
+async function audioFileToWavChunks(file, rate = 16000, chunkSec = 600) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  let decoded;
+  try {
+    decoded = await ac.decodeAudioData(await file.arrayBuffer());
+  } finally {
+    try { ac.close(); } catch (_) {}
+  }
+  const chunks = [];
+  for (let off = 0; off < decoded.duration; off += chunkSec) {
+    const dur = Math.min(chunkSec, decoded.duration - off);
+    if (dur < 0.5) break;
+    const oac = new OfflineAudioContext(1, Math.ceil(dur * rate), rate);
+    const src = oac.createBufferSource();
+    src.buffer = decoded;
+    src.connect(oac.destination);
+    src.start(0, off, dur);
+    const rendered = await oac.startRendering();
+    chunks.push(new Blob([wavFromFloat32(rendered.getChannelData(0), rate)], { type: 'audio/wav' }));
+  }
+  return chunks;
+}
+
+function wavFromFloat32(f32, rate) {
+  const v = new DataView(new ArrayBuffer(44 + f32.length * 2));
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + f32.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, f32.length * 2, true);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return v.buffer;
 }
 
 function renderStudyActionChips() {
@@ -2431,8 +2489,9 @@ function setupChat() {
     const file = fileInput.files?.[0];
     if (!file) { fileInput.value = ''; return; }
     if ((file.type || '').startsWith('image/')) { ingestImageFile(fileInput); return; }
-    // Lecture recordings / voice notes → transcription + study actions
-    if ((file.type || '').startsWith('audio/') || /\.(mp3|m4a|wav|ogg|opus|aac|flac|webm|amr|3gp)$/i.test(file.name)) {
+    // Recordings, voice notes, even videos (their audio track) → transcription
+    if ((file.type || '').startsWith('audio/') || (file.type || '').startsWith('video/')
+      || /\.(mp3|m4a|wav|ogg|opus|aac|flac|webm|amr|awb|3gp|3gpp|wma|mka|mp4|mov|mkv)$/i.test(file.name)) {
       transcribeStudyAudio(file);
       fileInput.value = '';
       return;
@@ -2440,23 +2499,35 @@ function setupChat() {
     const textLike = (file.type || '').startsWith('text/')
       || /\.(txt|md|markdown|csv|json|log|xml|yml|yaml|html|css|js|ts|jsx|tsx|py|java|kt|c|cpp|h|sh|sql|ini|conf|toml)$/i.test(file.name);
     if (!textLike) {
-      appendMessage('system', `I can read images, audio recordings, and text files — “${file.name}” is none of those.`);
+      appendMessage('system', `I can read images, recordings/videos, and text files — “${file.name}” isn't one of those yet.`);
       fileInput.value = '';
       return;
     }
-    if (file.size > 200 * 1024) {
-      appendMessage('system', `“${file.name}” is too large to read here (200 KB max).`);
+    if (file.size > 5 * 1024 * 1024) {
+      appendMessage('system', `“${file.name}” is too large to read here (5 MB max for text).`);
       fileInput.value = '';
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const inputEl = document.getElementById('chat-input');
-      if (inputEl) {
-        inputEl.value = `Here's the file "${file.name}":\n\n${reader.result}\n\n`;
-        inputEl.dispatchEvent(new Event('input'));
-        inputEl.focus();
-        inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+      const content = String(reader.result || '');
+      if (content.length > 20000) {
+        // Big notes become study material with action chips instead of
+        // flooding the composer.
+        App.studyContext = { source: file.name, text: content.slice(0, 500000) };
+        const msg = `**Loaded — ${file.name}** (${Math.round(content.length / 1000)}k characters)\n\n${content.slice(0, 500)}…`;
+        App.chatHistory.push({ role: 'assistant', content: msg });
+        saveChatHistory();
+        appendMessage('assistant', msg, App.chatHistory.length - 1);
+        renderStudyActionChips();
+      } else {
+        const inputEl = document.getElementById('chat-input');
+        if (inputEl) {
+          inputEl.value = `Here's the file "${file.name}":\n\n${content}\n\n`;
+          inputEl.dispatchEvent(new Event('input'));
+          inputEl.focus();
+          inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+        }
       }
       fileInput.value = '';
     };
@@ -3219,9 +3290,15 @@ async function generateAssistantReply(triggerText) {
   const abortSignal = App.currentAbort.signal;
   updateSendMicBtn();
   try {
-  const weatherCtx = await getWeatherLookupCtx(triggerText || '');
-  const knowledge = await getKnowledgeLookupCtx(triggerText || '');
-  const web = await getWebSearchCtx(triggerText || '');
+  // When the newest message carries an image, "what is this"-style questions
+  // are about the IMAGE — a Wikipedia/web lookup of the literal words would
+  // hijack the answer (e.g. defining the word "this" instead of looking).
+  const lastMsg = App.chatHistory[App.chatHistory.length - 1];
+  const askingAboutImage = lastMsg && Array.isArray(lastMsg.content)
+    && lastMsg.content.some(p => p && p.type === 'image_url');
+  const weatherCtx = askingAboutImage ? '' : await getWeatherLookupCtx(triggerText || '');
+  const knowledge = askingAboutImage ? { ctx: '', source: null } : await getKnowledgeLookupCtx(triggerText || '');
+  const web = askingAboutImage ? { ctx: '', source: null } : await getWebSearchCtx(triggerText || '');
   const sources = [knowledge.source, web.source].filter(Boolean);
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
@@ -3314,7 +3391,7 @@ async function generateAssistantReply(triggerText) {
       if (App.vaActive) setAssistantState('speaking', { status: '', reply });
       if (App.settings.voiceEnabled) speak(reply);           // speak() resumes listening when done
       else setTimeout(() => App.startListening?.(), 400);    // voice off — jump straight back to mic
-    } else if (App.voiceTriggered) { speak(reply); App.voiceTriggered = false; }
+    } else if (App.voiceTriggered) { App.voiceTriggered = false; } // dictated messages no longer auto-speak — use the 🔊 button on the reply
     if (triggerText) maybeExtractMemory(triggerText); // fire-and-forget, doesn't block the reply
     maybeSuggestFollowups(triggerText, reply);        // fire-and-forget too
   } else {
@@ -3432,6 +3509,9 @@ function buildBubbleInnerHTML(role, content, historyIndex, sources = []) {
       </button>${isUser && historyIndex != null ? `
       <button class="bubble-act-btn" data-act="edit" aria-label="Edit message">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+      </button>` : ''}${!isUser ? `
+      <button class="bubble-act-btn" data-act="speak" aria-label="Read aloud">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
       </button>` : ''}${!isUser && historyIndex != null ? `
       <button class="bubble-act-btn" data-act="regen" aria-label="Regenerate response">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -3492,6 +3572,20 @@ function setupMessageActions() {
 
     if (act === 'copy') {
       navigator.clipboard?.writeText(rawText).catch(() => {});
+    } else if (act === 'speak') {
+      // Read this one message aloud; tap again to stop. Works regardless of
+      // the global auto-read setting.
+      if (btn.classList.contains('speaking')) {
+        stopSpeaking();
+        btn.classList.remove('speaking');
+      } else {
+        document.querySelectorAll('.bubble-act-btn.speaking').forEach(b => b.classList.remove('speaking'));
+        const clean = rawText.replace(/[*#_`>]/g, '');
+        const wasEnabled = App.settings.voiceEnabled;
+        App.settings.voiceEnabled = true;
+        try { speak(clean); } finally { App.settings.voiceEnabled = wasEnabled; }
+        btn.classList.add('speaking');
+      }
     } else if (act === 'edit') {
       editMessageAt(index);
     } else if (act === 'del') {
@@ -7170,7 +7264,6 @@ const VoidFloat = (() => {
       if (reply) {
         history.push({ role: 'assistant', content: reply });
         addBubble(reply, 'vf-ai');
-        if (App.settings.voiceEnabled) speak(reply);
       } else {
         addBubble('Error — no response.', 'vf-ai');
       }

@@ -387,6 +387,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   padding: 5px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
 }
 .bubble-act-btn:active { background: var(--accent-soft); color: var(--accent); }
+.bubble-act-btn.speaking { color: var(--accent); background: var(--accent-soft); animation: micPulse 1.2s ease-in-out infinite; }
 
 .typing-dots { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }
 .typing-dots span {
