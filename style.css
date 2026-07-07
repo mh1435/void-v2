@@ -3028,3 +3028,46 @@ body.reduced-motion *::after {
 /* Light theme touch-ups */
 :root[data-light] .pg-code-edit { background: #f1f1f5; color: #1c1c22; }
 :root[data-light] .pg-block-view:hover { background: rgba(0,0,0,0.035); }
+
+/* Pages — AI menu sections + study blocks (quiz / flashcards / cheat sheet) */
+.pg-ai-section { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); padding: 8px 10px 3px; text-transform: uppercase; }
+.pg-ai-menu { min-width: 210px; }
+
+.pg-study-card { background: var(--card-soft); border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; margin: 6px 0; }
+.pg-study-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+.pg-study-reset { background: none; border: 1px solid var(--glass-border); color: var(--muted); font-size: 11px; padding: 3px 9px; border-radius: 8px; cursor: pointer; }
+.pg-study-empty { color: var(--muted); font-size: 12.5px; font-style: italic; padding: 6px 2px; }
+
+.pg-quiz-q { margin-bottom: 14px; }
+.pg-quiz-question { font-size: 13.5px; font-weight: 600; margin-bottom: 7px; line-height: 1.4; }
+.pg-quiz-opts { display: flex; flex-direction: column; gap: 6px; }
+.pg-quiz-opt {
+  text-align: left; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text);
+  font-size: 13px; padding: 9px 12px; border-radius: 9px; cursor: pointer; transition: background 0.12s;
+}
+.pg-quiz-opt:active { background: var(--accent-soft); }
+.pg-quiz-opt:disabled { cursor: default; opacity: 0.9; }
+.pg-quiz-correct { background: rgba(46,204,113,0.18) !important; border-color: #2ecc71 !important; color: #2ecc71 !important; }
+.pg-quiz-wrong { background: rgba(255,93,93,0.16) !important; border-color: var(--danger) !important; color: var(--danger) !important; }
+.pg-quiz-explain { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-left: 4px; line-height: 1.45; }
+.pg-quiz-score { font-size: 13px; font-weight: 700; color: var(--accent); margin-top: 6px; }
+
+.pg-flashcard {
+  position: relative; width: 100%; min-height: 130px; border: none; cursor: pointer; padding: 0;
+  perspective: 1000px; background: none; margin-bottom: 10px;
+}
+.pg-flashcard-face {
+  display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px 16px;
+  border-radius: 12px; font-size: 15px; line-height: 1.45; min-height: 130px; box-sizing: border-box;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; transition: transform 0.4s;
+  position: absolute; inset: 0;
+}
+.pg-fc-front { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-text); font-weight: 600; transform: rotateY(0deg); }
+.pg-fc-back { background: var(--card); border: 1px solid var(--accent); color: var(--text); transform: rotateY(180deg); }
+.pg-flashcard.pg-flipped .pg-fc-front { transform: rotateY(180deg); }
+.pg-flashcard.pg-flipped .pg-fc-back { transform: rotateY(360deg); }
+.pg-fc-hint { position: absolute; bottom: 6px; right: 10px; font-size: 9.5px; opacity: 0.6; letter-spacing: 0.03em; }
+.pg-fc-nav { display: flex; gap: 8px; }
+.pg-fc-btn { flex: 1; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text); font-size: 12.5px; font-weight: 600; padding: 9px; border-radius: 9px; cursor: pointer; }
+.pg-fc-btn:active { background: var(--accent-soft); }
+.pg-fc-counter { font-size: 11px; color: var(--muted); font-weight: 600; }

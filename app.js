@@ -7404,6 +7404,8 @@ function blankBlock(type) {
   if (type === 'code') b.lang = 'plain';
   if (type === 'image') b.imageUrl = '';
   if (type === 'table') b.table = { cells: [['', ''], ['', '']] };
+  if (type === 'quiz') b.quiz = { questions: [], answered: {} };
+  if (type === 'flashcards') { b.cards = []; b.cardIndex = 0; b.flipped = false; }
   return b;
 }
 
@@ -7940,6 +7942,8 @@ function pageToPlainText(page) {
       if (b.type === 'divider') { lines.push('---'); return; }
       if (b.type === 'table') { (b.table?.cells || []).forEach(row => lines.push(pad + row.join(' | '))); return; }
       if (b.type === 'image') { lines.push(pad + '[image]'); return; }
+      if (b.type === 'quiz') { (b.quiz?.questions || []).forEach(q => lines.push(pad + 'Q: ' + (q.q || ''))); return; }
+      if (b.type === 'flashcards') { (b.cards || []).forEach(c => lines.push(pad + c.front + ' — ' + c.back)); return; }
       let prefix = '';
       if (b.type === 'bulleted') prefix = '• ';
       else if (b.type === 'numbered') prefix = '1. ';
@@ -8005,13 +8009,24 @@ function blockHTML(b) {
     case 'divider': inner = `<hr class="pg-divider">`; break;
     case 'image': inner = imageBlockHTML(b); break;
     case 'table': inner = tableBlockHTML(b); break;
+    case 'quiz': inner = quizBlockHTML(b); break;
+    case 'flashcards': inner = flashcardsBlockHTML(b); break;
     default: inner = blockTextHTML(b, 'pg-p');
   }
   return `<div class="pg-block pg-block-${b.type}" data-block-id="${b.id}" ${indentStyle}>${handle}<div class="pg-block-body">${inner}</div></div>`;
 }
 
+const BLOCK_PLACEHOLDERS = {
+  heading1: 'Heading 1', heading2: 'Heading 2', heading3: 'Heading 3',
+  bulleted: 'List item', numbered: 'List item', todo: 'To-do',
+  toggle: 'Toggle', quote: 'Quote', callout: 'Callout',
+  paragraph: "Write, or press '/' for blocks",
+};
 function blockTextHTML(b, cls) {
-  return `<div class="pg-block-view ${cls}" data-block-id="${b.id}">${inlineFormat(b.text)}</div>` +
+  const view = b.text
+    ? inlineFormat(b.text)
+    : `<span class="pg-placeholder">${escapeHTML(BLOCK_PLACEHOLDERS[b.type] || '')}</span>`;
+  return `<div class="pg-block-view ${cls}" data-block-id="${b.id}">${view}</div>` +
          `<textarea class="pg-block-edit ${cls}" data-block-id="${b.id}" style="display:none">${escapeHTML(b.text || '')}</textarea>`;
 }
 
@@ -8031,6 +8046,51 @@ function tableBlockHTML(b) {
         <button class="pg-table-btn" data-block-id="${b.id}" data-act="addcol">+ Column</button>
         <button class="pg-table-btn" data-block-id="${b.id}" data-act="delrow">- Row</button>
         <button class="pg-table-btn" data-block-id="${b.id}" data-act="delcol">- Column</button>
+      </div>
+    </div>`;
+}
+
+// Interactive multiple-choice quiz block — tap an answer for instant feedback.
+function quizBlockHTML(b) {
+  const qs = b.quiz?.questions || [];
+  const answered = b.quiz?.answered || {};
+  if (!qs.length) return `<div class="pg-study-empty">Quiz is empty.</div>`;
+  const correct = Object.keys(answered).filter(qi => answered[qi] === qs[qi]?.answer).length;
+  const done = Object.keys(answered).length;
+  const body = qs.map((q, qi) => {
+    const chosen = answered[qi];
+    const opts = (q.options || []).map((o, oi) => {
+      let cls = 'pg-quiz-opt';
+      if (chosen != null) {
+        if (oi === q.answer) cls += ' pg-quiz-correct';
+        else if (oi === chosen) cls += ' pg-quiz-wrong';
+      }
+      return `<button class="${cls}" data-block-id="${b.id}" data-qi="${qi}" data-oi="${oi}" ${chosen != null ? 'disabled' : ''}>${escapeHTML(o)}</button>`;
+    }).join('');
+    const explain = chosen != null && q.explain ? `<div class="pg-quiz-explain">${escapeHTML(q.explain)}</div>` : '';
+    return `<div class="pg-quiz-q"><div class="pg-quiz-question">${qi + 1}. ${escapeHTML(q.q || '')}</div><div class="pg-quiz-opts">${opts}</div>${explain}</div>`;
+  }).join('');
+  const scoreLine = done ? `<div class="pg-quiz-score">Score: ${correct} / ${qs.length}${done === qs.length ? ' ✓ complete' : ` (${done} answered)`}</div>` : '';
+  return `<div class="pg-study-card pg-quiz"><div class="pg-study-head">🧠 Quiz <button class="pg-study-reset" data-block-id="${b.id}" data-study="quizreset">Reset</button></div>${body}${scoreLine}</div>`;
+}
+
+// Active-recall flashcards — one card at a time, tap to flip, prev/next.
+function flashcardsBlockHTML(b) {
+  const cards = b.cards || [];
+  if (!cards.length) return `<div class="pg-study-empty">No flashcards.</div>`;
+  const i = Math.min(b.cardIndex || 0, cards.length - 1);
+  const c = cards[i];
+  return `
+    <div class="pg-study-card pg-flashcards">
+      <div class="pg-study-head">🎴 Flashcards <span class="pg-fc-counter">${i + 1} / ${cards.length}</span></div>
+      <button class="pg-flashcard${b.flipped ? ' pg-flipped' : ''}" data-block-id="${b.id}" data-study="flip">
+        <div class="pg-flashcard-face pg-fc-front">${escapeHTML(c.front || '')}</div>
+        <div class="pg-flashcard-face pg-fc-back">${escapeHTML(c.back || '')}</div>
+        <div class="pg-fc-hint">${b.flipped ? 'answer' : 'tap to flip'}</div>
+      </button>
+      <div class="pg-fc-nav">
+        <button class="pg-fc-btn" data-block-id="${b.id}" data-study="prev">‹ Prev</button>
+        <button class="pg-fc-btn" data-block-id="${b.id}" data-study="next">Next ›</button>
       </div>
     </div>`;
 }
@@ -8234,6 +8294,36 @@ function wireBlockEvents(page) {
       else if (btn.dataset.act === 'delrow' && t.cells.length > 1) t.cells.pop();
       else if (btn.dataset.act === 'addcol') t.cells.forEach(row => row.push(''));
       else if (btn.dataset.act === 'delcol' && cols > 1) t.cells.forEach(row => row.pop());
+      touchPage(page);
+      rerenderBlocks(page);
+    });
+  });
+
+  // Quiz answers — instant feedback.
+  container.querySelectorAll('.pg-quiz-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = findBlockContainer(page, btn.dataset.blockId);
+      if (!loc) return;
+      const q = loc.arr[loc.idx].quiz;
+      q.answered = q.answered || {};
+      q.answered[btn.dataset.qi] = parseInt(btn.dataset.oi, 10);
+      touchPage(page);
+      rerenderBlocks(page);
+    });
+  });
+
+  // Study block controls (quiz reset, flashcard flip/prev/next).
+  container.querySelectorAll('[data-study]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const loc = findBlockContainer(page, btn.dataset.blockId);
+      if (!loc) return;
+      const b = loc.arr[loc.idx];
+      const act = btn.dataset.study;
+      if (act === 'quizreset') { b.quiz.answered = {}; }
+      else if (act === 'flip') { b.flipped = !b.flipped; }
+      else if (act === 'next') { b.cardIndex = Math.min((b.cardIndex || 0) + 1, (b.cards.length - 1)); b.flipped = false; }
+      else if (act === 'prev') { b.cardIndex = Math.max((b.cardIndex || 0) - 1, 0); b.flipped = false; }
       touchPage(page);
       rerenderBlocks(page);
     });
@@ -8529,15 +8619,23 @@ async function runAiOnSelection(ta, act) {
   ta.dispatchEvent(new Event('input'));
 }
 
-/* ── AI: page-level command menu ── */
+/* ── AI: page-level command menu (writing + study generation) ── */
 function openPageAiMenu(page, anchorEl) {
   closeFloatingMenus();
   const menu = document.createElement('div');
   menu.className = 'pg-ai-menu';
   menu.innerHTML = `
-    <button data-act="summarize">Summarize page</button>
-    <button data-act="actions">Find action items</button>
-    <button data-act="translate">Translate ▸</button>
+    <div class="pg-ai-section">ADD LECTURE</div>
+    <button data-act="lecture-photo">📸 Photo of notes/board</button>
+    <button data-act="lecture-audio">🎙 Voice / recording</button>
+    <div class="pg-ai-section">STUDY</div>
+    <button data-act="summarize">✨ Summarize page</button>
+    <button data-act="cheatsheet">📋 Make a cheat sheet</button>
+    <button data-act="quiz">🧠 Make a quiz</button>
+    <button data-act="flashcards">🎴 Make flashcards</button>
+    <div class="pg-ai-section">WRITING</div>
+    <button data-act="actions">✅ Find action items</button>
+    <button data-act="translate">🌐 Translate ▸</button>
   `;
   document.body.appendChild(menu);
   positionFloating(menu, anchorEl);
@@ -8546,23 +8644,176 @@ function openPageAiMenu(page, anchorEl) {
     if (!act) return;
     menu.remove();
     if (act === 'translate') { openTranslateLangMenu(page, anchorEl); return; }
+    if (act === 'lecture-photo') { addLectureToPage(page, 'photo'); return; }
+    if (act === 'lecture-audio') { addLectureToPage(page, 'audio'); return; }
+    if (act === 'quiz') { generatePageStudy(page, 'quiz'); return; }
+    if (act === 'flashcards') { generatePageStudy(page, 'flashcards'); return; }
+    if (act === 'cheatsheet') { generatePageStudy(page, 'cheatsheet'); return; }
+
     const text = pageToPlainText(page).slice(0, 12000);
-    if (!text.trim()) return;
+    if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
     const prompt = act === 'summarize'
       ? 'Summarize this page in 3-5 concise sentences.'
       : 'List the concrete action items / to-dos implied by this page as short bullet points. If there are none, say so briefly.';
-    const typingBanner = appendPageAiPending(page);
+    const banner = appendPageAiPending(page);
     const result = await quickAI(prompt, text);
-    removePageAiPending(typingBanner);
+    removePageAiPending(banner);
     if (!result) return;
-    const nb = { ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '🤖' : '✅', text: result.trim() };
-    page.blocks.push(nb);
+    page.blocks.push({ ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '✨' : '✅', text: result.trim() });
     touchPage(page);
     rerenderBlocks(page);
   });
   setTimeout(() => document.addEventListener('click', function closer(ev) {
     if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
   }), 0);
+}
+
+function appendPageAiToast(page, msg) {
+  const banner = appendPageAiPending(page);
+  if (banner) { banner.textContent = msg; setTimeout(() => banner.remove(), 2500); }
+}
+
+// Add a lecture to the current page: a photo of notes/board (vision OCR) or a
+// voice recording (Whisper transcription) becomes real text blocks you can
+// then Summarize / quiz / cheat-sheet.
+function addLectureToPage(page, kind) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = kind === 'photo' ? 'image/*' : 'audio/*,video/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    input.remove();
+    if (!file) return;
+    const banner = appendPageAiPending(page);
+    if (banner) banner.textContent = kind === 'photo' ? 'Reading the photo…' : 'Transcribing the recording…';
+    let text = '';
+    try {
+      if (kind === 'photo') {
+        const dataUrl = await downscaleImageToDataURL(file);
+        const messages = [
+          { role: 'system', content: 'Read ALL text and information visible in this photo of notes, a whiteboard, a slide, or a textbook page — accurately, preserving structure (headings, lists, formulas). Output plain text only, no commentary.' },
+          { role: 'user', content: [{ type: 'text', text: 'Transcribe everything in this image.' }, { type: 'image_url', image_url: { url: dataUrl } }] },
+        ];
+        try { text = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch (_) {}
+      } else {
+        text = await lectureAudioToText(file);
+      }
+    } catch (_) {}
+    removePageAiPending(banner);
+    if (!text || !text.trim()) { appendPageAiToast(page, "Couldn't read that — try a clearer photo or shorter clip."); return; }
+    // Insert as a heading + the transcribed content, split into paragraphs.
+    const src = kind === 'photo' ? 'From photo' : 'From recording';
+    page.blocks.push({ ...blankBlock('heading3'), text: `${src} — ${new Date().toLocaleDateString()}` });
+    text.trim().split(/\n{2,}/).forEach(para => {
+      if (para.trim()) page.blocks.push({ ...blankBlock('paragraph'), text: para.trim() });
+    });
+    touchPage(page);
+    rerenderBlocks(page);
+    appendPageAiToast(page, 'Added. Tap ✦ AI again to make a summary, quiz, or cheat sheet.');
+  };
+  input.click();
+}
+
+async function downscaleImageToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1400;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// Reuses the same chunked transcription pipeline as the Study Hub.
+async function lectureAudioToText(file) {
+  const MB = 1024 * 1024;
+  if (file.size <= 23 * MB) return await transcribeBlob(file, file.type || 'audio/mp4', file.name);
+  const chunks = await audioFileToWavChunks(file, 16000, 600);
+  const parts = [];
+  for (let i = 0; i < chunks.length; i++) parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
+  return parts.filter(Boolean).join('\n').trim();
+}
+
+// Generate a cheat sheet (text blocks), quiz (interactive block), or flashcards
+// (interactive block) from everything currently on the page.
+async function generatePageStudy(page, kind) {
+  const material = pageToPlainText(page).slice(0, 12000);
+  if (!material.trim() || material.trim().length < 20) { appendPageAiToast(page, 'Add lecture notes to the page first (✦ AI → Add lecture).'); return; }
+  const banner = appendPageAiPending(page);
+  if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : 'Making a cheat sheet…';
+
+  if (kind === 'cheatsheet') {
+    const out = await quickAI(
+      'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.',
+      material);
+    removePageAiPending(banner);
+    if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
+    page.blocks.push({ ...blankBlock('heading2'), text: 'Cheat sheet' });
+    out.trim().split('\n').forEach(line => {
+      const t = line.replace(/^\s*[-*•]\s*/, '').trim();
+      if (!t) return;
+      if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) page.blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
+      else page.blocks.push({ ...blankBlock('bulleted'), text: t });
+    });
+    touchPage(page);
+    rerenderBlocks(page);
+    return;
+  }
+
+  if (kind === 'quiz') {
+    const raw = await quickAI(
+      'Create a multiple-choice quiz that tests understanding of the material. Return ONLY valid JSON (no markdown fences, no prose): an array of 5-8 objects, each exactly {"q":"question text","options":["A","B","C","D"],"answer":0,"explain":"one short sentence why"}. "answer" is the 0-based index of the correct option.',
+      material);
+    removePageAiPending(banner);
+    const questions = parseJsonLoose(raw);
+    const valid = Array.isArray(questions) ? questions.filter(q => q && q.q && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.answer)) : null;
+    if (!valid || !valid.length) { appendPageAiToast(page, "Couldn't build a quiz from this — add more notes and retry."); return; }
+    const blk = blankBlock('quiz');
+    blk.quiz.questions = valid.slice(0, 8);
+    page.blocks.push(blk);
+    touchPage(page);
+    rerenderBlocks(page);
+    return;
+  }
+
+  if (kind === 'flashcards') {
+    const raw = await quickAI(
+      'Create active-recall study flashcards from the material. Return ONLY valid JSON (no markdown, no prose): an array of 8-15 objects, each exactly {"front":"term or question","back":"concise answer"}.',
+      material);
+    removePageAiPending(banner);
+    const cards = parseJsonLoose(raw);
+    const valid = Array.isArray(cards) ? cards.filter(c => c && c.front && c.back) : null;
+    if (!valid || !valid.length) { appendPageAiToast(page, "Couldn't build flashcards — add more notes and retry."); return; }
+    const blk = blankBlock('flashcards');
+    blk.cards = valid.slice(0, 20);
+    page.blocks.push(blk);
+    touchPage(page);
+    rerenderBlocks(page);
+    return;
+  }
+  removePageAiPending(banner);
+}
+
+// Extract a JSON array from a model reply even if it wrapped it in prose or ``` fences.
+function parseJsonLoose(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = s.indexOf('[');
+  const end = s.lastIndexOf(']');
+  if (start >= 0 && end > start) s = s.slice(start, end + 1);
+  try { return JSON.parse(s); } catch (_) {}
+  // Last resort: fix common trailing-comma issues.
+  try { return JSON.parse(s.replace(/,\s*([\]}])/g, '$1')); } catch (_) { return null; }
 }
 
 function openTranslateLangMenu(page, anchorEl) {
