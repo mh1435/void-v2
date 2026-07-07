@@ -727,8 +727,10 @@ function showUpdateBanner(url, published) {
   const bar = document.createElement('div');
   bar.id = 'void-update-banner';
   bar.style.cssText = 'position:fixed;left:10px;right:10px;top:calc(var(--safe-top,0px) + 8px);z-index:9999;'
-    + 'background:#16161f;border:1px solid rgba(124,111,255,0.35);border-radius:12px;padding:10px 12px;'
-    + 'display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+    + 'background:var(--glass-bg-strong);backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));'
+    + '-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));'
+    + 'border:1px solid var(--glass-border);border-radius:14px;padding:10px 12px;'
+    + 'display:flex;align-items:center;gap:10px;box-shadow:var(--glass-shadow);';
   bar.innerHTML = `
     <span style="flex:1;font-size:12.5px;color:#e8e8f0;line-height:1.4;">A new VOID app build is available.</span>
     <button id="void-update-get" style="background:#7c6fff;color:#0d0d10;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;">Get it</button>
@@ -4620,6 +4622,25 @@ function setupPlusMenu() {
   const menu = document.getElementById('plus-menu');
   if (!btn || !menu) return;
 
+  // Real bottom sheet: hoist to <body> so position:fixed isn't trapped by any
+  // ancestor stacking context, and back it with a scrim that swallows touches
+  // so dragging the sheet can't scroll the chat behind it.
+  document.body.appendChild(menu);
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  document.body.appendChild(scrim);
+
+  const openSheet = () => {
+    syncRows();
+    menu.classList.add('open');
+    scrim.classList.add('show');
+  };
+  const closeSheet = () => {
+    menu.classList.remove('open');
+    scrim.classList.remove('show');
+  };
+  scrim.addEventListener('click', closeSheet);
+
   const syncRows = () => {
     const p = PERSONAS.find(x => x.id === (App.settings.persona || '')) || PERSONAS[0];
     const modeSub = document.getElementById('plus-mode-sub');
@@ -4632,13 +4653,12 @@ function setupPlusMenu() {
     e.stopPropagation();
     document.getElementById('provider-picker')?.classList.remove('open');
     document.getElementById('persona-picker')?.classList.remove('open');
-    const isOpen = menu.classList.contains('open');
-    if (isOpen) menu.classList.remove('open');
-    else { syncRows(); menu.classList.add('open'); }
+    if (menu.classList.contains('open')) closeSheet();
+    else openSheet();
   });
 
   const handleTool = (act) => {
-    menu.classList.remove('open');
+    closeSheet();
     if (act === 'camera') document.getElementById('camera-input')?.click();
     else if (act === 'attach') document.getElementById('attach-btn')?.click();
     else if (act === 'voice') {
@@ -4670,9 +4690,11 @@ function setupPlusMenu() {
 
   // Drag-to-dismiss, like a native bottom sheet: the sheet follows your finger
   // downward and closes past ~30% (or on a quick flick); otherwise springs back.
+  // touchmove is registered non-passive so we can preventDefault while pulling —
+  // otherwise the browser also scrolls the chat behind the sheet.
   let dragStartY = 0, dragDelta = 0, dragStartT = 0, draggingSheet = false;
   menu.addEventListener('touchstart', (e) => {
-    // Only start a sheet-drag from the sheet body, not while scrolling its list mid-scroll
+    // Only start a sheet-drag from the sheet top, not while its list is scrolled
     if (menu.scrollTop > 0) return;
     draggingSheet = true;
     dragStartY = e.touches[0].clientY;
@@ -4683,8 +4705,13 @@ function setupPlusMenu() {
   menu.addEventListener('touchmove', (e) => {
     if (!draggingSheet) return;
     dragDelta = Math.max(0, e.touches[0].clientY - dragStartY);
-    menu.style.transform = dragDelta ? `translateY(${dragDelta}px)` : '';
-  }, { passive: true });
+    if (dragDelta > 0) {
+      e.preventDefault(); // we own this gesture — don't scroll anything behind
+      menu.style.transform = `translateY(${dragDelta}px)`;
+    } else {
+      menu.style.transform = '';
+    }
+  }, { passive: false });
   menu.addEventListener('touchend', () => {
     if (!draggingSheet) return;
     draggingSheet = false;
@@ -4695,7 +4722,7 @@ function setupPlusMenu() {
       menu.style.transform = `translateY(${menu.offsetHeight + 24}px)`;
       menu.style.opacity = '0';
       setTimeout(() => {
-        menu.classList.remove('open');
+        closeSheet();
         menu.style.transform = ''; menu.style.opacity = ''; menu.style.transition = '';
       }, 220);
     } else {
@@ -4704,7 +4731,7 @@ function setupPlusMenu() {
     }
   });
 
-  document.addEventListener('click', () => menu.classList.remove('open'));
+  document.addEventListener('click', closeSheet);
   menu.addEventListener('click', (e) => e.stopPropagation());
 }
 
@@ -5096,8 +5123,10 @@ function fireReminder(text) {
   }
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:10px;right:10px;top:calc(var(--safe-top,0px) + 8px);z-index:9999;'
-    + 'background:#16161f;border:1px solid rgba(124,111,255,0.35);border-radius:12px;padding:10px 12px;'
-    + 'display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+    + 'background:var(--glass-bg-strong);backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));'
+    + '-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));'
+    + 'border:1px solid var(--glass-border);border-radius:14px;padding:10px 12px;'
+    + 'display:flex;align-items:center;gap:10px;box-shadow:var(--glass-shadow);';
   bar.innerHTML = `<span style="flex:1;font-size:12.5px;color:#e8e8f0;line-height:1.4;">⏰ ${escapeHTML(text)}</span>
     <button style="background:transparent;border:none;color:#6b6b80;font-size:16px;padding:2px 4px;cursor:pointer;">✕</button>`;
   bar.querySelector('button').addEventListener('click', () => bar.remove());
