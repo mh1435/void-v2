@@ -40,8 +40,9 @@ public class WakeWordService extends Service {
     private static final int NOTIF_ID = 3001;
     private static final String MODEL_NAME = "vosk-model-small-en-us-0.15";
     private static final String MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
-    // Only listen for these phrases (keyword grammar) — fast and accurate.
-    private static final String GRAMMAR = "[\"okay void\", \"ok void\", \"hey void\", \"hi void\", \"void\", \"[unk]\"]";
+    // Only listen for these phrases (keyword grammar). Deliberately NO bare
+    // "void" — a single short word false-triggers on random speech.
+    private static final String GRAMMAR = "[\"okay void\", \"ok void\", \"hey void\", \"hi void\", \"[unk]\"]";
 
     public static final String ACTION_RESUME = "com.mlbbhub.app.WAKE_RESUME";
 
@@ -114,6 +115,7 @@ public class WakeWordService extends Service {
             setNotif("Say \"Okay VOID\"");
             model = new Model(modelDir.getAbsolutePath());
             Recognizer rec = new Recognizer(model, 16000.0f, GRAMMAR);
+            rec.setWords(true); // per-word confidence, used to reject false wakes
             speechService = new SpeechService(rec, 16000.0f);
             speechService.startListening(listener);
         } catch (Exception e) {
@@ -170,20 +172,24 @@ public class WakeWordService extends Service {
     }
 
     private final RecognitionListener listener = new RecognitionListener() {
-        @Override public void onPartialResult(String hypothesis) { check(hypothesis, "partial"); }
-        @Override public void onResult(String hypothesis) { check(hypothesis, "text"); }
-        @Override public void onFinalResult(String hypothesis) { check(hypothesis, "text"); }
+        // Partials are deliberately ignored — they carry no confidence scores
+        // and were the main source of random false wakes.
+        @Override public void onPartialResult(String hypothesis) {}
+        @Override public void onResult(String hypothesis) { check(hypothesis); }
+        @Override public void onFinalResult(String hypothesis) { check(hypothesis); }
         @Override public void onError(Exception e) {}
         @Override public void onTimeout() {}
     };
 
-    private void check(String hypothesisJson, String key) {
+    private void check(String hypothesisJson) {
         if (hypothesisJson == null) return;
         try {
-            String text = new JSONObject(hypothesisJson).optString(key, "").toLowerCase(Locale.ROOT).trim();
+            JSONObject h = new JSONObject(hypothesisJson);
+            String text = h.optString("text", "").toLowerCase(Locale.ROOT).trim();
             if (text.isEmpty()) return;
             int idx = indexOfWake(text);
             if (idx < 0) return;
+            if (!wakeConfident(h)) return;
             long now = System.currentTimeMillis();
             if (now - lastWakeMs < 3000) return;
             lastWakeMs = now;
@@ -193,8 +199,25 @@ public class WakeWordService extends Service {
         } catch (Exception ignored) {}
     }
 
+    // Require BOTH words of the wake phrase to be recognized with decent
+    // confidence — rejects background chatter that loosely matches.
+    private boolean wakeConfident(JSONObject h) {
+        org.json.JSONArray words = h.optJSONArray("result");
+        if (words == null) return true; // no scores available — keep old behavior
+        for (int i = 0; i < words.length() - 1; i++) {
+            JSONObject w1 = words.optJSONObject(i), w2 = words.optJSONObject(i + 1);
+            if (w1 == null || w2 == null) continue;
+            String a = w1.optString("word", ""), b = w2.optString("word", "");
+            if (("okay".equals(a) || "ok".equals(a) || "hey".equals(a) || "hi".equals(a)) && "void".equals(b)) {
+                double c1 = w1.optDouble("conf", 1.0), c2 = w2.optDouble("conf", 1.0);
+                if (c1 >= 0.6 && c2 >= 0.6) return true;
+            }
+        }
+        return false;
+    }
+
     private int indexOfWake(String p) {
-        String[] words = {"okay void", "ok void", "hey void", "hi void", "void"};
+        String[] words = {"okay void", "ok void", "hey void", "hi void"};
         int best = -1;
         for (String w : words) {
             int i = p.indexOf(w);

@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     private String pendingSharedText = null;
     private boolean pendingWake = false;
     private String pendingWakeCmd = null;
+    private String pendingAttach = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -23,6 +24,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         captureShare(getIntent());
         captureWake(getIntent());
+        captureAttach(getIntent());
     }
 
     @Override
@@ -30,8 +32,10 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         captureShare(intent);
         captureWake(intent);
+        captureAttach(intent);
         attemptDeliverShare(0);
         attemptDeliverWake(0);
+        attemptDeliverAttach(0);
     }
 
     @Override
@@ -40,6 +44,28 @@ public class MainActivity extends BridgeActivity {
         IN_FOREGROUND = true;
         attemptDeliverShare(0);
         attemptDeliverWake(0);
+        attemptDeliverAttach(0);
+    }
+
+    private void captureAttach(Intent intent) {
+        if (intent == null) return;
+        String kind = intent.getStringExtra("void_attach");
+        if (kind != null && !kind.isEmpty()) pendingAttach = kind;
+    }
+
+    // Voice pill "+" → open the app straight into the right attach picker.
+    private void attemptDeliverAttach(final int attempt) {
+        if (pendingAttach == null || bridge == null) return;
+        final String payload = JSONObject.quote(pendingAttach);
+        bridge.getWebView().evaluateJavascript(
+            "window.__voidAttach?(window.__voidAttach(" + payload + "),'ok'):'no'",
+            value -> {
+                if ("\"ok\"".equals(value)) {
+                    pendingAttach = null;
+                } else if (attempt < 20) {
+                    bridge.getWebView().postDelayed(() -> attemptDeliverAttach(attempt + 1), 800);
+                }
+            });
     }
 
     @Override

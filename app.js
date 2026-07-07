@@ -2080,6 +2080,49 @@ function setupChat() {
   }
   if (cameraInput) cameraInput.addEventListener('change', () => ingestImageFile(cameraInput));
 
+  // Generic file picker: images attach for vision; readable text files get
+  // pasted into the composer as context; anything else is declined honestly.
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) { fileInput.value = ''; return; }
+    if ((file.type || '').startsWith('image/')) { ingestImageFile(fileInput); return; }
+    const textLike = (file.type || '').startsWith('text/')
+      || /\.(txt|md|markdown|csv|json|log|xml|yml|yaml|html|css|js|ts|jsx|tsx|py|java|kt|c|cpp|h|sh|sql|ini|conf|toml)$/i.test(file.name);
+    if (!textLike) {
+      appendMessage('system', `I can read images and text files — “${file.name}” is neither.`);
+      fileInput.value = '';
+      return;
+    }
+    if (file.size > 200 * 1024) {
+      appendMessage('system', `“${file.name}” is too large to read here (200 KB max).`);
+      fileInput.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const inputEl = document.getElementById('chat-input');
+      if (inputEl) {
+        inputEl.value = `Here's the file "${file.name}":\n\n${reader.result}\n\n`;
+        inputEl.dispatchEvent(new Event('input'));
+        inputEl.focus();
+        inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+      }
+      fileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  // Voice pill "+" → land in the app with the right picker already opening.
+  window.__voidAttach = (kind) => {
+    try { switchTab('tab-chat'); } catch (_) {}
+    setTimeout(() => {
+      if (kind === 'camera') document.getElementById('camera-input')?.click();
+      else if (kind === 'files') document.getElementById('file-input')?.click();
+      else document.getElementById('attach-input')?.click();
+    }, 300);
+  };
+
   updateSendMicBtn();
   updateModelIndicator();
 
@@ -4754,6 +4797,7 @@ function setupPlusMenu() {
     closeSheet();
     if (act === 'camera') document.getElementById('camera-input')?.click();
     else if (act === 'attach') document.getElementById('attach-btn')?.click();
+    else if (act === 'files') document.getElementById('file-input')?.click();
     else if (act === 'voice') {
       // Trigger dictation via the send button while it's in mic mode
       const sb = document.getElementById('send-msg-btn');

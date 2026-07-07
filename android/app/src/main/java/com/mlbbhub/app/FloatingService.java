@@ -67,6 +67,9 @@ public class FloatingService extends Service {
     private WindowManager.LayoutParams voiceParams;
     private TextView        voiceStatus;
     private LinearLayout     voiceDots;
+    private EditText         voiceField;
+    private LinearLayout     attachRow;
+    private Runnable         autoCloseRun;
     private SpeechRecognizer voiceRecognizer;
     private TextToSpeech     tts;
     private boolean          ttsReady = false;
@@ -454,33 +457,38 @@ public class FloatingService extends Service {
         int screenW = getResources().getDisplayMetrics().widthPixels;
 
         LinearLayout pill = new LinearLayout(this);
-        pill.setOrientation(LinearLayout.HORIZONTAL);
-        pill.setGravity(Gravity.CENTER_VERTICAL);
-        pill.setPadding(dp(8), dp(8), dp(10), dp(8));
+        pill.setOrientation(LinearLayout.VERTICAL);
+        pill.setPadding(dp(10), dp(10), dp(10), dp(10));
         pill.setElevation(dp(14));
         GradientDrawable pbg = new GradientDrawable();
-        pbg.setCornerRadius(dp(28));
+        pbg.setCornerRadius(dp(26));
         pbg.setColor(0xF2_16161f);
         pbg.setStroke(dp(1), 0x40_7c6fff);
         pill.setBackground(pbg);
 
-        // Left orb (V)
-        FrameLayout orb = new FrameLayout(this);
-        GradientDrawable obg = new GradientDrawable();
-        obg.setShape(GradientDrawable.OVAL);
-        obg.setColors(new int[]{ 0xFF7c6fff, 0xFFb18cff });
-        obg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
-        obg.setOrientation(GradientDrawable.Orientation.TL_BR);
-        orb.setBackground(obg);
-        TextView v = new TextView(this);
-        v.setText("V"); v.setTextColor(0xFFFFFFFF); v.setTypeface(null, Typeface.BOLD);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); v.setGravity(Gravity.CENTER);
-        orb.addView(v, new FrameLayout.LayoutParams(dp(36), dp(36)));
-        LinearLayout.LayoutParams orbLp = new LinearLayout.LayoutParams(dp(36), dp(36));
-        orbLp.setMargins(dp(2), 0, dp(10), 0);
-        pill.addView(orb, orbLp);
+        /* Row 1: [+] [status + dots] [mic] */
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setGravity(Gravity.CENTER_VERTICAL);
 
-        // Center column: status text + animated listening dots
+        TextView plusBtn = new TextView(this);
+        plusBtn.setText("+");
+        plusBtn.setTextColor(COL_TEXT);
+        plusBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        plusBtn.setGravity(Gravity.CENTER);
+        GradientDrawable plusBg = new GradientDrawable();
+        plusBg.setShape(GradientDrawable.OVAL);
+        plusBg.setColor(0x14_ffffff);
+        plusBtn.setBackground(plusBg);
+        plusBtn.setOnClickListener(x -> {
+            cancelAutoClose();
+            if (attachRow != null) attachRow.setVisibility(
+                attachRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        });
+        LinearLayout.LayoutParams plusLp = new LinearLayout.LayoutParams(dp(38), dp(38));
+        plusLp.setMargins(0, 0, dp(10), 0);
+        row1.addView(plusBtn, plusLp);
+
         LinearLayout center = new LinearLayout(this);
         center.setOrientation(LinearLayout.VERTICAL);
         center.setGravity(Gravity.CENTER_VERTICAL);
@@ -488,7 +496,7 @@ public class FloatingService extends Service {
         voiceStatus = new TextView(this);
         voiceStatus.setTextColor(COL_TEXT);
         voiceStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        voiceStatus.setMaxLines(3);
+        voiceStatus.setMaxLines(4);
         voiceStatus.setText("Listening…");
         center.addView(voiceStatus, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -509,21 +517,97 @@ public class FloatingService extends Service {
         center.addView(voiceDots, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        pill.addView(center, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        row1.addView(center, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        // Right mic button (tap to dismiss)
+        // Mic button: restart listening (closing happens by tapping outside)
         FrameLayout mic = new FrameLayout(this);
         GradientDrawable mbg = new GradientDrawable();
         mbg.setShape(GradientDrawable.OVAL);
-        mbg.setColor(0x33_7c6fff);
+        mbg.setColor(0x59_7c6fff);
         mic.setBackground(mbg);
         TextView micIco = new TextView(this);
         micIco.setText("🎤"); micIco.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16); micIco.setGravity(Gravity.CENTER);
-        mic.addView(micIco, new FrameLayout.LayoutParams(dp(40), dp(40)));
-        mic.setOnClickListener(x -> finishVoice());
-        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        mic.addView(micIco, new FrameLayout.LayoutParams(dp(42), dp(42)));
+        mic.setOnClickListener(x -> restartListening());
+        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(42), dp(42));
         micLp.setMargins(dp(8), 0, 0, 0);
-        pill.addView(mic, micLp);
+        row1.addView(mic, micLp);
+
+        pill.addView(row1, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        /* Attach row (hidden until + is tapped): Photos / Camera / Files */
+        attachRow = new LinearLayout(this);
+        attachRow.setOrientation(LinearLayout.HORIZONTAL);
+        attachRow.setVisibility(View.GONE);
+        attachRow.setPadding(0, dp(10), 0, 0);
+        String[][] kinds = { {"Photos", "photos"}, {"Camera", "camera"}, {"Files", "files"} };
+        for (String[] k : kinds) {
+            TextView chip = new TextView(this);
+            chip.setText(k[0]);
+            chip.setTextColor(COL_TEXT);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            chip.setGravity(Gravity.CENTER);
+            chip.setPadding(0, dp(11), 0, dp(11));
+            GradientDrawable cbg = new GradientDrawable();
+            cbg.setCornerRadius(dp(14));
+            cbg.setColor(0x14_ffffff);
+            cbg.setStroke(dp(1), 0x26_ffffff);
+            chip.setBackground(cbg);
+            final String kind = k[1];
+            chip.setOnClickListener(x -> openAppForAttach(kind));
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+            cLp.setMargins(dp(3), 0, dp(3), 0);
+            attachRow.addView(chip, cLp);
+        }
+        pill.addView(attachRow, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        /* Row 2: type-instead field + send */
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+        row2.setGravity(Gravity.CENTER_VERTICAL);
+        row2.setPadding(dp(12), dp(4), dp(6), dp(2));
+        LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        row2Lp.setMargins(0, dp(8), 0, 0);
+        GradientDrawable r2bg = new GradientDrawable();
+        r2bg.setCornerRadius(dp(18));
+        r2bg.setColor(0x0F_ffffff);
+        r2bg.setStroke(dp(1), 0x1F_ffffff);
+        row2.setBackground(r2bg);
+
+        voiceField = new EditText(this);
+        voiceField.setHint("Or type…");
+        voiceField.setHintTextColor(COL_MUTED);
+        voiceField.setTextColor(COL_TEXT);
+        voiceField.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        voiceField.setBackground(null);
+        voiceField.setMaxLines(2);
+        voiceField.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        voiceField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        // The overlay window starts NOT_FOCUSABLE so it never steals the
+        // keyboard; first tap on the field makes it focusable and opens IME.
+        voiceField.setOnTouchListener((v2, ev) -> {
+            cancelAutoClose();
+            makePillFocusable();
+            return false;
+        });
+        voiceField.setOnEditorActionListener((v2, action, ev) -> {
+            if (action == EditorInfo.IME_ACTION_SEND) { sendTyped(); return true; }
+            return false;
+        });
+        row2.addView(voiceField, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView sendBtn = new TextView(this);
+        sendBtn.setText("➤");
+        sendBtn.setTextColor(COL_PURPLE_L);
+        sendBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        sendBtn.setPadding(dp(10), dp(6), dp(10), dp(6));
+        sendBtn.setOnClickListener(x -> sendTyped());
+        row2.addView(sendBtn);
+
+        pill.addView(row2, row2Lp);
 
         voiceParams = new WindowManager.LayoutParams(
             Math.min(screenW - dp(24), dp(380)),
@@ -531,16 +615,65 @@ public class FloatingService extends Service {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         );
         voiceParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         voiceParams.y = dp(80);
+        voiceParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+
+        // Tap anywhere OUTSIDE the pill → close (no ✕ button needed)
+        pill.setOnTouchListener((v2, ev) -> {
+            if (ev.getAction() == MotionEvent.ACTION_OUTSIDE) { finishVoice(); return true; }
+            return false;
+        });
 
         voicePill = pill;
         pill.setAlpha(0f);
         wm.addView(voicePill, voiceParams);
         pill.animate().alpha(1f).setDuration(180).start();
+    }
+
+    private void makePillFocusable() {
+        if (voicePill == null || voiceParams == null) return;
+        if ((voiceParams.flags & WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0) return;
+        voiceParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        try { wm.updateViewLayout(voicePill, voiceParams); } catch (Exception ignored) {}
+    }
+
+    private void sendTyped() {
+        if (voiceField == null) return;
+        String t = voiceField.getText().toString().trim();
+        if (t.isEmpty()) return;
+        voiceField.setText("");
+        cancelAutoClose();
+        try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); voiceRecognizer = null; } } catch (Exception ignored) {}
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(voiceField.getWindowToken(), 0);
+        onCommandRecognized(t);
+    }
+
+    private void restartListening() {
+        cancelAutoClose();
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+        try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); voiceRecognizer = null; } } catch (Exception ignored) {}
+        setVoiceState("Listening…", true);
+        startVoiceCapture(null);
+    }
+
+    private void cancelAutoClose() {
+        if (autoCloseRun != null) { mainHandler.removeCallbacks(autoCloseRun); autoCloseRun = null; }
+    }
+
+    private void openAppForAttach(String kind) {
+        Intent i = new Intent(this, MainActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        i.putExtra("void_attach", kind);
+        try { startActivity(i); } catch (Exception ignored) {}
+        finishVoice();
     }
 
     private void setVoiceState(String text, boolean showDots) {
@@ -617,6 +750,7 @@ public class FloatingService extends Service {
     }
 
     private void onCommandRecognized(String text) {
+        cancelAutoClose();
         setVoiceState(text, true);
         // Device commands ("open spotify", "open wifi settings") are handled
         // natively — actually launching the thing — never sent to the LLM,
@@ -638,33 +772,44 @@ public class FloatingService extends Service {
 
     private void speakAndFinish(String reply) {
         setVoiceState(reply, false);
-        long autoClose = 6000;
+        long autoClose = 8000;
         if (ttsReady && tts != null) {
             try {
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {}
-                    @Override public void onDone(String id) { mainHandler.post(FloatingService.this::finishVoice); }
-                    @Override public void onError(String id) { mainHandler.post(FloatingService.this::finishVoice); }
+                    @Override public void onDone(String id) { mainHandler.post(() -> scheduleAutoClose(2500)); }
+                    @Override public void onError(String id) { mainHandler.post(() -> scheduleAutoClose(2500)); }
                 });
                 tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "void_reply");
-                autoClose = Math.min(20000, 3500 + reply.length() * 70L); // safety fallback
+                autoClose = Math.min(22000, 4500 + reply.length() * 70L); // safety fallback
             } catch (Exception ignored) {}
         }
-        // Keep the reply on screen a bit even if TTS finishes fast / is silent.
-        mainHandler.postDelayed(this::finishVoice, autoClose);
+        // Keep the reply on screen a while; any interaction cancels this.
+        scheduleAutoClose(autoClose);
+    }
+
+    private void scheduleAutoClose(long delayMs) {
+        cancelAutoClose();
+        autoCloseRun = this::finishVoice;
+        mainHandler.postDelayed(autoCloseRun, delayMs);
     }
 
     private void removeVoicePill() {
         stopDots();
         if (voicePill != null && voicePill.isAttachedToWindow()) {
+            try {
+                InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null && voiceField != null) imm.hideSoftInputFromWindow(voiceField.getWindowToken(), 0);
+            } catch (Exception ignored) {}
             try { wm.removeView(voicePill); } catch (Exception ignored) {}
         }
-        voicePill = null; voiceStatus = null; voiceDots = null;
+        voicePill = null; voiceStatus = null; voiceDots = null; voiceField = null; attachRow = null;
     }
 
     private void finishVoice() {
         if (voiceFinishing) return;
         voiceFinishing = true;
+        cancelAutoClose();
         try { if (voiceRecognizer != null) { voiceRecognizer.cancel(); voiceRecognizer.destroy(); } } catch (Exception ignored) {}
         voiceRecognizer = null;
         try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
