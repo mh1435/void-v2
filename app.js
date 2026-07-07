@@ -31,6 +31,7 @@ const App = {
   bookmarks: [],     // starred assistant messages
   documents: [],     // created/edited documents, per account
   gems: [],          // user-created custom assistants (like Gemini Gems)
+  pages: [],         // Notion-style workspace pages/databases, per account
   githubToken: '',   // user's GitHub PAT — device-only, never synced
   githubUser: null,  // { login, ... } once connected
   githubRepos: [],
@@ -1066,6 +1067,8 @@ function bootApp() {
   loadBookmarks();
   loadDocuments();
   loadGems();
+  loadPages();
+  setupPagesHub();
   loadGitHub();
   updateUserDisplay();
   initLiveContext();
@@ -1341,7 +1344,7 @@ function switchTabRaw(targetId) {
 
 // Sub-pages (drill-downs) bring their own back+title header, so the top-level
 // VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
-const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view'];
+const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages'];
 function updateAppChromeForTab(targetId) {
   const chatMenuBtn = document.getElementById('chat-menu-btn');
   const wordmark = document.getElementById('workspace-wordmark');
@@ -6003,6 +6006,9 @@ function setupGameHub() {
   const wsStudyBtn = document.getElementById('ws-study-btn');
   if (wsStudyBtn) wsStudyBtn.addEventListener('click', () => openStudyPanel());
 
+  const wsPagesBtn = document.getElementById('ws-pages-btn');
+  if (wsPagesBtn) wsPagesBtn.addEventListener('click', () => openPagesHub());
+
   const backToWorkspace = document.getElementById('games-back-to-workspace');
   if (backToWorkspace) backToWorkspace.addEventListener('click', showWorkspaceLanding);
 
@@ -7324,4 +7330,1902 @@ async function setFloatingAssistant(enabled) {
       } catch (e) { console.warn('FloatingPlugin:', e); }
     }
   }
+}
+
+/* ================================================================
+   PAGES — a Notion-style workspace built into VOID.
+   Scope note: this is a genuine, fully-working block editor + database
+   engine (pages/sub-pages, rich blocks, slash commands, Table/Board/
+   Calendar/Gallery views, AI writing tools, mentions/backlinks,
+   templates) persisted per-account in localStorage. It is NOT a claim
+   of feature parity with Notion's server product — there is no backend
+   here, so real-time multi-user collaboration, comments tied to other
+   accounts, and a permissions/sharing model don't exist and aren't
+   faked. Everything below actually runs.
+   ================================================================ */
+
+const PG = {
+  nav: [],           // stack of parentIds representing "drill path" in list view (null = root)
+  view: 'list',       // 'list' | 'editor' | 'database'
+  currentId: null,    // page/database id open in editor/database view
+  slashBlockId: null, // block id with an open slash menu
+  slashIndex: 0,
+  mentionBlockId: null,
+  aiToolbarBlockId: null,
+  focusIntent: null,  // { blockId, pos: 'start'|'end'|number }
+  activeDbView: {},   // per-database last-used view id, mirrors page.dbActiveView
+  calMonth: {},       // per-database calendar cursor { year, month }
+};
+
+function loadPages() {
+  try { App.pages = JSON.parse(localStorage.getItem(userKey('pages'))) || []; } catch (_) { App.pages = []; }
+}
+function savePages() {
+  try { localStorage.setItem(userKey('pages'), JSON.stringify(App.pages)); } catch (_) {}
+}
+function newId(prefix) { return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`; }
+
+function getPage(id) { return App.pages.find(p => p.id === id) || null; }
+function getChildren(parentId) {
+  return App.pages.filter(p => p.parentId === parentId).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function getAncestors(id) {
+  const chain = [];
+  let cur = getPage(id);
+  while (cur && cur.parentId) {
+    cur = getPage(cur.parentId);
+    if (cur) chain.unshift(cur);
+  }
+  return chain;
+}
+
+const BLOCK_TYPES = [
+  { type: 'paragraph', label: 'Text', desc: 'Plain text', icon: 'T' },
+  { type: 'heading1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1' },
+  { type: 'heading2', label: 'Heading 2', desc: 'Medium heading', icon: 'H2' },
+  { type: 'heading3', label: 'Heading 3', desc: 'Small heading', icon: 'H3' },
+  { type: 'bulleted', label: 'Bulleted list', desc: 'A simple bullet point', icon: '•' },
+  { type: 'numbered', label: 'Numbered list', desc: 'A numbered list item', icon: '1.' },
+  { type: 'todo', label: 'To-do', desc: 'A checkbox task', icon: '☑' },
+  { type: 'toggle', label: 'Toggle', desc: 'Collapsible nested content', icon: '▸' },
+  { type: 'quote', label: 'Quote', desc: 'A block quote', icon: '"' },
+  { type: 'callout', label: 'Callout', desc: 'Highlighted note', icon: '💡' },
+  { type: 'code', label: 'Code', desc: 'A code block', icon: '</>' },
+  { type: 'divider', label: 'Divider', desc: 'A horizontal line', icon: '—' },
+  { type: 'image', label: 'Image', desc: 'Upload a picture', icon: '🖼' },
+  { type: 'table', label: 'Table', desc: 'A simple grid', icon: '⊞' },
+];
+
+function blankBlock(type) {
+  const b = { id: newId('blk'), type, text: '', indent: 0 };
+  if (type === 'todo') b.checked = false;
+  if (type === 'toggle') { b.collapsed = false; b.children = []; }
+  if (type === 'callout') b.calloutIcon = '💡';
+  if (type === 'code') b.lang = 'plain';
+  if (type === 'image') b.imageUrl = '';
+  if (type === 'table') b.table = { cells: [['', ''], ['', '']] };
+  return b;
+}
+
+function createPage(opts) {
+  const siblings = getChildren(opts.parentId || null);
+  const page = {
+    id: newId('pg'),
+    parentId: opts.parentId || null,
+    type: opts.type || 'page',
+    title: opts.title || 'Untitled',
+    icon: opts.icon || (opts.type === 'database' ? '🗂' : '📄'),
+    blocks: opts.blocks || [blankBlock('paragraph')],
+    dbSchema: opts.dbSchema || [],
+    dbRows: opts.dbRows || [],
+    dbViews: opts.dbViews || [],
+    dbActiveView: null,
+    order: siblings.length,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  if (page.type === 'database' && page.dbViews.length) page.dbActiveView = page.dbViews[0].id;
+  App.pages.push(page);
+  savePages();
+  return page;
+}
+
+function touchPage(page) { page.updatedAt = Date.now(); savePages(); }
+
+function deletePageDeep(id) {
+  const kids = getChildren(id);
+  kids.forEach(k => deletePageDeep(k.id));
+  // Un-link any database rows that were opened as this page.
+  App.pages.forEach(p => {
+    if (p.type === 'database') (p.dbRows || []).forEach(r => { if (r.pageId === id) r.pageId = null; });
+  });
+  App.pages = App.pages.filter(p => p.id !== id);
+  savePages();
+}
+
+function duplicatePageShallow(id) {
+  const src = getPage(id);
+  if (!src) return null;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = newId('pg');
+  copy.title = src.title + ' (copy)';
+  copy.order = getChildren(src.parentId).length;
+  copy.createdAt = Date.now();
+  copy.updatedAt = Date.now();
+  // Re-id blocks so edits don't collide with the original's ids.
+  const reid = (blocks) => (blocks || []).map(b => { const nb = { ...b, id: newId('blk') }; if (nb.children) nb.children = reid(nb.children); return nb; });
+  if (copy.blocks) copy.blocks = reid(copy.blocks);
+  if (copy.dbRows) copy.dbRows = copy.dbRows.map(r => ({ ...r, id: newId('row'), pageId: null }));
+  App.pages.push(copy);
+  savePages();
+  return copy;
+}
+
+/* ── Templates ── */
+const PAGE_TEMPLATES = [
+  { id: 'blank', label: 'Blank page', icon: '📄', desc: 'Start from nothing' },
+  { id: 'meeting', label: 'Meeting notes', icon: '🗒', desc: 'Attendees, agenda, action items' },
+  { id: 'journal', label: 'Daily journal', icon: '📔', desc: 'A page for today' },
+  { id: 'study', label: 'Study notes', icon: '🎓', desc: 'Structured notes for a topic' },
+  { id: 'tracker', label: 'Project tracker', icon: '📋', desc: 'Database — Status, Priority, Due date' },
+  { id: 'reading', label: 'Reading list', icon: '📚', desc: 'Database — Author, Status, Rating' },
+];
+
+function instantiateTemplate(templateId, parentId) {
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  if (templateId === 'blank') {
+    return createPage({ parentId, title: 'Untitled', icon: '📄' });
+  }
+  if (templateId === 'meeting') {
+    return createPage({
+      parentId, title: 'Meeting notes', icon: '🗒',
+      blocks: [
+        { ...blankBlock('heading2'), text: 'Attendees' },
+        { ...blankBlock('bulleted'), text: '' },
+        { ...blankBlock('heading2'), text: 'Agenda' },
+        { ...blankBlock('numbered'), text: '' },
+        { ...blankBlock('heading2'), text: 'Notes' },
+        blankBlock('paragraph'),
+        { ...blankBlock('heading2'), text: 'Action items' },
+        { ...blankBlock('todo'), text: '' },
+      ],
+    });
+  }
+  if (templateId === 'journal') {
+    return createPage({
+      parentId, title: today, icon: '📔',
+      blocks: [
+        { ...blankBlock('callout'), calloutIcon: '☀️', text: "How's today going?" },
+        { ...blankBlock('heading2'), text: 'Highlights' },
+        { ...blankBlock('bulleted'), text: '' },
+        { ...blankBlock('heading2'), text: "Tomorrow's focus" },
+        { ...blankBlock('todo'), text: '' },
+      ],
+    });
+  }
+  if (templateId === 'study') {
+    return createPage({
+      parentId, title: 'Study notes', icon: '🎓',
+      blocks: [
+        { ...blankBlock('heading1'), text: 'Topic' },
+        { ...blankBlock('callout'), calloutIcon: '💡', text: 'Paste your lecture transcript or notes here, then use the ✦ AI button above to Summarize or Find action items.' },
+        { ...blankBlock('heading2'), text: 'Key points' },
+        { ...blankBlock('bulleted'), text: '' },
+        { ...blankBlock('toggle'), text: 'Details', children: [blankBlock('paragraph')] },
+        { ...blankBlock('heading2'), text: 'Questions to review' },
+        { ...blankBlock('todo'), text: '' },
+      ],
+    });
+  }
+  if (templateId === 'tracker') {
+    const statusCol = { id: newId('col'), name: 'Status', type: 'select', options: [
+      { id: 'o1', label: 'Not started', color: '#8a8a92' }, { id: 'o2', label: 'In progress', color: '#7c6fff' }, { id: 'o3', label: 'Done', color: '#2ecc71' },
+    ] };
+    const prioCol = { id: newId('col'), name: 'Priority', type: 'select', options: [
+      { id: 'p1', label: 'Low', color: '#8a8a92' }, { id: 'p2', label: 'Medium', color: '#f5a623' }, { id: 'p3', label: 'High', color: '#ff5d5d' },
+    ] };
+    const dueCol = { id: newId('col'), name: 'Due', type: 'date' };
+    const tableView = { id: newId('view'), name: 'Table', type: 'table' };
+    const boardView = { id: newId('view'), name: 'Board', type: 'board', groupBy: statusCol.id };
+    return createPage({
+      parentId, type: 'database', title: 'Project tracker', icon: '📋',
+      dbSchema: [statusCol, prioCol, dueCol],
+      dbRows: [], dbViews: [tableView, boardView],
+    });
+  }
+  if (templateId === 'reading') {
+    const authorCol = { id: newId('col'), name: 'Author', type: 'text' };
+    const statusCol = { id: newId('col'), name: 'Status', type: 'select', options: [
+      { id: 'o1', label: 'Want to read', color: '#8a8a92' }, { id: 'o2', label: 'Reading', color: '#7c6fff' }, { id: 'o3', label: 'Finished', color: '#2ecc71' },
+    ] };
+    const ratingCol = { id: newId('col'), name: 'Rating', type: 'select', options: [
+      { id: 'r1', label: '★', color: '#f5a623' }, { id: 'r2', label: '★★', color: '#f5a623' }, { id: 'r3', label: '★★★', color: '#f5a623' }, { id: 'r4', label: '★★★★', color: '#f5a623' }, { id: 'r5', label: '★★★★★', color: '#f5a623' },
+    ] };
+    const tableView = { id: newId('view'), name: 'Table', type: 'table' };
+    const galleryView = { id: newId('view'), name: 'Gallery', type: 'gallery' };
+    return createPage({
+      parentId, type: 'database', title: 'Reading list', icon: '📚',
+      dbSchema: [authorCol, statusCol, ratingCol],
+      dbRows: [], dbViews: [tableView, galleryView],
+    });
+  }
+  return createPage({ parentId, title: 'Untitled', icon: '📄' });
+}
+
+/* ── Navigation ── */
+function openPagesHub() {
+  loadPages();
+  PG.nav = [];
+  PG.view = 'list';
+  PG.currentId = null;
+  switchTab('tab-pages');
+  renderPagesList(null);
+}
+
+function pagesGoBack() {
+  if (PG.view === 'editor' || PG.view === 'database') {
+    const page = getPage(PG.currentId);
+    const parentId = page ? page.parentId : null;
+    PG.view = 'list';
+    PG.currentId = null;
+    renderPagesList(parentId);
+    return;
+  }
+  if (PG.nav.length) {
+    PG.nav.pop();
+    renderPagesList(PG.nav.length ? PG.nav[PG.nav.length - 1] : null);
+    return;
+  }
+  switchTab('tab-gamehub');
+}
+
+function pagesOpenPage(id) {
+  const page = getPage(id);
+  if (!page) return;
+  PG.currentId = id;
+  if (page.type === 'database') { PG.view = 'database'; renderDatabaseView(page); }
+  else { PG.view = 'editor'; renderPageEditor(page); }
+}
+
+function pagesDrillInto(parentId) {
+  PG.nav.push(parentId);
+  renderPagesList(parentId);
+}
+
+/* ── List view (sidebar-as-drilldown, mobile-first) ── */
+function renderPagesList(parentId) {
+  PG.view = 'list';
+  PG.currentId = null;
+  const root = document.getElementById('pages-root');
+  if (!root) return;
+  const crumbHTML = pagesBreadcrumbHTML(parentId, true);
+  const kids = getChildren(parentId);
+  const rowsHTML = kids.length ? kids.map(pageListRowHTML).join('') : `
+    <div class="pg-empty">
+      <div class="pg-empty-icon">📄</div>
+      <div class="pg-empty-title">No pages yet</div>
+      <div class="pg-empty-sub">Tap "New" to create your first page or database.</div>
+    </div>`;
+
+  root.innerHTML = `
+    <div class="pg-list-view">
+      ${crumbHTML}
+      <div class="pg-list-rows">${rowsHTML}</div>
+      <button class="pg-new-btn" id="pg-new-page-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New
+      </button>
+    </div>`;
+
+  document.getElementById('pg-new-page-btn')?.addEventListener('click', () => openTemplatePicker(parentId));
+  root.querySelectorAll('.pg-list-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.pg-row-menu-btn')) return;
+      pagesOpenPage(row.dataset.id);
+    });
+    row.querySelector('.pg-row-menu-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openPageContextMenu(row.dataset.id, row.querySelector('.pg-row-menu-btn'));
+    });
+  });
+  root.querySelectorAll('.pg-crumb').forEach(c => {
+    c.addEventListener('click', () => {
+      const targetId = c.dataset.id === 'root' ? null : c.dataset.id;
+      const idx = PG.nav.indexOf(targetId);
+      PG.nav = idx >= 0 ? PG.nav.slice(0, idx + 1) : [];
+      if (targetId && !PG.nav.includes(targetId)) PG.nav.push(targetId);
+      renderPagesList(targetId);
+    });
+  });
+}
+
+function pageListRowHTML(p) {
+  const childCount = getChildren(p.id).length;
+  const sub = p.type === 'database'
+    ? `${(p.dbRows || []).length} row${(p.dbRows || []).length === 1 ? '' : 's'}`
+    : (childCount ? `${childCount} sub-page${childCount === 1 ? '' : 's'}` : 'Empty page');
+  return `
+    <div class="pg-list-row" data-id="${p.id}">
+      <span class="pg-row-icon">${p.icon || (p.type === 'database' ? '🗂' : '📄')}</span>
+      <span class="pg-row-text">
+        <span class="pg-row-title">${escapeHTML(p.title || 'Untitled')}</span>
+        <span class="pg-row-sub">${escapeHTML(sub)}</span>
+      </span>
+      <button class="pg-row-menu-btn" aria-label="Page options">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+      </button>
+    </div>`;
+}
+
+function pagesBreadcrumbHTML(parentId, forList) {
+  const chain = parentId ? [...getAncestors(parentId), getPage(parentId)].filter(Boolean) : [];
+  const items = [`<span class="pg-crumb" data-id="root">All pages</span>`]
+    .concat(chain.map(p => `<span class="pg-crumb" data-id="${p.id}">${escapeHTML(p.title || 'Untitled')}</span>`));
+  return `<div class="pg-breadcrumb">${items.join('<span class="pg-crumb-sep">/</span>')}</div>`;
+}
+
+function openPageContextMenu(id, anchorEl) {
+  const page = getPage(id);
+  if (!page) return;
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu';
+  menu.innerHTML = `
+    <button data-act="open">Open</button>
+    <button data-act="rename">Rename</button>
+    <button data-act="duplicate">Duplicate</button>
+    <button data-act="sub">Add sub-page</button>
+    <button data-act="delete" class="pg-ctx-danger">Delete</button>
+  `;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    if (!act) return;
+    if (act === 'open') pagesOpenPage(id);
+    else if (act === 'rename') {
+      const t = prompt('Rename page', page.title || '');
+      if (t != null && t.trim()) { page.title = t.trim(); touchPage(page); renderPagesList(page.parentId); }
+    } else if (act === 'duplicate') {
+      duplicatePageShallow(id);
+      renderPagesList(page.parentId);
+    } else if (act === 'sub') {
+      openTemplatePicker(id);
+    } else if (act === 'delete') {
+      if (confirm(`Delete "${page.title || 'Untitled'}" and everything inside it?`)) {
+        deletePageDeep(id);
+        renderPagesList(page.parentId);
+      }
+    }
+    menu.remove();
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function closeFloatingMenus() {
+  document.querySelectorAll('.pg-ctx-menu, .pg-slash-menu, .pg-mention-menu, .pg-ai-toolbar, .pg-ai-menu').forEach(e => e.remove());
+}
+
+function positionFloating(el, anchorEl) {
+  const r = anchorEl.getBoundingClientRect();
+  el.style.position = 'fixed';
+  el.style.zIndex = 850;
+  const top = Math.min(r.bottom + 4, window.innerHeight - 160);
+  const left = Math.min(r.left, window.innerWidth - 200);
+  el.style.top = top + 'px';
+  el.style.left = Math.max(8, left) + 'px';
+}
+
+/* ── Template picker modal ── */
+function openTemplatePicker(parentId) {
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal">
+      <div class="pg-modal-title">New page</div>
+      <div class="pg-template-grid">
+        ${PAGE_TEMPLATES.map(t => `
+          <button class="pg-template-card" data-t="${t.id}">
+            <span class="pg-template-icon">${t.icon}</span>
+            <span class="pg-template-label">${escapeHTML(t.label)}</span>
+            <span class="pg-template-desc">${escapeHTML(t.desc)}</span>
+          </button>`).join('')}
+      </div>
+      <button class="ghost-btn full pg-modal-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('.pg-template-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const page = instantiateTemplate(btn.dataset.t, parentId);
+      modal.remove();
+      pagesOpenPage(page.id);
+    });
+  });
+  modal.querySelector('.pg-modal-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+/* ── Search ── */
+function openPagesSearch() {
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal pg-search-modal">
+      <input type="text" class="text-input" id="pg-search-input" placeholder="Search pages...">
+      <div class="pg-search-results" id="pg-search-results"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = modal.querySelector('#pg-search-input');
+  const results = modal.querySelector('#pg-search-results');
+  const doSearch = () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { results.innerHTML = ''; return; }
+    const hits = App.pages.filter(p => {
+      if ((p.title || '').toLowerCase().includes(q)) return true;
+      const blockText = (p.blocks || []).map(flattenBlockText).join(' ').toLowerCase();
+      return blockText.includes(q);
+    }).slice(0, 30);
+    results.innerHTML = hits.length ? hits.map(p => `
+      <div class="pg-list-row" data-id="${p.id}">
+        <span class="pg-row-icon">${p.icon || '📄'}</span>
+        <span class="pg-row-text"><span class="pg-row-title">${escapeHTML(p.title || 'Untitled')}</span></span>
+      </div>`).join('') : `<div class="pg-empty-sub" style="padding:16px;">No matches.</div>`;
+    results.querySelectorAll('.pg-list-row').forEach(row => {
+      row.addEventListener('click', () => { modal.remove(); pagesOpenPage(row.dataset.id); });
+    });
+  };
+  input.addEventListener('input', doSearch);
+  setTimeout(() => input.focus(), 50);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function flattenBlockText(b) {
+  let t = b.text || '';
+  if (b.children) t += ' ' + b.children.map(flattenBlockText).join(' ');
+  if (b.table) t += ' ' + b.table.cells.flat().join(' ');
+  return t;
+}
+
+/* ── Block tree helpers ── */
+function findBlockContainer(page, blockId, arr) {
+  arr = arr || page.blocks;
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i].id === blockId) return { arr, idx: i };
+    if (arr[i].children) {
+      const found = findBlockContainer(page, blockId, arr[i].children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function addBlockAfter(page, afterBlockId, type) {
+  const nb = blankBlock(type || 'paragraph');
+  if (!afterBlockId) { page.blocks.push(nb); return nb; }
+  const loc = findBlockContainer(page, afterBlockId);
+  if (!loc) { page.blocks.push(nb); return nb; }
+  loc.arr.splice(loc.idx + 1, 0, nb);
+  return nb;
+}
+
+function deleteBlockById(page, blockId) {
+  const loc = findBlockContainer(page, blockId);
+  if (!loc) return null;
+  const isRoot = loc.arr === page.blocks;
+  if (isRoot && loc.arr.length === 1) return null; // never delete the last block of a page
+  const prevId = loc.idx > 0 ? loc.arr[loc.idx - 1].id : null;
+  loc.arr.splice(loc.idx, 1);
+  return prevId;
+}
+
+function changeBlockType(page, blockId, type) {
+  const loc = findBlockContainer(page, blockId);
+  if (!loc) return;
+  const old = loc.arr[loc.idx];
+  const nb = blankBlock(type);
+  nb.id = old.id;
+  nb.text = old.text;
+  nb.indent = old.indent || 0;
+  loc.arr[loc.idx] = nb;
+}
+
+/* ── Editor view ── */
+function renderPageEditor(page) {
+  const root = document.getElementById('pages-root');
+  if (!root) return;
+  const children = getChildren(page.id).filter(c => c.type !== 'database' || true);
+  root.innerHTML = `
+    <div class="pg-editor-view">
+      ${pagesBreadcrumbHTML(page.parentId)}
+      <div class="pg-page-head">
+        <button class="pg-page-icon-btn" id="pg-icon-btn">${page.icon || '📄'}</button>
+        <input type="text" class="pg-title-input" id="pg-title-input" value="${escapeHTML(page.title || '')}" placeholder="Untitled">
+        <div class="pg-head-actions">
+          <button class="pg-head-btn" id="pg-ai-btn">✦ AI</button>
+          <button class="pg-head-btn" id="pg-page-menu-btn">⋯</button>
+        </div>
+      </div>
+      <div class="pg-subpages" id="pg-subpages">
+        ${children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
+        <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
+      </div>
+      <div class="pg-blocks" id="pg-blocks">${renderBlocks(page.blocks)}</div>
+      <button class="pg-add-block-btn" id="pg-add-block-btn">+ Add a block</button>
+      ${renderBacklinksHTML(page.id)}
+    </div>`;
+
+  wirePageEditorChrome(page);
+  wireBlockEvents(page);
+  applyFocusIntent();
+}
+
+function wirePageEditorChrome(page) {
+  const root = document.getElementById('pages-root');
+  root.querySelectorAll('.pg-crumb').forEach(c => {
+    c.addEventListener('click', () => {
+      const targetId = c.dataset.id === 'root' ? null : c.dataset.id;
+      PG.nav = targetId ? [...getAncestors(targetId).map(a => a.id), targetId] : [];
+      renderPagesList(targetId);
+    });
+  });
+  document.getElementById('pg-title-input')?.addEventListener('input', (e) => {
+    page.title = e.target.value;
+    touchPage(page);
+  });
+  document.getElementById('pg-icon-btn')?.addEventListener('click', () => {
+    const emoji = prompt('Page icon (emoji)', page.icon || '📄');
+    if (emoji != null) { page.icon = emoji.trim().slice(0, 4) || '📄'; touchPage(page); renderPageEditor(page); }
+  });
+  document.getElementById('pg-add-subpage')?.addEventListener('click', () => openTemplatePicker(page.id));
+  root.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => {
+    chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id));
+  });
+  document.getElementById('pg-add-block-btn')?.addEventListener('click', () => {
+    const last = page.blocks[page.blocks.length - 1];
+    const nb = addBlockAfter(page, last ? last.id : null, 'paragraph');
+    touchPage(page);
+    PG.focusIntent = { blockId: nb.id, pos: 'start' };
+    rerenderBlocks(page);
+  });
+  document.getElementById('pg-ai-btn')?.addEventListener('click', (e) => openPageAiMenu(page, e.currentTarget));
+  document.getElementById('pg-page-menu-btn')?.addEventListener('click', (e) => openPageDetailMenu(page, e.currentTarget));
+  // (.pg-mention click wiring happens in wireBlockEvents(), called right after this.)
+}
+
+function openPageDetailMenu(page, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu';
+  menu.innerHTML = `
+    <button data-act="export">Export as document</button>
+    <button data-act="duplicate">Duplicate</button>
+    <button data-act="delete" class="pg-ctx-danger">Delete page</button>
+  `;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    if (act === 'export') {
+      const text = pageToPlainText(page);
+      storeDocument(page.title || 'Untitled', text);
+      openDocFormatPicker(page.title || 'Untitled', text, anchorEl);
+    } else if (act === 'duplicate') {
+      const copy = duplicatePageShallow(page.id);
+      menu.remove();
+      pagesOpenPage(copy.id);
+      return;
+    } else if (act === 'delete') {
+      if (confirm(`Delete "${page.title || 'Untitled'}" and everything inside it?`)) {
+        const parentId = page.parentId;
+        deletePageDeep(page.id);
+        renderPagesList(parentId);
+      }
+    }
+    menu.remove();
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function pageToPlainText(page) {
+  const lines = [page.title || 'Untitled', ''];
+  const walk = (blocks, depth) => {
+    blocks.forEach(b => {
+      const pad = '  '.repeat(depth);
+      if (b.type === 'divider') { lines.push('---'); return; }
+      if (b.type === 'table') { (b.table?.cells || []).forEach(row => lines.push(pad + row.join(' | '))); return; }
+      if (b.type === 'image') { lines.push(pad + '[image]'); return; }
+      let prefix = '';
+      if (b.type === 'bulleted') prefix = '• ';
+      else if (b.type === 'numbered') prefix = '1. ';
+      else if (b.type === 'todo') prefix = b.checked ? '[x] ' : '[ ] ';
+      else if (b.type === 'quote') prefix = '> ';
+      else if (b.type === 'callout') prefix = (b.calloutIcon || '💡') + ' ';
+      else if (b.type === 'heading1') prefix = '# ';
+      else if (b.type === 'heading2') prefix = '## ';
+      else if (b.type === 'heading3') prefix = '### ';
+      lines.push(pad + prefix + stripInlineSyntax(b.text || ''));
+      if (b.children) walk(b.children, depth + 1);
+    });
+  };
+  walk(page.blocks || [], 0);
+  return lines.join('\n');
+}
+
+function stripInlineSyntax(text) {
+  return text.replace(/@\[\[([^:\]]+):([^\]]+)\]\]/g, '@$2').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(^|[^*])\*([^*]+)\*/g, '$1$2').replace(/`([^`]+)`/g, '$1');
+}
+
+/* ── Backlinks ── */
+function renderBacklinksHTML(pageId) {
+  const backlinks = App.pages.filter(p => p.id !== pageId && (p.blocks || []).some(b => flattenBlockText(b).includes(`[[${pageId}:`)));
+  if (!backlinks.length) return '';
+  return `
+    <div class="pg-backlinks">
+      <div class="pg-backlinks-title">🔗 ${backlinks.length} linked mention${backlinks.length === 1 ? '' : 's'}</div>
+      ${backlinks.map(p => `<button class="pg-subpage-chip" data-id="${p.id}">${p.icon || '📄'} ${escapeHTML(p.title || 'Untitled')}</button>`).join('')}
+    </div>`;
+}
+
+/* ── Block rendering ── */
+function renderBlocks(blocks) {
+  return (blocks || []).map(b => blockHTML(b)).join('');
+}
+
+function inlineFormat(text) {
+  let s = escapeHTML(text || '');
+  s = s.replace(/@\[\[([^:\]]+):([^\]]+)\]\]/g, (m, id, title) => `<span class="pg-mention" data-page="${id}">📄 ${title}</span>`);
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  return s || '<span class="pg-placeholder">&nbsp;</span>';
+}
+
+function blockHTML(b) {
+  const indentStyle = b.indent ? `style="margin-left:${b.indent * 20}px"` : '';
+  const handle = `<span class="pg-block-handle" draggable="true" data-block-id="${b.id}">⠿</span>`;
+  let inner = '';
+  switch (b.type) {
+    case 'heading1': inner = blockTextHTML(b, 'pg-h1'); break;
+    case 'heading2': inner = blockTextHTML(b, 'pg-h2'); break;
+    case 'heading3': inner = blockTextHTML(b, 'pg-h3'); break;
+    case 'bulleted': inner = `<span class="pg-bullet">•</span>${blockTextHTML(b, 'pg-p')}`; break;
+    case 'numbered': inner = `<span class="pg-bullet">${(b.numIndex || 1)}.</span>${blockTextHTML(b, 'pg-p')}`; break;
+    case 'todo': inner = `<label class="pg-todo-row"><input type="checkbox" class="pg-todo-check" data-block-id="${b.id}" ${b.checked ? 'checked' : ''}>${blockTextHTML(b, 'pg-p' + (b.checked ? ' pg-checked' : ''))}</label>`; break;
+    case 'toggle': inner = `<span class="pg-toggle-arrow${b.collapsed ? ' pg-collapsed' : ''}" data-block-id="${b.id}">▸</span>${blockTextHTML(b, 'pg-p pg-toggle-title')}
+        <div class="pg-toggle-children" style="display:${b.collapsed ? 'none' : ''}">${renderBlocks(b.children || [])}<button class="pg-toggle-add" data-parent="${b.id}">+ Add inside</button></div>`; break;
+    case 'quote': inner = blockTextHTML(b, 'pg-quote'); break;
+    case 'callout': inner = `<span class="pg-callout-icon" data-block-id="${b.id}">${b.calloutIcon || '💡'}</span>${blockTextHTML(b, 'pg-p')}`; break;
+    case 'code': inner = `<textarea class="pg-code-edit" data-block-id="${b.id}" spellcheck="false">${escapeHTML(b.text || '')}</textarea>`; break;
+    case 'divider': inner = `<hr class="pg-divider">`; break;
+    case 'image': inner = imageBlockHTML(b); break;
+    case 'table': inner = tableBlockHTML(b); break;
+    default: inner = blockTextHTML(b, 'pg-p');
+  }
+  return `<div class="pg-block pg-block-${b.type}" data-block-id="${b.id}" ${indentStyle}>${handle}<div class="pg-block-body">${inner}</div></div>`;
+}
+
+function blockTextHTML(b, cls) {
+  return `<div class="pg-block-view ${cls}" data-block-id="${b.id}">${inlineFormat(b.text)}</div>` +
+         `<textarea class="pg-block-edit ${cls}" data-block-id="${b.id}" style="display:none">${escapeHTML(b.text || '')}</textarea>`;
+}
+
+function imageBlockHTML(b) {
+  if (b.imageUrl) return `<img class="pg-block-image" src="${b.imageUrl}" alt="" data-block-id="${b.id}">`;
+  return `<button class="pg-image-drop" data-block-id="${b.id}">🖼 Click to upload an image</button>`;
+}
+
+function tableBlockHTML(b) {
+  const cells = b.table.cells;
+  const rows = cells.map((row, r) => `<tr>${row.map((c, ci) => `<td><input type="text" class="pg-table-cell" data-block-id="${b.id}" data-r="${r}" data-c="${ci}" value="${escapeHTML(c)}"></td>`).join('')}</tr>`).join('');
+  return `
+    <div class="pg-table-wrap">
+      <table class="pg-table">${rows}</table>
+      <div class="pg-table-controls">
+        <button class="pg-table-btn" data-block-id="${b.id}" data-act="addrow">+ Row</button>
+        <button class="pg-table-btn" data-block-id="${b.id}" data-act="addcol">+ Column</button>
+        <button class="pg-table-btn" data-block-id="${b.id}" data-act="delrow">- Row</button>
+        <button class="pg-table-btn" data-block-id="${b.id}" data-act="delcol">- Column</button>
+      </div>
+    </div>`;
+}
+
+function rerenderBlocks(page) {
+  numberListBlocks(page.blocks);
+  const container = document.getElementById('pg-blocks');
+  if (container) container.innerHTML = renderBlocks(page.blocks);
+  const sub = document.getElementById('pg-subpages');
+  if (sub) {
+    const children = getChildren(page.id);
+    sub.innerHTML = children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('') +
+      `<button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>`;
+    document.getElementById('pg-add-subpage')?.addEventListener('click', () => openTemplatePicker(page.id));
+    sub.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id)));
+  }
+  const bl = document.querySelector('.pg-backlinks');
+  const newBl = renderBacklinksHTML(page.id);
+  if (bl) bl.outerHTML = newBl; else if (newBl) container?.insertAdjacentHTML('afterend', newBl);
+  wireBlockEvents(page);
+  applyFocusIntent();
+}
+
+function numberListBlocks(blocks) {
+  let n = 0;
+  (blocks || []).forEach(b => {
+    if (b.type === 'numbered') { n++; b.numIndex = n; } else if (b.type !== 'bulleted') { n = 0; }
+    if (b.children) numberListBlocks(b.children);
+  });
+}
+
+function applyFocusIntent() {
+  if (!PG.focusIntent) return;
+  const { blockId, pos } = PG.focusIntent;
+  PG.focusIntent = null;
+  // Focus synchronously right after the innerHTML swap — waiting a frame
+  // (requestAnimationFrame) left a window where fast typing landed on
+  // nothing and characters were silently dropped.
+  const view = document.querySelector(`.pg-block-view[data-block-id="${blockId}"]`);
+  if (view) {
+    const at = pos === 'start' ? 0 : (pos === 'end' ? undefined : pos);
+    switchBlockToEdit(view, at);
+    return;
+  }
+  const ta = document.querySelector(`textarea[data-block-id="${blockId}"]`);
+  if (ta) {
+    ta.focus();
+    const at = pos === 'start' ? 0 : (pos === 'end' ? ta.value.length : pos);
+    try { ta.setSelectionRange(at, at); } catch (_) {}
+  }
+}
+
+function switchBlockToEdit(viewEl, caretPos) {
+  const blockId = viewEl.dataset.blockId;
+  const wrap = viewEl.parentElement;
+  const ta = wrap.querySelector(`textarea.pg-block-edit[data-block-id="${blockId}"]`);
+  if (!ta) return;
+  document.querySelectorAll('.pg-block-view').forEach(v => { if (v !== viewEl) v.style.display = ''; });
+  viewEl.style.display = 'none';
+  ta.style.display = '';
+  autoResizeTA(ta);
+  ta.focus();
+  const at = caretPos != null ? caretPos : ta.value.length;
+  try { ta.setSelectionRange(at, at); } catch (_) {}
+}
+
+function switchBlockToView(ta, page) {
+  const blockId = ta.dataset.blockId;
+  const loc = findBlockContainer(page, blockId);
+  if (loc) { loc.arr[loc.idx].text = ta.value; touchPage(page); }
+  const viewEl = ta.parentElement.querySelector(`.pg-block-view[data-block-id="${blockId}"]`);
+  if (viewEl && loc) {
+    const cls = viewEl.className;
+    viewEl.innerHTML = inlineFormat(loc.arr[loc.idx].text);
+    viewEl.className = cls;
+    viewEl.style.display = '';
+    // Freshly-inserted mention pills need their click handler wired — this
+    // innerHTML swap happens outside the normal wireBlockEvents() pass.
+    viewEl.querySelectorAll('.pg-mention').forEach(m => {
+      m.addEventListener('click', (e) => { e.stopPropagation(); pagesOpenPage(m.dataset.page); });
+    });
+  }
+  ta.style.display = 'none';
+  closeFloatingMenus();
+}
+
+function autoResizeTA(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+/* ── Block event wiring (delegated) ── */
+function wireBlockEvents(page) {
+  const container = document.getElementById('pg-blocks');
+  if (!container) return;
+
+  container.querySelectorAll('.pg-block-view').forEach(view => {
+    view.addEventListener('click', () => switchBlockToEdit(view));
+  });
+
+  container.querySelectorAll('.pg-mention').forEach(m => {
+    m.addEventListener('click', (e) => { e.stopPropagation(); pagesOpenPage(m.dataset.page); });
+  });
+
+  container.querySelectorAll('textarea.pg-block-edit, textarea.pg-code-edit').forEach(ta => {
+    autoResizeTA(ta);
+    ta.addEventListener('input', () => {
+      autoResizeTA(ta);
+      const loc = findBlockContainer(page, ta.dataset.blockId);
+      if (!loc) return;
+      loc.arr[loc.idx].text = ta.value;
+      touchPage(page);
+      maybeShowSlashMenu(ta, page);
+      maybeShowMentionMenu(ta, page);
+    });
+    ta.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (document.activeElement === ta) return; // refocused (e.g. menu click)
+        if (ta.classList.contains('pg-code-edit')) {
+          const loc = findBlockContainer(page, ta.dataset.blockId);
+          if (loc) { loc.arr[loc.idx].text = ta.value; touchPage(page); }
+        } else {
+          switchBlockToView(ta, page);
+        }
+        closeFloatingMenus();
+      }, 120);
+    });
+    ta.addEventListener('mouseup', () => maybeShowAiToolbar(ta));
+    ta.addEventListener('touchend', () => maybeShowAiToolbar(ta));
+    ta.addEventListener('keyup', (e) => { if (e.shiftKey) maybeShowAiToolbar(ta); });
+    ta.addEventListener('keydown', (e) => handleBlockKeydown(e, ta, page));
+  });
+
+  container.querySelectorAll('.pg-todo-check').forEach(cb => {
+    cb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const loc = findBlockContainer(page, cb.dataset.blockId);
+      if (!loc) return;
+      loc.arr[loc.idx].checked = cb.checked;
+      touchPage(page);
+      const view = cb.parentElement.querySelector('.pg-block-view');
+      if (view) view.classList.toggle('pg-checked', cb.checked);
+    });
+  });
+
+  container.querySelectorAll('.pg-toggle-arrow').forEach(arrow => {
+    arrow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const loc = findBlockContainer(page, arrow.dataset.blockId);
+      if (!loc) return;
+      loc.arr[loc.idx].collapsed = !loc.arr[loc.idx].collapsed;
+      touchPage(page);
+      rerenderBlocks(page);
+    });
+  });
+
+  container.querySelectorAll('.pg-toggle-add').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const loc = findBlockContainer(page, btn.dataset.parent);
+      if (!loc) return;
+      const parent = loc.arr[loc.idx];
+      parent.children = parent.children || [];
+      const nb = blankBlock('paragraph');
+      parent.children.push(nb);
+      touchPage(page);
+      PG.focusIntent = { blockId: nb.id, pos: 'start' };
+      rerenderBlocks(page);
+    });
+  });
+
+  container.querySelectorAll('.pg-callout-icon').forEach(ic => {
+    ic.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const loc = findBlockContainer(page, ic.dataset.blockId);
+      if (!loc) return;
+      const emoji = prompt('Callout icon (emoji)', loc.arr[loc.idx].calloutIcon || '💡');
+      if (emoji != null) { loc.arr[loc.idx].calloutIcon = emoji.trim().slice(0, 4) || '💡'; touchPage(page); rerenderBlocks(page); }
+    });
+  });
+
+  container.querySelectorAll('.pg-image-drop, .pg-block-image').forEach(el => {
+    el.addEventListener('click', () => openImageBlockPicker(el.dataset.blockId, page));
+  });
+
+  container.querySelectorAll('.pg-table-cell').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const loc = findBlockContainer(page, inp.dataset.blockId);
+      if (!loc) return;
+      loc.arr[loc.idx].table.cells[+inp.dataset.r][+inp.dataset.c] = inp.value;
+      touchPage(page);
+    });
+  });
+  container.querySelectorAll('.pg-table-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = findBlockContainer(page, btn.dataset.blockId);
+      if (!loc) return;
+      const t = loc.arr[loc.idx].table;
+      const cols = t.cells[0]?.length || 1;
+      if (btn.dataset.act === 'addrow') t.cells.push(new Array(cols).fill(''));
+      else if (btn.dataset.act === 'delrow' && t.cells.length > 1) t.cells.pop();
+      else if (btn.dataset.act === 'addcol') t.cells.forEach(row => row.push(''));
+      else if (btn.dataset.act === 'delcol' && cols > 1) t.cells.forEach(row => row.pop());
+      touchPage(page);
+      rerenderBlocks(page);
+    });
+  });
+
+  // Drag-to-reorder among siblings via the handle.
+  let dragBlockId = null;
+  container.querySelectorAll('.pg-block-handle').forEach(h => {
+    h.addEventListener('dragstart', (e) => { dragBlockId = h.dataset.blockId; e.dataTransfer.effectAllowed = 'move'; });
+  });
+  container.querySelectorAll('.pg-block').forEach(blockEl => {
+    blockEl.addEventListener('dragover', (e) => { e.preventDefault(); blockEl.classList.add('pg-drop-target'); });
+    blockEl.addEventListener('dragleave', () => blockEl.classList.remove('pg-drop-target'));
+    blockEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      blockEl.classList.remove('pg-drop-target');
+      const targetId = blockEl.dataset.blockId;
+      if (!dragBlockId || dragBlockId === targetId) return;
+      const src = findBlockContainer(page, dragBlockId);
+      const tgt = findBlockContainer(page, targetId);
+      if (!src || !tgt || src.arr !== tgt.arr) return; // only reorder within the same level
+      const [moved] = src.arr.splice(src.idx, 1);
+      const newIdx = tgt.arr.indexOf(tgt.arr.find(b => b.id === targetId));
+      src.arr.splice(newIdx, 0, moved);
+      touchPage(page);
+      rerenderBlocks(page);
+    });
+  });
+
+  container.querySelectorAll('.pg-block-handle').forEach(h => {
+    h.addEventListener('click', (e) => { e.stopPropagation(); openBlockMenu(h.dataset.blockId, page, h); });
+  });
+}
+
+function openBlockMenu(blockId, page, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu';
+  menu.innerHTML = `
+    <button data-act="up">Move up</button>
+    <button data-act="down">Move down</button>
+    <button data-act="dup">Duplicate</button>
+    <button data-act="del" class="pg-ctx-danger">Delete</button>
+  `;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    const loc = findBlockContainer(page, blockId);
+    if (loc && act === 'up' && loc.idx > 0) { const [b] = loc.arr.splice(loc.idx, 1); loc.arr.splice(loc.idx - 1, 0, b); }
+    else if (loc && act === 'down' && loc.idx < loc.arr.length - 1) { const [b] = loc.arr.splice(loc.idx, 1); loc.arr.splice(loc.idx + 1, 0, b); }
+    else if (loc && act === 'dup') { const copy = JSON.parse(JSON.stringify(loc.arr[loc.idx])); copy.id = newId('blk'); loc.arr.splice(loc.idx + 1, 0, copy); }
+    else if (act === 'del') deleteBlockById(page, blockId);
+    touchPage(page);
+    rerenderBlocks(page);
+    menu.remove();
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function openImageBlockPicker(blockId, page) {
+  let input = document.getElementById('pg-image-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.id = 'pg-image-input'; input.style.display = 'none';
+    document.body.appendChild(input);
+  }
+  input.onchange = () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1024;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const loc = findBlockContainer(page, blockId);
+      if (loc) { loc.arr[loc.idx].imageUrl = canvas.toDataURL('image/jpeg', 0.85); touchPage(page); rerenderBlocks(page); }
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+  input.click();
+}
+
+/* ── Keyboard behavior inside a block textarea ── */
+function handleBlockKeydown(e, ta, page) {
+  const blockId = ta.dataset.blockId;
+
+  if (PG.slashBlockId === blockId) {
+    const menu = document.querySelector('.pg-slash-menu');
+    if (menu) {
+      const items = menu.querySelectorAll('.pg-slash-item');
+      if (e.key === 'ArrowDown') { e.preventDefault(); PG.slashIndex = Math.min(PG.slashIndex + 1, items.length - 1); highlightSlashItem(menu); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); PG.slashIndex = Math.max(PG.slashIndex - 1, 0); highlightSlashItem(menu); return; }
+      if (e.key === 'Enter') { e.preventDefault(); items[PG.slashIndex]?.click(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeFloatingMenus(); PG.slashBlockId = null; return; }
+    }
+  }
+  if (PG.mentionBlockId === blockId) {
+    const menu = document.querySelector('.pg-mention-menu');
+    if (menu && (e.key === 'Escape')) { closeFloatingMenus(); PG.mentionBlockId = null; }
+  }
+
+  const loc = findBlockContainer(page, blockId);
+  if (!loc) return;
+  const block = loc.arr[loc.idx];
+
+  if (e.key === 'Enter' && !e.shiftKey && block.type !== 'code') {
+    e.preventDefault();
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const after = ta.value.slice(pos);
+    block.text = before;
+    let nextType = 'paragraph';
+    if (block.type === 'bulleted' || block.type === 'numbered' || block.type === 'todo') nextType = block.type;
+    const nb = addBlockAfter(page, blockId, nextType);
+    nb.text = after;
+    nb.indent = block.indent || 0;
+    touchPage(page);
+    PG.focusIntent = { blockId: nb.id, pos: 'start' };
+    rerenderBlocks(page);
+    return;
+  }
+
+  if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+    const isFirstInContainer = loc.idx === 0;
+    if (isFirstInContainer && block.type !== 'paragraph' && ta.value.length > 0) {
+      e.preventDefault();
+      changeBlockType(page, blockId, 'paragraph');
+      touchPage(page);
+      PG.focusIntent = { blockId, pos: 'start' };
+      rerenderBlocks(page);
+      return;
+    }
+    if (loc.idx > 0) {
+      e.preventDefault();
+      const prev = loc.arr[loc.idx - 1];
+      const mergeAt = prev.text.length;
+      prev.text = (prev.text || '') + (block.text || '');
+      loc.arr.splice(loc.idx, 1);
+      touchPage(page);
+      PG.focusIntent = { blockId: prev.id, pos: mergeAt };
+      rerenderBlocks(page);
+      return;
+    }
+  }
+
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (['bulleted', 'numbered', 'todo'].includes(block.type)) {
+      block.indent = Math.max(0, Math.min(4, (block.indent || 0) + (e.shiftKey ? -1 : 1)));
+      touchPage(page);
+      PG.focusIntent = { blockId, pos: ta.selectionStart };
+      rerenderBlocks(page);
+    }
+  }
+}
+
+function highlightSlashItem(menu) {
+  menu.querySelectorAll('.pg-slash-item').forEach((el, i) => el.classList.toggle('pg-active', i === PG.slashIndex));
+}
+
+function maybeShowSlashMenu(ta, page) {
+  const m = ta.value.match(/^\/(\S*)$/);
+  if (!m) { closeFloatingMenus(); PG.slashBlockId = null; return; }
+  PG.slashBlockId = ta.dataset.blockId;
+  PG.slashIndex = 0;
+  const query = m[1].toLowerCase();
+  const matches = BLOCK_TYPES.filter(t => t.label.toLowerCase().includes(query) || t.type.includes(query));
+  document.querySelectorAll('.pg-slash-menu').forEach(e => e.remove());
+  const menu = document.createElement('div');
+  menu.className = 'pg-slash-menu';
+  menu.innerHTML = matches.length ? matches.map((t, i) => `
+    <button class="pg-slash-item${i === 0 ? ' pg-active' : ''}" data-type="${t.type}">
+      <span class="pg-slash-ico">${t.icon}</span>
+      <span class="pg-slash-text"><span class="pg-slash-label">${t.label}</span><span class="pg-slash-desc">${t.desc}</span></span>
+    </button>`).join('') : `<div class="pg-empty-sub" style="padding:10px;">No matching block type.</div>`;
+  document.body.appendChild(menu);
+  positionFloating(menu, ta);
+  menu.querySelectorAll('.pg-slash-item').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      changeBlockType(page, ta.dataset.blockId, btn.dataset.type);
+      // The "/query" that triggered this menu is not real content — clear it.
+      const loc2 = findBlockContainer(page, ta.dataset.blockId);
+      if (loc2) loc2.arr[loc2.idx].text = '';
+      touchPage(page);
+      PG.slashBlockId = null;
+      closeFloatingMenus();
+      PG.focusIntent = { blockId: ta.dataset.blockId, pos: 'start' };
+      rerenderBlocks(page);
+    });
+  });
+}
+
+function maybeShowMentionMenu(ta, page) {
+  const pos = ta.selectionStart;
+  const head = ta.value.slice(0, pos);
+  const m = head.match(/@([\w\s]{0,30})$/);
+  if (!m) { if (PG.mentionBlockId === ta.dataset.blockId) { closeFloatingMenus(); PG.mentionBlockId = null; } return; }
+  PG.mentionBlockId = ta.dataset.blockId;
+  const query = m[1].trim().toLowerCase();
+  const candidates = App.pages.filter(p => p.id !== page.id && (!query || (p.title || '').toLowerCase().includes(query))).slice(0, 8);
+  document.querySelectorAll('.pg-mention-menu').forEach(e => e.remove());
+  const menu = document.createElement('div');
+  menu.className = 'pg-mention-menu';
+  menu.innerHTML = candidates.length ? candidates.map(p => `
+    <button class="pg-slash-item" data-id="${p.id}" data-title="${escapeHTML(p.title || 'Untitled')}">
+      <span class="pg-slash-ico">${p.icon || '📄'}</span><span class="pg-slash-text"><span class="pg-slash-label">${escapeHTML(p.title || 'Untitled')}</span></span>
+    </button>`).join('') : `<div class="pg-empty-sub" style="padding:10px;">No pages match.</div>`;
+  document.body.appendChild(menu);
+  positionFloating(menu, ta);
+  const matchStart = pos - m[0].length;
+  menu.querySelectorAll('.pg-slash-item').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const token = `@[[${btn.dataset.id}:${btn.dataset.title}]] `;
+      ta.value = ta.value.slice(0, matchStart) + token + ta.value.slice(pos);
+      const loc = findBlockContainer(page, ta.dataset.blockId);
+      if (loc) { loc.arr[loc.idx].text = ta.value; touchPage(page); }
+      PG.mentionBlockId = null;
+      closeFloatingMenus();
+      const caret = matchStart + token.length;
+      ta.focus();
+      try { ta.setSelectionRange(caret, caret); } catch (_) {}
+      autoResizeTA(ta);
+    });
+  });
+}
+
+/* ── AI: selection toolbar ── */
+function maybeShowAiToolbar(ta) {
+  document.querySelectorAll('.pg-ai-toolbar').forEach(e => e.remove());
+  if (ta.selectionStart === ta.selectionEnd) return;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'pg-ai-toolbar';
+  toolbar.innerHTML = `
+    <button data-act="improve">Improve</button>
+    <button data-act="grammar">Fix grammar</button>
+    <button data-act="shorter">Shorter</button>
+    <button data-act="longer">Longer</button>
+    <button data-act="continue">Continue</button>
+    <button data-act="summarize">Summarize</button>
+  `;
+  document.body.appendChild(toolbar);
+  const r = ta.getBoundingClientRect();
+  toolbar.style.position = 'fixed';
+  toolbar.style.zIndex = 850;
+  toolbar.style.top = Math.max(8, r.top - 42) + 'px';
+  toolbar.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 260)) + 'px';
+  toolbar.addEventListener('mousedown', (e) => e.preventDefault());
+  toolbar.addEventListener('click', async (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    if (!act) return;
+    await runAiOnSelection(ta, act);
+    toolbar.remove();
+  });
+}
+
+const AI_SELECTION_PROMPTS = {
+  improve: 'Improve the writing quality of this text — clearer, more polished. Keep the same meaning and roughly the same length. Reply with ONLY the improved text.',
+  grammar: 'Fix all spelling and grammar mistakes in this text. Reply with ONLY the corrected text.',
+  shorter: 'Make this text noticeably shorter while keeping the key meaning. Reply with ONLY the shortened text.',
+  longer: 'Expand this text with more detail and explanation, roughly double the length. Reply with ONLY the expanded text.',
+  continue: 'Continue writing naturally from this text for 1-3 more sentences, matching its tone. Reply with ONLY the continuation (not the original text).',
+  summarize: 'Summarize this text in 1-2 sentences. Reply with ONLY the summary.',
+};
+
+async function runAiOnSelection(ta, act) {
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const selected = ta.value.slice(start, end);
+  if (!selected.trim()) return;
+  const prompt = AI_SELECTION_PROMPTS[act];
+  if (!prompt) return;
+  const original = ta.value;
+  ta.value = ta.value.slice(0, start) + '…' + ta.value.slice(end);
+  autoResizeTA(ta);
+  const result = await quickAI(prompt, selected);
+  if (!result) { ta.value = original; autoResizeTA(ta); return; }
+  const clean = result.trim();
+  if (act === 'continue') {
+    ta.value = original.slice(0, end) + ' ' + clean + original.slice(end);
+  } else {
+    ta.value = original.slice(0, start) + clean + original.slice(end);
+  }
+  autoResizeTA(ta);
+  ta.dispatchEvent(new Event('input'));
+}
+
+/* ── AI: page-level command menu ── */
+function openPageAiMenu(page, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ai-menu';
+  menu.innerHTML = `
+    <button data-act="summarize">Summarize page</button>
+    <button data-act="actions">Find action items</button>
+    <button data-act="translate">Translate ▸</button>
+  `;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', async (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    if (!act) return;
+    menu.remove();
+    if (act === 'translate') { openTranslateLangMenu(page, anchorEl); return; }
+    const text = pageToPlainText(page).slice(0, 12000);
+    if (!text.trim()) return;
+    const prompt = act === 'summarize'
+      ? 'Summarize this page in 3-5 concise sentences.'
+      : 'List the concrete action items / to-dos implied by this page as short bullet points. If there are none, say so briefly.';
+    const typingBanner = appendPageAiPending(page);
+    const result = await quickAI(prompt, text);
+    removePageAiPending(typingBanner);
+    if (!result) return;
+    const nb = { ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '🤖' : '✅', text: result.trim() };
+    page.blocks.push(nb);
+    touchPage(page);
+    rerenderBlocks(page);
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function openTranslateLangMenu(page, anchorEl) {
+  const menu = document.createElement('div');
+  menu.className = 'pg-ai-menu';
+  menu.innerHTML = Object.entries(LANG_NAMES).map(([code, name]) => `<button data-lang="${name}">${name}</button>`).join('');
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', async (e) => {
+    const lang = e.target.closest('button')?.dataset.lang;
+    if (!lang) return;
+    menu.remove();
+    const text = pageToPlainText(page).slice(0, 12000);
+    if (!text.trim()) return;
+    const typingBanner = appendPageAiPending(page);
+    const result = await quickAI(`Translate this page into ${lang}. Reply with ONLY the translation, preserving line breaks.`, text);
+    removePageAiPending(typingBanner);
+    if (!result) return;
+    const nb = { ...blankBlock('callout'), calloutIcon: '🌐', text: result.trim() };
+    page.blocks.push(nb);
+    touchPage(page);
+    rerenderBlocks(page);
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function appendPageAiPending(page) {
+  const container = document.getElementById('pg-blocks');
+  if (!container) return null;
+  const el = document.createElement('div');
+  el.className = 'pg-ai-pending';
+  el.textContent = 'VOID is thinking…';
+  container.appendChild(el);
+  return el;
+}
+function removePageAiPending(el) { el?.remove(); }
+
+/* ================================================================
+   DATABASES — Table / Board / Calendar / Gallery views
+   ================================================================ */
+
+const DB_PROP_TYPES = ['text', 'number', 'select', 'multiselect', 'date', 'checkbox', 'url', 'person'];
+
+function ensureDbView(page) {
+  if (!page.dbViews.length) page.dbViews.push({ id: newId('view'), name: 'Table', type: 'table' });
+  if (!page.dbActiveView || !page.dbViews.find(v => v.id === page.dbActiveView)) page.dbActiveView = page.dbViews[0].id;
+  return page.dbViews.find(v => v.id === page.dbActiveView);
+}
+
+function renderDatabaseView(page) {
+  const root = document.getElementById('pages-root');
+  if (!root) return;
+  const view = ensureDbView(page);
+  root.innerHTML = `
+    <div class="pg-db-view">
+      ${pagesBreadcrumbHTML(page.parentId)}
+      <div class="pg-page-head">
+        <button class="pg-page-icon-btn" id="pg-icon-btn">${page.icon || '🗂'}</button>
+        <input type="text" class="pg-title-input" id="pg-title-input" value="${escapeHTML(page.title || '')}" placeholder="Untitled">
+        <div class="pg-head-actions"><button class="pg-head-btn" id="pg-page-menu-btn">⋯</button></div>
+      </div>
+      <div class="pg-db-tabs" id="pg-db-tabs">
+        ${page.dbViews.map(v => `<button class="pg-db-tab${v.id === view.id ? ' active' : ''}" data-view="${v.id}">${dbViewIcon(v.type)} ${escapeHTML(v.name)}</button>`).join('')}
+        <button class="pg-db-tab pg-db-add-view" id="pg-db-add-view">+</button>
+      </div>
+      <div class="pg-db-toolbar">
+        <button class="pg-db-tool-btn" id="pg-db-props-btn">Properties</button>
+        <button class="pg-db-tool-btn" id="pg-db-sort-btn">Sort${view.sortBy ? ' •' : ''}</button>
+        <button class="pg-db-tool-btn" id="pg-db-filter-btn">Filter${(view.filters || []).length ? ' •' + view.filters.length : ''}</button>
+      </div>
+      <div class="pg-db-body" id="pg-db-body"></div>
+    </div>`;
+
+  document.getElementById('pg-title-input')?.addEventListener('input', (e) => { page.title = e.target.value; touchPage(page); });
+  document.getElementById('pg-icon-btn')?.addEventListener('click', () => {
+    const emoji = prompt('Icon (emoji)', page.icon || '🗂');
+    if (emoji != null) { page.icon = emoji.trim().slice(0, 4) || '🗂'; touchPage(page); renderDatabaseView(page); }
+  });
+  document.getElementById('pg-page-menu-btn')?.addEventListener('click', (e) => openPageDetailMenu(page, e.currentTarget));
+  root.querySelectorAll('.pg-crumb').forEach(c => {
+    c.addEventListener('click', () => {
+      const targetId = c.dataset.id === 'root' ? null : c.dataset.id;
+      PG.nav = targetId ? [...getAncestors(targetId).map(a => a.id), targetId] : [];
+      renderPagesList(targetId);
+    });
+  });
+  root.querySelectorAll('.pg-db-tab[data-view]').forEach(t => {
+    t.addEventListener('click', () => { page.dbActiveView = t.dataset.view; touchPage(page); renderDatabaseView(page); });
+  });
+  document.getElementById('pg-db-add-view')?.addEventListener('click', (e) => openAddViewMenu(page, e.currentTarget));
+  document.getElementById('pg-db-props-btn')?.addEventListener('click', (e) => openPropsMenu(page, e.currentTarget));
+  document.getElementById('pg-db-sort-btn')?.addEventListener('click', (e) => openSortMenu(page, view, e.currentTarget));
+  document.getElementById('pg-db-filter-btn')?.addEventListener('click', (e) => openFilterMenu(page, view, e.currentTarget));
+
+  renderDbBody(page, view);
+}
+
+function dbViewIcon(type) { return { table: '☰', board: '▤', calendar: '📅', gallery: '▦' }[type] || '☰'; }
+
+function getSortedFilteredRows(page, view) {
+  let rows = page.dbRows.slice();
+  (view.filters || []).forEach(f => { rows = rows.filter(r => rowMatchesFilter(page, r, f)); });
+  if (view.sortBy) {
+    const col = page.dbSchema.find(c => c.id === view.sortBy);
+    rows.sort((a, b) => {
+      const av = view.sortBy === 'title' ? (a.title || '') : (a.props[view.sortBy] ?? '');
+      const bv = view.sortBy === 'title' ? (b.title || '') : (b.props[view.sortBy] ?? '');
+      let cmp;
+      if (col && col.type === 'number') cmp = (parseFloat(av) || 0) - (parseFloat(bv) || 0);
+      else cmp = String(av).localeCompare(String(bv));
+      return view.sortDir === 'desc' ? -cmp : cmp;
+    });
+  }
+  return rows;
+}
+
+function rowMatchesFilter(page, row, f) {
+  const col = page.dbSchema.find(c => c.id === f.colId);
+  const val = f.colId === 'title' ? row.title : row.props[f.colId];
+  if (f.op === 'contains') return String(val || '').toLowerCase().includes(String(f.value || '').toLowerCase());
+  if (f.op === 'is') { if (col?.type === 'multiselect') return (val || []).includes(f.value); return String(val ?? '') === String(f.value ?? ''); }
+  if (f.op === 'isnot') return String(val ?? '') !== String(f.value ?? '');
+  if (f.op === 'gt') return (parseFloat(val) || 0) > (parseFloat(f.value) || 0);
+  if (f.op === 'lt') return (parseFloat(val) || 0) < (parseFloat(f.value) || 0);
+  if (f.op === 'checked') return !!val === true;
+  if (f.op === 'unchecked') return !val;
+  if (f.op === 'before') return val && f.value && val < f.value;
+  if (f.op === 'after') return val && f.value && val > f.value;
+  return true;
+}
+
+function newRow(page, presetProps) {
+  const row = { id: newId('row'), title: '', props: {}, pageId: null, createdAt: Date.now() };
+  page.dbSchema.forEach(c => { row.props[c.id] = c.type === 'multiselect' ? [] : c.type === 'checkbox' ? false : ''; });
+  Object.assign(row.props, presetProps || {});
+  page.dbRows.push(row);
+  touchPage(page);
+  return row;
+}
+
+function renderDbBody(page, view) {
+  const body = document.getElementById('pg-db-body');
+  if (!body) return;
+  if (view.type === 'table') body.innerHTML = tableViewHTML(page, view);
+  else if (view.type === 'board') body.innerHTML = boardViewHTML(page, view);
+  else if (view.type === 'calendar') body.innerHTML = calendarViewHTML(page, view);
+  else body.innerHTML = galleryViewHTML(page, view);
+  wireDbBodyEvents(page, view);
+}
+
+function propCellControl(page, row, col) {
+  const val = row.props[col.id];
+  if (col.type === 'text' || col.type === 'url' || col.type === 'person') {
+    return `<input type="text" class="pg-cell-input" data-row="${row.id}" data-col="${col.id}" value="${escapeHTML(val || '')}">`;
+  }
+  if (col.type === 'number') {
+    return `<input type="number" class="pg-cell-input" data-row="${row.id}" data-col="${col.id}" value="${val === '' || val == null ? '' : val}">`;
+  }
+  if (col.type === 'date') {
+    return `<input type="date" class="pg-cell-input" data-row="${row.id}" data-col="${col.id}" value="${val || ''}">`;
+  }
+  if (col.type === 'checkbox') {
+    return `<input type="checkbox" class="pg-cell-check" data-row="${row.id}" data-col="${col.id}" ${val ? 'checked' : ''}>`;
+  }
+  if (col.type === 'select') {
+    const opt = (col.options || []).find(o => o.id === val);
+    return `<button class="pg-select-chip-btn" data-row="${row.id}" data-col="${col.id}">${opt ? `<span class="pg-chip" style="background:${opt.color}22;color:${opt.color}">${escapeHTML(opt.label)}</span>` : '<span class="pg-chip-empty">Empty</span>'}</button>`;
+  }
+  if (col.type === 'multiselect') {
+    const chips = (val || []).map(id => (col.options || []).find(o => o.id === id)).filter(Boolean);
+    return `<button class="pg-select-chip-btn" data-row="${row.id}" data-col="${col.id}">${chips.length ? chips.map(o => `<span class="pg-chip" style="background:${o.color}22;color:${o.color}">${escapeHTML(o.label)}</span>`).join('') : '<span class="pg-chip-empty">Empty</span>'}</button>`;
+  }
+  return '';
+}
+
+function tableViewHTML(page, view) {
+  const rows = getSortedFilteredRows(page, view);
+  return `
+    <div class="pg-table-scroll">
+      <table class="pg-db-table">
+        <thead><tr>
+          <th>Title</th>
+          ${page.dbSchema.map(c => `<th>${escapeHTML(c.name)}</th>`).join('')}
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr data-row="${r.id}">
+              <td><input type="text" class="pg-cell-input pg-title-cell" data-row="${r.id}" data-col="title" value="${escapeHTML(r.title || '')}" placeholder="Untitled"></td>
+              ${page.dbSchema.map(c => `<td>${propCellControl(page, r, c)}</td>`).join('')}
+              <td><button class="pg-row-open-btn" data-row="${r.id}">Open</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="pg-new-btn" id="pg-db-new-row">+ New row</button>
+    </div>`;
+}
+
+function boardViewHTML(page, view) {
+  const selectCols = page.dbSchema.filter(c => c.type === 'select');
+  if (!view.groupBy || !selectCols.find(c => c.id === view.groupBy)) view.groupBy = selectCols[0]?.id || null;
+  if (!view.groupBy) return `<div class="pg-empty"><div class="pg-empty-title">No Select property yet</div><div class="pg-empty-sub">Board view groups rows by a Select property. Add one from "Properties".</div></div>`;
+  const col = page.dbSchema.find(c => c.id === view.groupBy);
+  const rows = getSortedFilteredRows(page, view);
+  const groups = (col.options || []).map(o => ({ opt: o, rows: rows.filter(r => r.props[col.id] === o.id) }));
+  groups.push({ opt: { id: '', label: 'No ' + col.name, color: '#8a8a92' }, rows: rows.filter(r => !r.props[col.id]) });
+  return `
+    <div class="pg-board-scroll">
+      ${groups.map(g => `
+        <div class="pg-board-col" data-opt="${g.opt.id}">
+          <div class="pg-board-col-head"><span class="pg-chip" style="background:${g.opt.color}22;color:${g.opt.color}">${escapeHTML(g.opt.label)}</span><span class="pg-board-count">${g.rows.length}</span></div>
+          <div class="pg-board-cards" data-opt="${g.opt.id}">
+            ${g.rows.map(r => `
+              <div class="pg-board-card" draggable="true" data-row="${r.id}">
+                <div class="pg-board-card-title">${escapeHTML(r.title || 'Untitled')}</div>
+                ${page.dbSchema.filter(c => c.id !== view.groupBy).slice(0, 2).map(c => rowPropPreview(c, r)).join('')}
+              </div>`).join('')}
+          </div>
+          <button class="pg-board-add-btn" data-opt="${g.opt.id}">+ New</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+function rowPropPreview(col, row) {
+  const val = row.props[col.id];
+  if (val == null || val === '' || (Array.isArray(val) && !val.length)) return '';
+  if (col.type === 'select') { const o = (col.options || []).find(x => x.id === val); return o ? `<span class="pg-chip" style="background:${o.color}22;color:${o.color}">${escapeHTML(o.label)}</span>` : ''; }
+  if (col.type === 'multiselect') return (val || []).map(id => { const o = (col.options || []).find(x => x.id === id); return o ? `<span class="pg-chip" style="background:${o.color}22;color:${o.color}">${escapeHTML(o.label)}</span>` : ''; }).join('');
+  if (col.type === 'checkbox') return val ? `<span class="pg-chip">✓ ${escapeHTML(col.name)}</span>` : '';
+  return `<span class="pg-board-card-prop">${escapeHTML(String(val))}</span>`;
+}
+
+function galleryViewHTML(page, view) {
+  const rows = getSortedFilteredRows(page, view);
+  return `
+    <div class="pg-gallery-grid">
+      ${rows.map(r => `
+        <div class="pg-gallery-card" data-row="${r.id}">
+          <div class="pg-gallery-title">${escapeHTML(r.title || 'Untitled')}</div>
+          <div class="pg-gallery-props">${page.dbSchema.slice(0, 3).map(c => rowPropPreview(c, r)).join('')}</div>
+        </div>`).join('')}
+      <button class="pg-gallery-card pg-gallery-add" id="pg-db-new-row-gallery">+ New</button>
+    </div>`;
+}
+
+function calendarViewHTML(page, view) {
+  const dateCols = page.dbSchema.filter(c => c.type === 'date');
+  if (!view.groupBy || !dateCols.find(c => c.id === view.groupBy)) view.groupBy = dateCols[0]?.id || null;
+  if (!view.groupBy) return `<div class="pg-empty"><div class="pg-empty-title">No Date property yet</div><div class="pg-empty-sub">Calendar view groups rows by a Date property. Add one from "Properties".</div></div>`;
+  const cursor = PG.calMonth[page.id] || (() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; })();
+  PG.calMonth[page.id] = cursor;
+  const rows = getSortedFilteredRows(page, view);
+  const byDate = {};
+  rows.forEach(r => { const d = r.props[view.groupBy]; if (d) { (byDate[d] = byDate[d] || []).push(r); } });
+  const first = new Date(cursor.year, cursor.month, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const monthLabel = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let cells = '';
+  for (let i = 0; i < startDow; i++) cells += `<div class="pg-cal-cell pg-cal-empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const items = byDate[dateStr] || [];
+    cells += `
+      <div class="pg-cal-cell${dateStr === todayStr ? ' pg-cal-today' : ''}" data-date="${dateStr}">
+        <div class="pg-cal-daynum">${d}</div>
+        ${items.map(r => `<div class="pg-cal-pill" data-row="${r.id}">${escapeHTML(r.title || 'Untitled')}</div>`).join('')}
+      </div>`;
+  }
+  return `
+    <div class="pg-cal-header">
+      <button class="pg-head-btn" id="pg-cal-prev">‹</button>
+      <span class="pg-cal-month-label">${monthLabel}</span>
+      <button class="pg-head-btn" id="pg-cal-today-btn">Today</button>
+      <button class="pg-head-btn" id="pg-cal-next">›</button>
+    </div>
+    <div class="pg-cal-grid pg-cal-dow">${['S','M','T','W','T','F','S'].map(d => `<div>${d}</div>`).join('')}</div>
+    <div class="pg-cal-grid">${cells}</div>`;
+}
+
+function wireDbBodyEvents(page, view) {
+  const body = document.getElementById('pg-db-body');
+  if (!body) return;
+
+  body.querySelectorAll('.pg-cell-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const row = page.dbRows.find(r => r.id === inp.dataset.row);
+      if (!row) return;
+      const col = inp.dataset.col;
+      if (col === 'title') row.title = inp.value; else row.props[col] = inp.type === 'number' ? (inp.value === '' ? '' : parseFloat(inp.value)) : inp.value;
+      touchPage(page);
+      if (view.type === 'board' || view.type === 'calendar' || view.type === 'gallery') renderDbBody(page, view);
+    });
+  });
+  body.querySelectorAll('.pg-cell-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const row = page.dbRows.find(r => r.id === cb.dataset.row);
+      if (!row) return;
+      row.props[cb.dataset.col] = cb.checked;
+      touchPage(page);
+    });
+  });
+  body.querySelectorAll('.pg-select-chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => openSelectPicker(page, view, btn.dataset.row, btn.dataset.col, btn));
+  });
+  body.querySelectorAll('.pg-row-open-btn').forEach(btn => btn.addEventListener('click', () => openRowDetail(page, view, btn.dataset.row)));
+  body.querySelectorAll('.pg-board-card, .pg-gallery-card[data-row], .pg-cal-pill').forEach(card => {
+    card.addEventListener('click', (e) => { if (e.target.closest('input')) return; openRowDetail(page, view, card.dataset.row); });
+  });
+  document.getElementById('pg-db-new-row')?.addEventListener('click', () => { const r = newRow(page); renderDbBody(page, view); openRowDetail(page, view, r.id); });
+  document.getElementById('pg-db-new-row-gallery')?.addEventListener('click', () => { const r = newRow(page); renderDbBody(page, view); openRowDetail(page, view, r.id); });
+  body.querySelectorAll('.pg-board-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = {}; if (btn.dataset.opt) preset[view.groupBy] = btn.dataset.opt;
+      const r = newRow(page, preset);
+      renderDbBody(page, view);
+      openRowDetail(page, view, r.id);
+    });
+  });
+  body.querySelectorAll('.pg-cal-cell[data-date]').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+      if (e.target.closest('.pg-cal-pill')) return;
+      const preset = {}; preset[view.groupBy] = cell.dataset.date;
+      const r = newRow(page, preset);
+      renderDbBody(page, view);
+      openRowDetail(page, view, r.id);
+    });
+  });
+  document.getElementById('pg-cal-prev')?.addEventListener('click', () => { shiftCalMonth(page, -1); renderDbBody(page, view); });
+  document.getElementById('pg-cal-next')?.addEventListener('click', () => { shiftCalMonth(page, 1); renderDbBody(page, view); });
+  document.getElementById('pg-cal-today-btn')?.addEventListener('click', () => { const d = new Date(); PG.calMonth[page.id] = { year: d.getFullYear(), month: d.getMonth() }; renderDbBody(page, view); });
+
+  // Board drag-and-drop between columns.
+  let dragRowId = null;
+  body.querySelectorAll('.pg-board-card').forEach(card => {
+    card.addEventListener('dragstart', () => { dragRowId = card.dataset.row; });
+  });
+  body.querySelectorAll('.pg-board-cards').forEach(col => {
+    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('pg-drop-target'); });
+    col.addEventListener('dragleave', () => col.classList.remove('pg-drop-target'));
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('pg-drop-target');
+      const row = page.dbRows.find(r => r.id === dragRowId);
+      if (!row) return;
+      row.props[view.groupBy] = col.dataset.opt || '';
+      touchPage(page);
+      renderDbBody(page, view);
+    });
+  });
+}
+
+function shiftCalMonth(page, delta) {
+  const c = PG.calMonth[page.id];
+  let m = c.month + delta, y = c.year;
+  if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+  PG.calMonth[page.id] = { year: y, month: m };
+}
+
+function openSelectPicker(page, view, rowId, colId, anchorEl) {
+  const col = page.dbSchema.find(c => c.id === colId);
+  const row = page.dbRows.find(r => r.id === rowId);
+  if (!col || !row) return;
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu pg-select-menu';
+  const isMulti = col.type === 'multiselect';
+  const current = isMulti ? (row.props[colId] || []) : row.props[colId];
+  menu.innerHTML = (col.options || []).map(o => `
+    <button data-opt="${o.id}" class="pg-select-opt${isMulti ? (current.includes(o.id) ? ' pg-selected' : '') : (current === o.id ? ' pg-selected' : '')}">
+      <span class="pg-chip" style="background:${o.color}22;color:${o.color}">${escapeHTML(o.label)}</span>
+    </button>`).join('') + `<button class="pg-select-new-opt" data-newopt="1">+ New option</button>` + (isMulti || !current ? '' : `<button class="pg-select-clear" data-clear="1">Clear</button>`);
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.newopt) {
+      const label = prompt('New option name');
+      if (label && label.trim()) {
+        const colors = ['#7c6fff', '#00c2ff', '#2ecc71', '#f5a623', '#ff5d5d', '#ca5cff', '#8a8a92'];
+        const opt = { id: newId('opt'), label: label.trim(), color: colors[(col.options || []).length % colors.length] };
+        col.options = col.options || []; col.options.push(opt);
+        if (isMulti) { row.props[colId] = [...(row.props[colId] || []), opt.id]; } else { row.props[colId] = opt.id; }
+        touchPage(page);
+        menu.remove();
+        renderDbBody(page, view);
+      }
+      return;
+    }
+    if (btn.dataset.clear) { row.props[colId] = isMulti ? [] : ''; touchPage(page); menu.remove(); renderDbBody(page, view); return; }
+    const optId = btn.dataset.opt;
+    if (!optId) return;
+    if (isMulti) {
+      const arr = row.props[colId] || [];
+      row.props[colId] = arr.includes(optId) ? arr.filter(x => x !== optId) : [...arr, optId];
+      touchPage(page);
+      renderDbBody(page, view);
+      return; // keep menu open for multi-select toggling
+    }
+    row.props[colId] = optId;
+    touchPage(page);
+    menu.remove();
+    renderDbBody(page, view);
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function openRowDetail(page, view, rowId) {
+  const row = page.dbRows.find(r => r.id === rowId);
+  if (!row) return;
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal pg-row-modal">
+      <input type="text" class="pg-title-input" id="pg-row-title" value="${escapeHTML(row.title || '')}" placeholder="Untitled">
+      <div class="pg-row-props" id="pg-row-props">
+        ${page.dbSchema.map(c => `
+          <div class="pg-row-prop-line">
+            <span class="pg-row-prop-label">${escapeHTML(c.name)}</span>
+            <span class="pg-row-prop-ctl">${propCellControl(page, row, c)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="pg-row-modal-actions">
+        <button class="ghost-btn" id="pg-row-open-page">📄 Open as full page</button>
+        <button class="ghost-btn pg-ctx-danger" id="pg-row-delete">Delete row</button>
+      </div>
+      <button class="primary-btn full" id="pg-row-close">Done</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#pg-row-title').addEventListener('input', (e) => { row.title = e.target.value; touchPage(page); });
+  modal.querySelectorAll('.pg-cell-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const col = inp.dataset.col;
+      row.props[col] = inp.type === 'number' ? (inp.value === '' ? '' : parseFloat(inp.value)) : inp.value;
+      touchPage(page);
+    });
+  });
+  modal.querySelectorAll('.pg-cell-check').forEach(cb => cb.addEventListener('change', () => { row.props[cb.dataset.col] = cb.checked; touchPage(page); }));
+  modal.querySelectorAll('.pg-select-chip-btn').forEach(btn => btn.addEventListener('click', () => openSelectPicker(page, view, row.id, btn.dataset.col, btn)));
+  modal.querySelector('#pg-row-open-page').addEventListener('click', () => {
+    let target;
+    if (row.pageId && getPage(row.pageId)) target = getPage(row.pageId);
+    else { target = createPage({ parentId: page.id, title: row.title || 'Untitled', icon: '📄' }); row.pageId = target.id; touchPage(page); }
+    modal.remove();
+    pagesOpenPage(target.id);
+  });
+  modal.querySelector('#pg-row-delete').addEventListener('click', () => {
+    if (!confirm('Delete this row?')) return;
+    page.dbRows = page.dbRows.filter(r => r.id !== rowId);
+    touchPage(page);
+    modal.remove();
+    renderDbBody(page, view);
+  });
+  modal.querySelector('#pg-row-close').addEventListener('click', () => { modal.remove(); renderDbBody(page, view); });
+  modal.addEventListener('click', (e) => { if (e.target === modal) { modal.remove(); renderDbBody(page, view); } });
+}
+
+function openAddViewMenu(page, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu';
+  menu.innerHTML = `
+    <button data-t="table">☰ Table</button>
+    <button data-t="board">▤ Board</button>
+    <button data-t="calendar">📅 Calendar</button>
+    <button data-t="gallery">▦ Gallery</button>
+  `;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const t = e.target.closest('button')?.dataset.t;
+    if (!t) return;
+    const view = { id: newId('view'), name: t.charAt(0).toUpperCase() + t.slice(1), type: t };
+    if (t === 'board') view.groupBy = page.dbSchema.find(c => c.type === 'select')?.id || null;
+    if (t === 'calendar') view.groupBy = page.dbSchema.find(c => c.type === 'date')?.id || null;
+    page.dbViews.push(view);
+    page.dbActiveView = view.id;
+    touchPage(page);
+    menu.remove();
+    renderDatabaseView(page);
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function openPropsMenu(page, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu pg-props-menu';
+  menu.innerHTML = page.dbSchema.map(c => `<button data-col="${c.id}">${escapeHTML(c.name)} <span class="pg-prop-type">${c.type}</span></button>`).join('') +
+    `<button data-newprop="1" class="pg-select-new-opt">+ New property</button>`;
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.newprop) { menu.remove(); openNewPropertyModal(page); return; }
+    if (btn.dataset.col) { menu.remove(); openNewPropertyModal(page, btn.dataset.col); }
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+function openNewPropertyModal(page, editColId) {
+  const editing = editColId ? page.dbSchema.find(c => c.id === editColId) : null;
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal">
+      <div class="pg-modal-title">${editing ? 'Edit property' : 'New property'}</div>
+      <input type="text" class="text-input" id="pg-prop-name" placeholder="Property name" value="${escapeHTML(editing?.name || '')}">
+      <select class="select-input" id="pg-prop-type">
+        ${DB_PROP_TYPES.map(t => `<option value="${t}" ${editing?.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <div id="pg-prop-options" class="pg-prop-options"></div>
+      <div class="pg-row-modal-actions">
+        ${editing ? '<button class="ghost-btn pg-ctx-danger" id="pg-prop-delete">Delete property</button>' : ''}
+      </div>
+      <button class="primary-btn full" id="pg-prop-save">${editing ? 'Save' : 'Add property'}</button>
+      <button class="ghost-btn full pg-modal-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+  const typeSel = modal.querySelector('#pg-prop-type');
+  const optsWrap = modal.querySelector('#pg-prop-options');
+  const renderOptsEditor = () => {
+    if (!['select', 'multiselect'].includes(typeSel.value)) { optsWrap.innerHTML = ''; return; }
+    const opts = editing?.options || [];
+    optsWrap.innerHTML = `<div class="pg-empty-sub">Options are added inline while editing rows — save the property first.</div>`;
+  };
+  typeSel.addEventListener('change', renderOptsEditor);
+  renderOptsEditor();
+  modal.querySelector('#pg-prop-save').addEventListener('click', () => {
+    const name = modal.querySelector('#pg-prop-name').value.trim();
+    if (!name) return;
+    const type = typeSel.value;
+    if (editing) {
+      editing.name = name;
+      if (editing.type !== type) { editing.type = type; if (['select', 'multiselect'].includes(type) && !editing.options) editing.options = []; }
+    } else {
+      const col = { id: newId('col'), name, type };
+      if (['select', 'multiselect'].includes(type)) col.options = [];
+      page.dbSchema.push(col);
+      page.dbRows.forEach(r => { r.props[col.id] = type === 'multiselect' ? [] : type === 'checkbox' ? false : ''; });
+    }
+    touchPage(page);
+    modal.remove();
+    renderDatabaseView(page);
+  });
+  if (editing) modal.querySelector('#pg-prop-delete')?.addEventListener('click', () => {
+    if (!confirm(`Delete property "${editing.name}"? This removes its data from every row.`)) return;
+    page.dbSchema = page.dbSchema.filter(c => c.id !== editColId);
+    page.dbRows.forEach(r => { delete r.props[editColId]; });
+    page.dbViews.forEach(v => { if (v.groupBy === editColId) v.groupBy = null; if (v.sortBy === editColId) v.sortBy = null; v.filters = (v.filters || []).filter(f => f.colId !== editColId); });
+    touchPage(page);
+    modal.remove();
+    renderDatabaseView(page);
+  });
+  modal.querySelector('.pg-modal-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function openSortMenu(page, view, anchorEl) {
+  closeFloatingMenus();
+  const menu = document.createElement('div');
+  menu.className = 'pg-ctx-menu';
+  const cols = [{ id: 'title', name: 'Title' }, ...page.dbSchema];
+  menu.innerHTML = cols.map(c => `<button data-col="${c.id}">${escapeHTML(c.name)}${view.sortBy === c.id ? (view.sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</button>`).join('') +
+    (view.sortBy ? `<button data-clear="1" class="pg-ctx-danger">Clear sort</button>` : '');
+  document.body.appendChild(menu);
+  positionFloating(menu, anchorEl);
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.clear) { view.sortBy = null; } else {
+      if (view.sortBy === btn.dataset.col) view.sortDir = view.sortDir === 'desc' ? 'asc' : 'desc';
+      else { view.sortBy = btn.dataset.col; view.sortDir = 'asc'; }
+    }
+    touchPage(page);
+    menu.remove();
+    renderDatabaseView(page);
+  });
+  setTimeout(() => document.addEventListener('click', function closer(ev) {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); }
+  }), 0);
+}
+
+const FILTER_OPS = {
+  text: [['contains', 'contains'], ['is', 'is']], url: [['contains', 'contains']], person: [['contains', 'contains']],
+  number: [['is', '='], ['gt', '>'], ['lt', '<']],
+  select: [['is', 'is'], ['isnot', 'is not']], multiselect: [['is', 'contains']],
+  date: [['is', 'is'], ['before', 'before'], ['after', 'after']],
+  checkbox: [['checked', 'checked'], ['unchecked', 'unchecked']],
+};
+
+function openFilterMenu(page, view, anchorEl) {
+  closeFloatingMenus();
+  view.filters = view.filters || [];
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  const cols = [{ id: 'title', name: 'Title', type: 'text' }, ...page.dbSchema];
+  const renderFilterRow = (f, i) => {
+    const col = cols.find(c => c.id === f.colId) || cols[0];
+    const ops = FILTER_OPS[col.type] || FILTER_OPS.text;
+    const needsValue = !['checked', 'unchecked'].includes(f.op);
+    let valueCtl = '';
+    if (needsValue) {
+      if (col.type === 'select' || col.type === 'multiselect') {
+        valueCtl = `<select class="select-input pg-filter-value" data-i="${i}">${(col.options || []).map(o => `<option value="${o.id}" ${f.value === o.id ? 'selected' : ''}>${escapeHTML(o.label)}</option>`).join('')}</select>`;
+      } else if (col.type === 'date') {
+        valueCtl = `<input type="date" class="text-input pg-filter-value" data-i="${i}" value="${f.value || ''}">`;
+      } else {
+        valueCtl = `<input type="text" class="text-input pg-filter-value" data-i="${i}" value="${escapeHTML(f.value || '')}" placeholder="Value">`;
+      }
+    }
+    return `
+      <div class="pg-filter-row">
+        <select class="select-input pg-filter-col" data-i="${i}">${cols.map(c => `<option value="${c.id}" ${c.id === f.colId ? 'selected' : ''}>${escapeHTML(c.name)}</option>`).join('')}</select>
+        <select class="select-input pg-filter-op" data-i="${i}">${ops.map(([v, l]) => `<option value="${v}" ${f.op === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        ${valueCtl}
+        <button class="pg-filter-remove" data-i="${i}">✕</button>
+      </div>`;
+  };
+  const render = () => {
+    modal.querySelector('.pg-modal').innerHTML = `
+      <div class="pg-modal-title">Filters</div>
+      <div id="pg-filter-rows">${view.filters.map(renderFilterRow).join('') || '<div class="pg-empty-sub">No filters yet.</div>'}</div>
+      <button class="ghost-btn full" id="pg-filter-add" ${view.filters.length >= 3 ? 'disabled' : ''}>+ Add filter${view.filters.length >= 3 ? ' (max 3)' : ''}</button>
+      <button class="primary-btn full" id="pg-filter-done">Done</button>`;
+    wire();
+  };
+  const wire = () => {
+    modal.querySelector('#pg-filter-add')?.addEventListener('click', () => {
+      const col = cols[0];
+      view.filters.push({ colId: col.id, op: (FILTER_OPS[col.type] || FILTER_OPS.text)[0][0], value: '' });
+      render();
+    });
+    modal.querySelectorAll('.pg-filter-col').forEach(sel => sel.addEventListener('change', () => {
+      const i = +sel.dataset.i; const col = cols.find(c => c.id === sel.value);
+      view.filters[i] = { colId: sel.value, op: (FILTER_OPS[col.type] || FILTER_OPS.text)[0][0], value: '' };
+      render();
+    }));
+    modal.querySelectorAll('.pg-filter-op').forEach(sel => sel.addEventListener('change', () => { view.filters[+sel.dataset.i].op = sel.value; render(); }));
+    modal.querySelectorAll('.pg-filter-value').forEach(inp => inp.addEventListener('input', () => { view.filters[+inp.dataset.i].value = inp.value; }));
+    modal.querySelectorAll('.pg-filter-remove').forEach(btn => btn.addEventListener('click', () => { view.filters.splice(+btn.dataset.i, 1); render(); }));
+    modal.querySelector('#pg-filter-done')?.addEventListener('click', () => { touchPage(page); modal.remove(); renderDatabaseView(page); });
+  };
+  modal.innerHTML = `<div class="pg-modal"></div>`;
+  document.body.appendChild(modal);
+  render();
+  modal.addEventListener('click', (e) => { if (e.target === modal) { touchPage(page); modal.remove(); renderDatabaseView(page); } });
+}
+
+/* ── Wire the tab-level chrome (back + search buttons) ── */
+function setupPagesHub() {
+  document.getElementById('pages-back-btn')?.addEventListener('click', () => pagesGoBack());
+  document.getElementById('pages-search-btn')?.addEventListener('click', () => openPagesSearch());
 }
