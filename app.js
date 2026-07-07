@@ -56,7 +56,8 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Custom commands and task lists
 - Knowledge lookups: "who is X" / "what is X" / "tell me about X" pull a real Wikipedia summary, injected as a KNOWLEDGE LOOKUP block below
 - /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
-- Device utilities (Android app): open ANY installed app by name and any Settings screen ("open proton vpn", "open wifi settings")
+- Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
+- Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 
 Rules:
 - You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
@@ -369,6 +370,21 @@ function detectAppAction(text) {
   const t = text.trim();
   let m;
 
+  // A pasted link on its own → just open it (deep-links into the right app)
+  const bare = t.replace(/[.,!?]+$/, '').trim();
+  if (/^(?:https?:\/\/|www\.)\S+$/i.test(bare) && !/\s/.test(bare)) {
+    return { type: 'url', label: 'Opening that link', url: bare.match(/^https?:\/\//i) ? bare : 'https://' + bare };
+  }
+  // "open youtube.com", "go to github.com/mh1435"
+  if ((m = bare.match(/^(?:please\s+)?(?:open|go to|visit|take me to)\s+((?:https?:\/\/|www\.)\S+|[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)$/i))) {
+    const u = m[1].match(/^https?:\/\//i) ? m[1] : 'https://' + m[1];
+    return { type: 'url', label: `Opening ${m[1]}`, url: u };
+  }
+  // Song detection — "what song is this", "shazam this"
+  if (/^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?|what song is (?:this|that|playing)|identify (?:this |the )?song|detect (?:this |the )?song|name (?:this|that) song|shazam(?: (?:this|it))?)[.?!]?$/i.test(t)) {
+    return { type: 'music' };
+  }
+
   if ((m = t.match(/\b(?:play|search)\s+(.+?)\s+on\s+youtube\b/i))) {
     return { type: 'url', label: `YouTube search: ${m[1]}`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}` };
   }
@@ -410,6 +426,34 @@ function detectAppAction(text) {
     }
   }
   return null;
+}
+
+// Open a URL through the system resolver on Android (deep-links straight into
+// the matching app — Instagram links open Instagram); browser tab otherwise.
+async function openLink(url) {
+  const Native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
+  if (Native) {
+    try { const r = await Native.openUrl({ url }); if (r?.ok) return; } catch (_) {}
+  }
+  window.open(url, '_blank');
+}
+
+// Shazam-style song detection: hands off to Google's "Search a song"
+// listener (or Shazam/SoundHound) via the native plugin.
+async function runSongDetection() {
+  const Native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidSystem : null;
+  if (!Native) {
+    appendMessage('system', '🎵 Song detection needs the VOID Android app — in the browser I can\'t listen to what\'s playing.');
+    return;
+  }
+  try {
+    const r = await Native.detectMusic();
+    if (r?.ok) {
+      appendMessage('system', `🎵 Listening via ${r.via} — hold your phone near the music.`);
+      return;
+    }
+  } catch (_) {}
+  appendMessage('system', 'To identify songs, install the Google app or Shazam and try again.');
 }
 
 async function initLiveContext() {
@@ -2701,7 +2745,12 @@ async function sendMessage() {
 
     if (appAction.type === 'url') {
       appendMessage('system', `🚀 ${appAction.label}`);
-      window.open(appAction.url, '_blank');
+      await openLink(appAction.url);
+      return;
+    }
+
+    if (appAction.type === 'music') {
+      await runSongDetection();
       return;
     }
 
@@ -2729,6 +2778,8 @@ async function sendMessage() {
         const r = await NativeSystem.openApp({ query: appAction.query });
         if (r?.ok) { appendMessage('system', `🚀 Opening ${r.label}…`); return; }
       } catch (_) {}
+      // Fuzzy match failed but we know a web link for it — use that instead
+      if (appAction.url) { appendMessage('system', `🚀 Opening ${appAction.label}`); await openLink(appAction.url); return; }
       appendMessage('system', `I couldn't find an app called “${appAction.query}” on this device.`);
       return;
     }
@@ -4808,6 +4859,7 @@ function setupPlusMenu() {
       document.getElementById('persona-picker')?.classList.remove('open');
       document.getElementById('image-style-picker')?.classList.add('open');
     }
+    else if (act === 'song') runSongDetection();
     else if (act === 'research') setToolMode('research');
     else if (act === 'draft') setToolMode('doc');
     else if (act === 'forge') setToolMode('gh');

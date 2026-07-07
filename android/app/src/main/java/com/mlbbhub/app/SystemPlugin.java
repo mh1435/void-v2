@@ -102,6 +102,65 @@ public class SystemPlugin extends Plugin {
         return 0;
     }
 
+    /** Open any URL via the system resolver — deep-links into installed apps
+     *  (an Instagram link opens the Instagram app, not a browser tab). */
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String url = call.getString("url", "");
+        JSObject ret = new JSObject();
+        ret.put("ok", viewUrl(getContext(), url));
+        call.resolve(ret);
+    }
+
+    public static boolean viewUrl(android.content.Context ctx, String url) {
+        if (url == null || url.trim().isEmpty()) return false;
+        String u = url.trim();
+        if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://" + u;
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(u));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    /** Shazam-style song detection: Google's "Search a song" listener, or
+     *  Shazam/SoundHound if installed. Returns which one handled it. */
+    @PluginMethod
+    public void detectMusic(PluginCall call) {
+        String via = startMusicSearch(getContext());
+        JSObject ret = new JSObject();
+        ret.put("ok", via != null);
+        if (via != null) ret.put("via", via);
+        call.resolve(ret);
+    }
+
+    public static String startMusicSearch(android.content.Context ctx) {
+        try {
+            Intent i = new Intent("com.google.android.googlequicksearchbox.MUSIC_SEARCH");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "Google";
+        } catch (Exception ignored) {}
+        String[][] apps = {
+            {"com.shazam.android", "Shazam"}, {"com.shazam.encore.android", "Shazam"},
+            {"com.melodis.midomiMusicIdentifier.freemium", "SoundHound"},
+            {"com.melodis.midomiMusicIdentifier", "SoundHound"},
+        };
+        PackageManager pm = ctx.getPackageManager();
+        for (String[] a : apps) {
+            try {
+                Intent li = pm.getLaunchIntentForPackage(a[0]);
+                if (li != null) {
+                    li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(li);
+                    return a[1];
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
     /* ── Voice-pill hook: handle "open X" / "open X settings" natively ─────
        Used by FloatingService so "Okay VOID, open spotify" from the home
        screen actually launches the app instead of asking the LLM. Returns a
@@ -110,6 +169,20 @@ public class SystemPlugin extends Plugin {
         if (text == null) return null;
         String t = text.toLowerCase(Locale.ROOT).trim().replaceAll("[.?!]+$", "").trim();
         java.util.regex.Matcher m;
+
+        // Links — a pasted URL or "open youtube.com"
+        m = java.util.regex.Pattern.compile("^(?:(?:please )?(?:open|go to|visit|take me to)\\s+)?((?:https?://|www\\.)\\S+|[a-z0-9-]+(?:\\.[a-z0-9-]+)+(?:/\\S*)?)$").matcher(t);
+        if (m.matches()) {
+            if (viewUrl(ctx, m.group(1))) return "Opening that link.";
+            return "I couldn't open that link.";
+        }
+
+        // Song detection — "what song is this", "shazam this"
+        if (t.matches("^(?:what(?:'s| is) (?:this|that|the) song(?: playing)?|what song is (?:this|that|playing)|identify (?:this |the )?song|detect (?:this |the )?song|name (?:this|that) song|shazam(?: (?:this|it))?)$")) {
+            String via = startMusicSearch(ctx);
+            return via != null ? "Listening via " + via + "…"
+                : "You'll need the Google app or Shazam installed to identify songs.";
+        }
 
         m = java.util.regex.Pattern.compile("^(?:please )?(?:open|show|launch|go to|take me to)\\s+(?:the |my )?(.+?)\\s+settings?$").matcher(t);
         if (m.matches()) {
