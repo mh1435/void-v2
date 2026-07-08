@@ -498,15 +498,16 @@ async function transcribeStudyAudio(file) {
   const typingId = appendTyping();
   try {
     let text;
-    if (file.size <= 23 * MB) {
-      // Fits the transcription API directly, whatever the format.
+    if (file.size <= 10 * MB) {
+      // Small enough to send whole (uploads reliably on mobile), any format.
       text = await transcribeBlob(file, file.type || 'audio/mp4', file.name);
     } else {
       // Too big to send whole: decode it (any audio/video the phone can play),
-      // downsample to 16 kHz mono, and transcribe in 10-minute parts.
-      const chunks = await audioFileToWavChunks(file, 16000, 600);
+      // downsample to 16 kHz mono, and transcribe in small, upload-friendly parts.
+      const chunks = await audioFileToWavChunks(file, 16000, 120);
       const parts = [];
       for (let i = 0; i < chunks.length; i++) {
+        updateTyping(typingId, `Transcribing… part ${i + 1} of ${chunks.length}`);
         parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
       }
       text = parts.filter(Boolean).join('\n').trim();
@@ -562,9 +563,13 @@ async function transcribeBlob(blob, mime, name) {
 
 // Decode any audio (or the audio track of a video), downsample to 16 kHz
 // mono, and return WAV blobs of at most `chunkSec` seconds each.
-async function audioFileToWavChunks(file, rate = 16000, chunkSec = 600) {
+async function audioFileToWavChunks(file, rate = 16000, chunkSec = 120) {
   const AC = window.AudioContext || window.webkitAudioContext;
-  const ac = new AC();
+  // Decode straight into a 16 kHz context when the browser honours it — that
+  // resamples during decode and uses ~3× less memory than decoding at 48 kHz
+  // then downsampling, which matters for 20-minute recordings on a phone.
+  let ac;
+  try { ac = new AC({ sampleRate: rate }); } catch (_) { ac = new AC(); }
   let decoded;
   try {
     decoded = await ac.decodeAudioData(await file.arrayBuffer());
@@ -572,6 +577,19 @@ async function audioFileToWavChunks(file, rate = 16000, chunkSec = 600) {
     try { ac.close(); } catch (_) {}
   }
   const chunks = [];
+  // Small chunks = small uploads. A 2-minute 16 kHz mono WAV is ~4 MB, which
+  // uploads reliably on mobile; a 10-minute one is ~19 MB and routinely drops.
+  if (decoded.sampleRate === rate) {
+    const data = decoded.getChannelData(0);
+    const per = rate * chunkSec;
+    for (let off = 0; off < data.length; off += per) {
+      const slice = data.subarray(off, Math.min(off + per, data.length));
+      if (slice.length < rate * 0.5) break;
+      chunks.push(new Blob([wavFromFloat32(slice, rate)], { type: 'audio/wav' }));
+    }
+    return chunks;
+  }
+  // Context ignored the requested rate — resample each chunk to 16 kHz.
   for (let off = 0; off < decoded.duration; off += chunkSec) {
     const dur = Math.min(chunkSec, decoded.duration - off);
     if (dur < 0.5) break;
@@ -3812,6 +3830,14 @@ function appendTyping() {
 function removeTyping(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
+}
+
+// Swap the typing dots for a short status line (e.g. transcription progress).
+function updateTyping(id, label) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const body = el.querySelector('.bubble-body');
+  if (body) body.innerHTML = `<span class="typing-dots"><span></span><span></span><span></span></span> <span class="typing-label">${escapeHTML(String(label))}</span>`;
 }
 
 function escapeHTML(str) {
@@ -8905,7 +8931,8 @@ function openLectureRecorder(page) {
     const banner = appendPageAiPending(page);
     if (banner) banner.textContent = 'Transcribing the lecture… (long ones take a minute)';
     let text = '', failReason = '';
-    try { text = await lectureAudioToText(new File([blob], 'lecture.webm', { type: blob.type })); }
+    try { text = await lectureAudioToText(new File([blob], 'lecture.webm', { type: blob.type }),
+      (i, n) => { if (banner) banner.textContent = `Transcribing the lecture… part ${i} of ${n}`; }); }
     catch (e) { failReason = String(e?.message || e || ''); }
     removePageAiPending(banner);
     if (!text || !text.trim()) {
@@ -8957,7 +8984,8 @@ function addLectureToPage(page, kind) {
         // diagnosable instead of always showing "couldn't read that".
         text = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
       } else {
-        text = await lectureAudioToText(file);
+        text = await lectureAudioToText(file,
+          (i, n) => { if (banner) banner.textContent = `Transcribing… part ${i} of ${n}`; });
       }
     } catch (e) { failReason = String(e?.message || e || '').replace(/^Error:\s*/, '').slice(0, 140); }
     removePageAiPending(banner);
@@ -9018,12 +9046,17 @@ function fileToDataURL(file) {
 }
 
 // Reuses the same chunked transcription pipeline as the Study Hub.
-async function lectureAudioToText(file) {
+async function lectureAudioToText(file, onProgress) {
   const MB = 1024 * 1024;
-  if (file.size <= 23 * MB) return await transcribeBlob(file, file.type || 'audio/mp4', file.name);
-  const chunks = await audioFileToWavChunks(file, 16000, 600);
+  if (file.size <= 10 * MB) return await transcribeBlob(file, file.type || 'audio/mp4', file.name);
+  // Long recording: decode + split into small 2-minute WAV parts that upload
+  // reliably on mobile, and report progress so the user sees it working.
+  const chunks = await audioFileToWavChunks(file, 16000, 120);
   const parts = [];
-  for (let i = 0; i < chunks.length; i++) parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
+  for (let i = 0; i < chunks.length; i++) {
+    onProgress?.(i + 1, chunks.length);
+    parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
+  }
   return parts.filter(Boolean).join('\n').trim();
 }
 
