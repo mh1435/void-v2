@@ -8178,6 +8178,7 @@ function openPageDetailMenu(page, anchorEl) {
   const menu = document.createElement('div');
   menu.className = 'pg-ctx-menu';
   menu.innerHTML = `
+    <button data-act="paper">📜 Open as paper</button>
     <button data-act="export">Export as document</button>
     <button data-act="duplicate">Duplicate</button>
     <button data-act="delete" class="pg-ctx-danger">Delete page</button>
@@ -8186,7 +8187,11 @@ function openPageDetailMenu(page, anchorEl) {
   positionFloating(menu, anchorEl);
   menu.addEventListener('click', (e) => {
     const act = e.target.closest('button')?.dataset.act;
-    if (act === 'export') {
+    if (act === 'paper') {
+      menu.remove();
+      openPaperView(page);
+      return;
+    } else if (act === 'export') {
       const text = pageToPlainText(page);
       storeDocument(page.title || 'Untitled', text);
       openDocFormatPicker(page.title || 'Untitled', text, anchorEl);
@@ -8910,6 +8915,7 @@ function openPageAiMenu(page, anchorEl) {
     <button data-act="lecture-photo">📸 Photo of notes/board</button>
     <button data-act="lecture-audio">🎙 Upload recording</button>
     <div class="pg-ai-section">STUDY</div>
+    <button data-act="paper">📜 Make it a paper <span class="pg-ai-hint">print / PDF</span></button>
     <button data-act="summary">📝 Summarize <span class="pg-ai-hint">new page</span></button>
     <button data-act="cheatsheet">📋 Make a cheat sheet <span class="pg-ai-hint">new page</span></button>
     <button data-act="quiz">🧠 Make a quiz <span class="pg-ai-hint">new page</span></button>
@@ -8932,6 +8938,7 @@ function openPageAiMenu(page, anchorEl) {
     if (act === 'flashcards') { generatePageStudy(page, 'flashcards'); return; }
     if (act === 'cheatsheet') { generatePageStudy(page, 'cheatsheet'); return; }
     if (act === 'summary') { generatePageStudy(page, 'summary'); return; }
+    if (act === 'paper') { openPaperView(page); return; }
 
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
@@ -9282,6 +9289,253 @@ async function generatePageStudy(page, kind) {
     return;
   }
   removePageAiPending(banner);
+}
+
+/* ── Paper: the page (e.g. a lecture transcript) rewritten as a real,
+   beautifully typeset paper — previewed on a white sheet inside VOID and
+   downloadable as a print-ready PDF. The PDF pages are rendered on a canvas,
+   so Arabic/RTL text and math symbols come out exactly as the browser draws
+   them (the old text-only PDF built here mangles anything non-Latin). ── */
+
+const PAPER_RTL_RE = /[֐-߿ࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
+
+async function openPaperView(page) {
+  const material = pageToPlainText(page).slice(0, 12000);
+  if (!material.trim() || material.trim().length < 20) { appendPageAiToast(page, 'Add lecture notes to the page first (✦ AI → Add lecture).'); return; }
+  const banner = appendPageAiPending(page);
+  if (banner) banner.textContent = 'Writing your paper…';
+  const raw = await quickAI(
+    'Rewrite the material as a clean, well-organized paper. Return ONLY valid JSON (no markdown fences, no prose): an array of 2-8 sections, each exactly {"heading":"short section title","items":[{"t":"p","text":"a paragraph"},{"t":"b","text":"a bullet point"}]}. Cover ALL the important content faithfully — organize and clean it up, never invent facts. Prefer short paragraphs and bullet lists. Write everything in the SAME language and script as the material. Write math with real Unicode symbols (π, √, ², →), never LaTeX.',
+    material);
+  removePageAiPending(banner);
+  let sections = null;
+  const parsed = parseJsonLoose(raw);
+  if (Array.isArray(parsed)) {
+    sections = parsed
+      .map(s => ({
+        heading: String(s?.heading || '').trim(),
+        items: (Array.isArray(s?.items) ? s.items : [])
+          .filter(it => it && String(it.text || '').trim())
+          .map(it => ({ t: it.t === 'b' ? 'b' : 'p', text: latexToUnicode(String(it.text).trim()) })),
+      }))
+      .filter(s => s.heading || s.items.length);
+  }
+  // If the AI is unreachable or returns junk, lay out the page's own blocks —
+  // the paper still opens, just without the AI cleanup.
+  if (!sections || !sections.length) sections = paperSectionsFromBlocks(page);
+  if (!sections.length) { appendPageAiToast(page, "Couldn't build a paper from this page yet."); return; }
+  const model = {
+    title: (page.title || 'Untitled').trim() || 'Untitled',
+    date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
+    sections,
+    rtl: PAPER_RTL_RE.test(page.title + ' ' + sections.map(s => s.heading + ' ' + s.items.map(i => i.text).join(' ')).join(' ')),
+  };
+  storeDocument(model.title, paperPlainText(model));
+  renderPaperOverlay(model);
+}
+
+function paperSectionsFromBlocks(page) {
+  const secs = [];
+  let cur = { heading: '', items: [] };
+  const pushCur = () => { if (cur.heading || cur.items.length) secs.push(cur); };
+  const walk = (blocks) => (blocks || []).forEach(b => {
+    const text = (b.text || '').trim();
+    if (/^heading/.test(b.type || '')) { if (text) { pushCur(); cur = { heading: text, items: [] }; } }
+    else if (['bulleted', 'numbered', 'todo'].includes(b.type)) { if (text) cur.items.push({ t: 'b', text }); }
+    else if (['paragraph', 'quote', 'callout', 'code', 'toggle'].includes(b.type)) { if (text) cur.items.push({ t: 'p', text }); }
+    if (b.children) walk(b.children);
+  });
+  walk(page.blocks);
+  pushCur();
+  return secs;
+}
+
+function paperPlainText(model) {
+  return model.sections.map(s =>
+    (s.heading ? s.heading + '\n' : '') +
+    s.items.map(it => (it.t === 'b' ? '• ' : '') + it.text).join('\n')
+  ).join('\n\n');
+}
+
+function renderPaperOverlay(model) {
+  document.querySelector('.paper-scrim')?.remove();
+  const scrim = document.createElement('div');
+  scrim.className = 'paper-scrim';
+  scrim.innerHTML = `
+    <div class="paper-topbar">
+      <button class="paper-top-btn" id="paper-close">✕</button>
+      <span class="paper-top-title">PAPER</span>
+      <div class="paper-top-actions">
+        <button class="paper-top-btn" id="paper-doc">⬇ Word</button>
+        <button class="paper-top-btn paper-top-primary" id="paper-pdf">⬇ PDF</button>
+      </div>
+    </div>
+    <div class="paper-scroll">
+      <div class="paper-sheet" ${model.rtl ? 'dir="rtl"' : ''}>
+        <div class="paper-head-row"><span class="paper-brand">VOID · STUDY PAPER</span><span class="paper-date">${escapeHTML(model.date)}</span></div>
+        <h1 class="paper-title">${escapeHTML(model.title)}</h1>
+        ${model.sections.map(sec => `
+          <section class="paper-sec">
+            ${sec.heading ? `<h2 class="paper-heading">${escapeHTML(sec.heading)}</h2>` : ''}
+            ${sec.items.map(it => it.t === 'b'
+              ? `<div class="paper-bullet"><span class="paper-bullet-dot">•</span><span>${escapeHTML(it.text)}</span></div>`
+              : `<p class="paper-p">${escapeHTML(it.text)}</p>`).join('')}
+          </section>`).join('')}
+        <div class="paper-foot">${escapeHTML(model.title)} — VOID</div>
+      </div>
+    </div>`;
+  document.body.appendChild(scrim);
+  scrim.querySelector('#paper-close').addEventListener('click', () => scrim.remove());
+  scrim.querySelector('#paper-pdf').addEventListener('click', () => downloadPaperPdf(model));
+  scrim.querySelector('#paper-doc').addEventListener('click', () => exportDocument(model.title, paperPlainText(model), 'doc'));
+}
+
+/* Render the paper onto A4 canvases (one per PDF page). Working in points
+   (595×842 = A4) at 2× device scale keeps print output crisp. */
+function paperCanvasPages(model) {
+  const S = 2, W = 595, H = 842, M = 62, FOOT = 46;
+  const bodyW = W - M * 2;
+  const SERIF = 'Georgia, "Noto Serif", "Times New Roman", serif';
+  const SANS = 'Inter, system-ui, sans-serif';
+  const rtl = model.rtl;
+  const X = rtl ? W - M : M;
+  const pages = [];
+  let ctx, y;
+
+  const newPage = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = W * S; canvas.height = H * S;
+    ctx = canvas.getContext('2d');
+    ctx.scale(S, S);
+    ctx.fillStyle = '#fdfcf8';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'alphabetic';
+    ctx.direction = rtl ? 'rtl' : 'ltr';
+    ctx.textAlign = rtl ? 'right' : 'left';
+    pages.push(canvas);
+    y = M;
+  };
+
+  const wrap = (text, font, maxW) => {
+    ctx.font = font;
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = []; let cur = '';
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; }
+      else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines.length ? lines : [''];
+  };
+
+  const ensure = (h) => { if (y + h > H - FOOT) newPage(); };
+
+  const drawText = (text, { font, size, lineH, color, indent = 0, hang = 0, bulletDot = false }) => {
+    const lines = wrap(text, font, bodyW - indent - hang);
+    lines.forEach((line, i) => {
+      ensure(lineH);
+      if (bulletDot && i === 0) {
+        ctx.font = '700 ' + size + 'px ' + font.split('px ')[1];
+        ctx.fillStyle = '#b7aa88';
+        ctx.fillText('•', rtl ? X - indent : X + indent, y + size);
+      }
+      ctx.font = font; ctx.fillStyle = color;
+      const tx = rtl ? X - indent - hang : X + indent + hang;
+      ctx.fillText(line, tx, y + size);
+      y += lineH;
+    });
+  };
+
+  newPage();
+
+  // Letterhead: small-caps brand + date over a hairline rule.
+  ctx.font = '600 8.5px ' + SANS; ctx.fillStyle = '#8a8578';
+  try { ctx.letterSpacing = '2px'; } catch (_) {}
+  ctx.fillText('VOID · STUDY PAPER', X, y + 8);
+  ctx.save();
+  ctx.textAlign = rtl ? 'left' : 'right';
+  ctx.fillText(model.date, rtl ? M : W - M, y + 8);
+  ctx.restore();
+  try { ctx.letterSpacing = '0px'; } catch (_) {}
+  y += 18;
+  ctx.strokeStyle = '#dcd7c9'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
+  y += 22;
+
+  drawText(model.title, { font: '700 24px ' + SERIF, size: 24, lineH: 31, color: '#1b1a17' });
+  y += 10;
+
+  model.sections.forEach(sec => {
+    if (sec.heading) {
+      ensure(52);
+      y += 12;
+      drawText(sec.heading, { font: '700 14px ' + SERIF, size: 14, lineH: 20, color: '#2a2823' });
+      ctx.strokeStyle = '#b7aa88'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      if (rtl) { ctx.moveTo(W - M, y); ctx.lineTo(W - M - 26, y); } else { ctx.moveTo(M, y); ctx.lineTo(M + 26, y); }
+      ctx.stroke();
+      y += 10;
+    }
+    sec.items.forEach(it => {
+      if (it.t === 'b') {
+        drawText(it.text, { font: '400 11px ' + SERIF, size: 11, lineH: 17.5, color: '#26241f', indent: 6, hang: 13, bulletDot: true });
+        y += 3.5;
+      } else {
+        drawText(it.text, { font: '400 11px ' + SERIF, size: 11, lineH: 17.5, color: '#26241f' });
+        y += 7;
+      }
+    });
+  });
+
+  // Footer pass: page numbers + hairline, once the total is known.
+  pages.forEach((canvas, i) => {
+    const c = canvas.getContext('2d');
+    c.strokeStyle = '#dcd7c9'; c.lineWidth = 0.8;
+    c.beginPath(); c.moveTo(M, H - 34); c.lineTo(W - M, H - 34); c.stroke();
+    c.font = '500 8.5px ' + SANS; c.fillStyle = '#8a8578';
+    c.textAlign = 'center'; c.direction = 'ltr';
+    c.fillText(`${i + 1} / ${pages.length}`, W / 2, H - 21);
+  });
+
+  return { pages, W, H };
+}
+
+// Wrap the rendered pages into a PDF by embedding each page as a JPEG
+// (DCTDecode) XObject — dependency-free, and Unicode-safe because the text
+// was already rasterized by the browser.
+function downloadPaperPdf(model) {
+  buzz();
+  const { pages, W, H } = paperCanvasPages(model);
+  const jpegs = pages.map(c => atob(c.toDataURL('image/jpeg', 0.92).split(',')[1]));
+
+  const catalogNum = 1, pagesNum = 2;
+  let nextNum = 3;
+  const pageNums = [], contentNums = [], imageNums = [];
+  jpegs.forEach(() => { pageNums.push(nextNum++); contentNums.push(nextNum++); imageNums.push(nextNum++); });
+
+  const objDefs = {};
+  objDefs[catalogNum] = `<< /Type /Catalog /Pages ${pagesNum} 0 R >>`;
+  objDefs[pagesNum] = `<< /Type /Pages /Kids [${pageNums.map(n => `${n} 0 R`).join(' ')}] /Count ${jpegs.length} >>`;
+  jpegs.forEach((jpg, i) => {
+    const stream = `q\n${W} 0 0 ${H} 0 0 cm\n/Im${i} Do\nQ`;
+    objDefs[pageNums[i]] = `<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im${i} ${imageNums[i]} 0 R >> >> /Contents ${contentNums[i]} 0 R >>`;
+    objDefs[contentNums[i]] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+    objDefs[imageNums[i]] = `<< /Type /XObject /Subtype /Image /Width ${pages[i].width} /Height ${pages[i].height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n${jpg}\nendstream`;
+  });
+
+  const totalObjs = nextNum - 1;
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (let n = 1; n <= totalObjs; n++) { offsets[n] = pdf.length; pdf += `${n} 0 obj\n${objDefs[n]}\nendobj\n`; }
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
+  for (let n = 1; n <= totalObjs; n++) pdf += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+  const bytes = new Uint8Array(pdf.length);
+  for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xff;
+  saveFileBlob(new Blob([bytes], { type: 'application/pdf' }), `${safeFileName(model.title)}.pdf`);
 }
 
 // Extract a JSON array from a model reply even if it wrapped it in prose or ``` fences.
