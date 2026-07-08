@@ -7778,9 +7778,10 @@ function pagesDrillInto(parentId) {
 // Icon/label for each kind of AI-generated study sub-page, shared by the
 // Study strip (Pages hub) and the filtered list it opens into.
 const STUDY_KIND_META = {
-  quiz: { icon: '🧠', label: 'Quizzes' },
-  cheatsheet: { icon: '📋', label: 'Cheat sheets' },
-  flashcards: { icon: '🎴', label: 'Flashcards' },
+  summary: { icon: '📝', label: 'Summaries', one: 'summary' },
+  quiz: { icon: '🧠', label: 'Quizzes', one: 'quiz' },
+  cheatsheet: { icon: '📋', label: 'Cheat sheets', one: 'cheat sheet' },
+  flashcards: { icon: '🎴', label: 'Flashcards', one: 'flashcard set' },
 };
 
 /* ── List view (sidebar-as-drilldown, mobile-first) ── */
@@ -7872,7 +7873,7 @@ function renderStudyKindList(kind) {
     <div class="pg-empty">
       <div class="pg-empty-icon">${meta.icon}</div>
       <div class="pg-empty-title">No ${meta.label.toLowerCase()} yet</div>
-      <div class="pg-empty-sub">Open any notes page → ✦ AI → Make a ${meta.label.toLowerCase().replace(/s$/, '')}.</div>
+      <div class="pg-empty-sub">Open any project → ✦ AI → Make a ${meta.one || meta.label.toLowerCase()}.</div>
     </div>`;
 
   root.innerHTML = `
@@ -8083,6 +8084,12 @@ function renderPageEditor(page) {
   const root = document.getElementById('pages-root');
   if (!root) return;
   const children = getChildren(page.id).filter(c => c.type !== 'database' || true);
+  // Every project (a regular notes page — not a database, not a study
+  // sub-page itself) carries fixed study sections: Summary, Quizzes, Cheat
+  // sheets, Flashcards. Generated material always has an obvious home, and an
+  // empty section is a one-tap Generate away.
+  const isProject = page.type !== 'database' && !page.studyKind;
+  const plainKids = isProject ? children.filter(c => !c.studyKind) : children;
   root.innerHTML = `
     <div class="pg-editor-view">
       ${pagesBreadcrumbHTML(page.parentId)}
@@ -8094,8 +8101,9 @@ function renderPageEditor(page) {
           <button class="pg-head-btn" id="pg-page-menu-btn">⋯</button>
         </div>
       </div>
+      ${isProject ? pageStudySectionsHTML(page, children) : ''}
       <div class="pg-subpages" id="pg-subpages">
-        ${children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
+        ${plainKids.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
         <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
       </div>
       <div class="pg-blocks" id="pg-blocks">${renderBlocks(page.blocks)}</div>
@@ -8106,6 +8114,27 @@ function renderPageEditor(page) {
   wirePageEditorChrome(page);
   wireBlockEvents(page);
   applyFocusIntent();
+}
+
+// The study sections rendered at the top of every project page: one row per
+// kind (Summary / Quizzes / Cheat sheets / Flashcards) with that project's
+// generated sub-pages as chips and a Generate button.
+function pageStudySectionsHTML(page, children) {
+  const secs = Object.keys(STUDY_KIND_META).map(kind => {
+    const meta = STUDY_KIND_META[kind];
+    const chips = children.filter(c => c.studyKind === kind)
+      .map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || meta.icon} ${escapeHTML(c.title || 'Untitled')}</button>`)
+      .join('');
+    return `
+      <div class="pg-study-sec">
+        <div class="pg-study-sec-head">
+          <span class="pg-study-sec-name">${meta.icon} ${meta.label}</span>
+          <button class="pg-study-sec-gen" data-kind="${kind}">✦ Generate</button>
+        </div>
+        <div class="pg-study-sec-items">${chips || `<span class="pg-study-sec-empty">Nothing yet — generate a ${meta.one} from these notes.</span>`}</div>
+      </div>`;
+  }).join('');
+  return `<div class="pg-study-sections">${secs}</div>`;
 }
 
 function wirePageEditorChrome(page) {
@@ -8128,6 +8157,9 @@ function wirePageEditorChrome(page) {
   document.getElementById('pg-add-subpage')?.addEventListener('click', () => openTemplatePicker(page.id));
   root.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => {
     chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id));
+  });
+  root.querySelectorAll('.pg-study-sec-gen').forEach(btn => {
+    btn.addEventListener('click', () => generatePageStudy(page, btn.dataset.kind));
   });
   document.getElementById('pg-add-block-btn')?.addEventListener('click', () => {
     const last = page.blocks[page.blocks.length - 1];
@@ -8878,7 +8910,7 @@ function openPageAiMenu(page, anchorEl) {
     <button data-act="lecture-photo">📸 Photo of notes/board</button>
     <button data-act="lecture-audio">🎙 Upload recording</button>
     <div class="pg-ai-section">STUDY</div>
-    <button data-act="summarize">✨ Summarize page</button>
+    <button data-act="summary">📝 Summarize <span class="pg-ai-hint">new page</span></button>
     <button data-act="cheatsheet">📋 Make a cheat sheet <span class="pg-ai-hint">new page</span></button>
     <button data-act="quiz">🧠 Make a quiz <span class="pg-ai-hint">new page</span></button>
     <button data-act="flashcards">🎴 Make flashcards <span class="pg-ai-hint">new page</span></button>
@@ -8899,18 +8931,17 @@ function openPageAiMenu(page, anchorEl) {
     if (act === 'quiz') { generatePageStudy(page, 'quiz'); return; }
     if (act === 'flashcards') { generatePageStudy(page, 'flashcards'); return; }
     if (act === 'cheatsheet') { generatePageStudy(page, 'cheatsheet'); return; }
+    if (act === 'summary') { generatePageStudy(page, 'summary'); return; }
 
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
     const UNI = ' Write any math/science with real Unicode symbols (π, ω, √, ², ₀, →), never LaTeX or $…$.';
-    const prompt = act === 'summarize'
-      ? 'Summarize this page in 3-5 concise sentences. Reply in the SAME language as the material.' + UNI
-      : 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.' + UNI;
+    const prompt = 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.' + UNI;
     const banner = appendPageAiPending(page);
     const result = await quickAI(prompt, text);
     removePageAiPending(banner);
     if (!result) return;
-    page.blocks.push({ ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '✨' : '✅', text: latexToUnicode(result.trim()) });
+    page.blocks.push({ ...blankBlock('callout'), calloutIcon: '✅', text: latexToUnicode(result.trim()) });
     touchPage(page);
     rerenderBlocks(page);
   });
@@ -9166,7 +9197,7 @@ async function generatePageStudy(page, kind) {
   const material = pageToPlainText(page).slice(0, 12000);
   if (!material.trim() || material.trim().length < 20) { appendPageAiToast(page, 'Add lecture notes to the page first (✦ AI → Add lecture).'); return; }
   const banner = appendPageAiPending(page);
-  if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : 'Making a cheat sheet…';
+  if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : kind === 'summary' ? 'Summarizing your notes…' : 'Making a cheat sheet…';
 
   const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes. Write math and science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NEVER LaTeX — no $…$, no \\frac/\\omega/\\sqrt; write fractions inline as a/b.';
 
@@ -9174,6 +9205,29 @@ async function generatePageStudy(page, kind) {
   // 🧠 Quiz, 🎴 Flashcards) under the source notes instead of piling more
   // blocks onto the same page — so a page of raw notes grows into an
   // organized little study set you can see and jump into at a glance.
+  if (kind === 'summary') {
+    const out = await quickAI(
+      'Summarize the material into clear, well-organized study notes: short bold headings, each followed by concise bullet points covering the key ideas, definitions and results. Plain text, no intro.' + LANG_RULE,
+      material);
+    removePageAiPending(banner);
+    if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
+    const blocks = [];
+    latexToUnicode(out).trim().split('\n').forEach(line => {
+      // Require whitespace after the bullet char so "**Heading**" doesn't
+      // lose its first asterisk and leak a stray "*" into the heading text.
+      const t = line.replace(/^\s*[-*•]\s+/, '').trim();
+      if (!t) return;
+      if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
+      else if (/^\s*[-*•]\s/.test(line)) blocks.push({ ...blankBlock('bulleted'), text: t });
+      else blocks.push({ ...blankBlock('paragraph'), text: t });
+    });
+    if (!blocks.length) blocks.push(blankBlock('paragraph'));
+    const sub = createPage({ parentId: page.id, title: uniqueSubPageTitle(page.id, 'Summary'), icon: '📝', blocks, studyKind: 'summary' });
+    touchPage(page);
+    pagesOpenPage(sub.id);
+    return;
+  }
+
   if (kind === 'cheatsheet') {
     const out = await quickAI(
       'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.' + LANG_RULE,
@@ -9182,7 +9236,9 @@ async function generatePageStudy(page, kind) {
     if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
     const blocks = [];
     latexToUnicode(out).trim().split('\n').forEach(line => {
-      const t = line.replace(/^\s*[-*•]\s*/, '').trim();
+      // Require whitespace after the bullet char so "**Heading**" doesn't
+      // lose its first asterisk and leak a stray "*" into the heading text.
+      const t = line.replace(/^\s*[-*•]\s+/, '').trim();
       if (!t) return;
       if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
       else blocks.push({ ...blankBlock('bulleted'), text: t });

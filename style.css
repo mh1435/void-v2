@@ -2801,6 +2801,21 @@ body.reduced-motion *::after {
 }
 .pg-head-btn:active { background: var(--accent-soft); color: var(--accent); }
 
+/* Fixed study sections inside every project page: Summary / Quizzes /
+   Cheat sheets / Flashcards, each listing its generated sub-pages with a
+   one-tap Generate. */
+.pg-study-sections { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+.pg-study-sec { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px; padding: 9px 11px; }
+.pg-study-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pg-study-sec-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.pg-study-sec-gen {
+  background: none; border: 1px dashed var(--glass-border); color: var(--accent);
+  font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 10px; cursor: pointer; flex-shrink: 0;
+}
+.pg-study-sec-gen:active { background: var(--accent-soft); }
+.pg-study-sec-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pg-study-sec-empty { font-size: 11.5px; color: var(--muted); padding: 2px 1px; }
+
 .pg-subpages { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
 .pg-subpage-chip {
   display: inline-flex; align-items: center; gap: 5px; background: var(--glass-bg); border: 1px solid var(--glass-border);
