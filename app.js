@@ -2697,10 +2697,16 @@ async function callOpenAICompat(url, key, model, messages) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `${res.status}`);
+    const msg = err.error?.message
+      || (typeof err.error === 'string' ? err.error : '')
+      || (err.detail ? (Array.isArray(err.detail) ? err.detail[0] : JSON.stringify(err.detail)).slice(0, 120) : '')
+      || `HTTP ${res.status}`;
+    throw new Error(msg);
   }
   const data = await res.json();
-  return data.choices[0].message.content;
+  const content = data?.choices?.[0]?.message?.content;
+  if (content == null) throw new Error(data?.error?.message || 'no response from the model');
+  return content;
 }
 
 // True token-by-token streaming (real ChatGPT/Claude-style live text) via
@@ -8907,21 +8913,33 @@ function addLectureToPage(page, kind) {
     if (!file) return;
     const banner = appendPageAiPending(page);
     if (banner) banner.textContent = kind === 'photo' ? 'Reading the photo…' : 'Transcribing the recording…';
-    let text = '';
+    let text = '', failReason = '';
     try {
       if (kind === 'photo') {
-        const dataUrl = await downscaleImageToDataURL(file);
+        // Downscale for reliability; if the canvas step fails (some WebViews
+        // choke on huge photos), fall back to sending the image as-is.
+        let dataUrl;
+        try { dataUrl = await downscaleImageToDataURL(file); }
+        catch (_) { dataUrl = await fileToDataURL(file); }
         const messages = [
           { role: 'system', content: 'Read ALL text and information visible in this photo of notes, a whiteboard, a slide, or a textbook page — accurately, preserving structure (headings, lists, formulas). Write any math/science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NOT LaTeX — never use $…$, \\frac, \\omega, \\sqrt; write fractions inline as a/b. Output plain text only, no commentary.' },
           { role: 'user', content: [{ type: 'text', text: 'Transcribe everything in this image.' }, { type: 'image_url', image_url: { url: dataUrl } }] },
         ];
-        try { text = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch (_) {}
+        // Let the real error propagate (was silently swallowed) so failures are
+        // diagnosable instead of always showing "couldn't read that".
+        text = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages);
       } else {
         text = await lectureAudioToText(file);
       }
-    } catch (_) {}
+    } catch (e) { failReason = String(e?.message || e || '').replace(/^Error:\s*/, '').slice(0, 140); }
     removePageAiPending(banner);
-    if (!text || !text.trim()) { appendPageAiToast(page, "Couldn't read that — try a clearer photo or shorter clip."); return; }
+    if (!text || !text.trim()) {
+      const base = kind === 'photo'
+        ? "Couldn't read the photo — try a clearer, well-lit shot"
+        : "Couldn't transcribe that — check your connection and try again";
+      appendPageAiToast(page, failReason ? `${base}. (${failReason})` : `${base}.`);
+      return;
+    }
     text = latexToUnicode(text); // store real symbols, not raw LaTeX
     // Insert as a heading + the transcribed content, split into paragraphs.
     const src = kind === 'photo' ? 'From photo' : 'From recording';
@@ -8951,6 +8969,16 @@ async function downscaleImageToDataURL(file) {
     };
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
+  });
+}
+
+// Fallback when canvas downscaling fails: hand the raw file to the model.
+function fileToDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('could not read the image file'));
+    r.readAsDataURL(file);
   });
 }
 
