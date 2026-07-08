@@ -7547,6 +7547,16 @@ function getAncestors(id) {
   return chain;
 }
 
+// "Cheat sheet", then "Cheat sheet (2)", "Cheat sheet (3)"… so regenerating
+// study material never silently overwrites the last one.
+function uniqueSubPageTitle(parentId, base) {
+  const taken = new Set(getChildren(parentId).map(p => p.title));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base} (${n})`)) n++;
+  return `${base} (${n})`;
+}
+
 const BLOCK_TYPES = [
   { type: 'paragraph', label: 'Text', desc: 'Plain text', icon: 'T' },
   { type: 'heading1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1' },
@@ -7590,6 +7600,9 @@ function createPage(opts) {
     dbRows: opts.dbRows || [],
     dbViews: opts.dbViews || [],
     dbActiveView: null,
+    // Tags AI-generated study pages (quiz/cheatsheet/flashcards) so they can be
+    // found from the Study strip at the top of the Pages hub, across every note.
+    studyKind: opts.studyKind || null,
     order: siblings.length,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -7762,6 +7775,14 @@ function pagesDrillInto(parentId) {
   renderPagesList(parentId);
 }
 
+// Icon/label for each kind of AI-generated study sub-page, shared by the
+// Study strip (Pages hub) and the filtered list it opens into.
+const STUDY_KIND_META = {
+  quiz: { icon: '🧠', label: 'Quizzes' },
+  cheatsheet: { icon: '📋', label: 'Cheat sheets' },
+  flashcards: { icon: '🎴', label: 'Flashcards' },
+};
+
 /* ── List view (sidebar-as-drilldown, mobile-first) ── */
 function renderPagesList(parentId) {
   PG.view = 'list';
@@ -7777,15 +7798,33 @@ function renderPagesList(parentId) {
       <div class="pg-empty-sub">Tap "New" to create your first page or database.</div>
     </div>`;
 
+  // A "smart folder" strip at the very top of the hub: every quiz, cheat
+  // sheet, and flashcard set you've generated, from any note, in one tap —
+  // the "section for quizzes, cheat sheets, etc." across the whole workspace.
+  let studyStripHTML = '';
+  if (!parentId) {
+    const chips = Object.keys(STUDY_KIND_META).map(kind => {
+      const count = App.pages.filter(p => p.studyKind === kind).length;
+      if (!count) return '';
+      const meta = STUDY_KIND_META[kind];
+      return `<button class="pg-study-chip" data-study-kind="${kind}">${meta.icon} ${meta.label} <span class="pg-study-count">${count}</span></button>`;
+    }).join('');
+    if (chips) studyStripHTML = `<div class="pg-study-strip"><div class="pg-study-strip-title">STUDY</div><div class="pg-study-chips">${chips}</div></div>`;
+  }
+
   root.innerHTML = `
     <div class="pg-list-view">
       ${crumbHTML}
+      ${studyStripHTML}
       <div class="pg-list-rows">${rowsHTML}</div>
       <button class="pg-new-btn" id="pg-new-page-btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New
       </button>
     </div>`;
+  root.querySelectorAll('.pg-study-chip').forEach(chip => {
+    chip.addEventListener('click', () => renderStudyKindList(chip.dataset.studyKind));
+  });
 
   document.getElementById('pg-new-page-btn')?.addEventListener('click', () => openTemplatePicker(parentId));
   root.querySelectorAll('.pg-list-row').forEach(row => {
@@ -7807,6 +7846,42 @@ function renderPagesList(parentId) {
       renderPagesList(targetId);
     });
   });
+}
+
+// A flat, cross-workspace list of every study sub-page of one kind (all your
+// quizzes, or all your cheat sheets, etc.), each labelled with the note it
+// came from — the Study strip's destination.
+function renderStudyKindList(kind) {
+  PG.view = 'list';
+  PG.currentId = null;
+  const root = document.getElementById('pages-root');
+  if (!root) return;
+  const meta = STUDY_KIND_META[kind] || { icon: '📄', label: 'Study' };
+  const items = App.pages.filter(p => p.studyKind === kind).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const rowsHTML = items.length ? items.map(p => {
+    const parent = getPage(p.parentId);
+    return `
+      <div class="pg-list-row" data-id="${p.id}">
+        <span class="pg-row-icon">${p.icon || meta.icon}</span>
+        <span class="pg-row-text">
+          <span class="pg-row-title">${escapeHTML(p.title || 'Untitled')}</span>
+          <span class="pg-row-sub">${parent ? 'from ' + escapeHTML(parent.title || 'Untitled') : ''}</span>
+        </span>
+      </div>`;
+  }).join('') : `
+    <div class="pg-empty">
+      <div class="pg-empty-icon">${meta.icon}</div>
+      <div class="pg-empty-title">No ${meta.label.toLowerCase()} yet</div>
+      <div class="pg-empty-sub">Open any notes page → ✦ AI → Make a ${meta.label.toLowerCase().replace(/s$/, '')}.</div>
+    </div>`;
+
+  root.innerHTML = `
+    <div class="pg-list-view">
+      <div class="pg-breadcrumb"><span class="pg-crumb" data-id="root">All pages</span><span class="pg-crumb-sep">/</span><span class="pg-crumb">${meta.icon} ${escapeHTML(meta.label)}</span></div>
+      <div class="pg-list-rows">${rowsHTML}</div>
+    </div>`;
+  root.querySelector('.pg-crumb[data-id="root"]')?.addEventListener('click', () => renderPagesList(null));
+  root.querySelectorAll('.pg-list-row').forEach(row => row.addEventListener('click', () => pagesOpenPage(row.dataset.id)));
 }
 
 function pageListRowHTML(p) {
@@ -8804,9 +8879,9 @@ function openPageAiMenu(page, anchorEl) {
     <button data-act="lecture-audio">🎙 Upload recording</button>
     <div class="pg-ai-section">STUDY</div>
     <button data-act="summarize">✨ Summarize page</button>
-    <button data-act="cheatsheet">📋 Make a cheat sheet</button>
-    <button data-act="quiz">🧠 Make a quiz</button>
-    <button data-act="flashcards">🎴 Make flashcards</button>
+    <button data-act="cheatsheet">📋 Make a cheat sheet <span class="pg-ai-hint">new page</span></button>
+    <button data-act="quiz">🧠 Make a quiz <span class="pg-ai-hint">new page</span></button>
+    <button data-act="flashcards">🎴 Make flashcards <span class="pg-ai-hint">new page</span></button>
     <div class="pg-ai-section">WRITING</div>
     <button data-act="actions">✅ Find action items</button>
     <button data-act="translate">🌐 Translate ▸</button>
@@ -9095,21 +9170,27 @@ async function generatePageStudy(page, kind) {
 
   const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes. Write math and science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NEVER LaTeX — no $…$, no \\frac/\\omega/\\sqrt; write fractions inline as a/b.';
 
+  // Each generated asset becomes its own tidy sub-page (📋 Cheat sheet,
+  // 🧠 Quiz, 🎴 Flashcards) under the source notes instead of piling more
+  // blocks onto the same page — so a page of raw notes grows into an
+  // organized little study set you can see and jump into at a glance.
   if (kind === 'cheatsheet') {
     const out = await quickAI(
       'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.' + LANG_RULE,
       material);
     removePageAiPending(banner);
     if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
-    page.blocks.push({ ...blankBlock('heading2'), text: 'Cheat sheet' });
+    const blocks = [];
     latexToUnicode(out).trim().split('\n').forEach(line => {
       const t = line.replace(/^\s*[-*•]\s*/, '').trim();
       if (!t) return;
-      if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) page.blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
-      else page.blocks.push({ ...blankBlock('bulleted'), text: t });
+      if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
+      else blocks.push({ ...blankBlock('bulleted'), text: t });
     });
+    if (!blocks.length) blocks.push(blankBlock('paragraph'));
+    const sub = createPage({ parentId: page.id, title: uniqueSubPageTitle(page.id, 'Cheat sheet'), icon: '📋', blocks, studyKind: 'cheatsheet' });
     touchPage(page);
-    rerenderBlocks(page);
+    pagesOpenPage(sub.id);
     return;
   }
 
@@ -9123,9 +9204,9 @@ async function generatePageStudy(page, kind) {
     if (!valid || !valid.length) { appendPageAiToast(page, "Couldn't build a quiz from this — add more notes and retry."); return; }
     const blk = blankBlock('quiz');
     blk.quiz.questions = valid.slice(0, 8);
-    page.blocks.push(blk);
+    const sub = createPage({ parentId: page.id, title: uniqueSubPageTitle(page.id, 'Quiz'), icon: '🧠', blocks: [blk], studyKind: 'quiz' });
     touchPage(page);
-    rerenderBlocks(page);
+    pagesOpenPage(sub.id);
     return;
   }
 
@@ -9139,9 +9220,9 @@ async function generatePageStudy(page, kind) {
     if (!valid || !valid.length) { appendPageAiToast(page, "Couldn't build flashcards — add more notes and retry."); return; }
     const blk = blankBlock('flashcards');
     blk.cards = valid.slice(0, 20);
-    page.blocks.push(blk);
+    const sub = createPage({ parentId: page.id, title: uniqueSubPageTitle(page.id, 'Flashcards'), icon: '🎴', blocks: [blk], studyKind: 'flashcards' });
     touchPage(page);
-    rerenderBlocks(page);
+    pagesOpenPage(sub.id);
     return;
   }
   removePageAiPending(banner);
