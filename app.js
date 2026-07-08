@@ -530,13 +530,34 @@ async function transcribeStudyAudio(file) {
 }
 
 async function transcribeBlob(blob, mime, name) {
-  const res = await fetch(`${VOID_CORE_API.url}/transcribe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio: await blobToB64(blob), mimeType: mime, name }),
-  });
-  const data = await res.json().catch(() => null);
-  return (data?.text || '').trim();
+  const body = JSON.stringify({ audio: await blobToB64(blob), mimeType: mime, name });
+  let lastErr;
+  // Mobile networks (and VPNs) drop big uploads intermittently — a plain
+  // fetch surfaces "Failed to fetch". Retry a few times with backoff so a
+  // transient blip self-heals instead of losing the whole transcription.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${VOID_CORE_API.url}/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        const detail = Array.isArray(e.detail) ? e.detail[0] : e.detail;
+        throw new Error((e.error || `HTTP ${res.status}`) + (detail ? `: ${String(detail).slice(0, 80)}` : ''));
+      }
+      const data = await res.json().catch(() => null);
+      return (data?.text || '').trim();
+    } catch (err) {
+      lastErr = err;
+      const transient = /failed to fetch|networkerror|load failed|timeout|timed out|aborted|network request failed/i.test(String(err?.message || err));
+      if (!transient || attempt === 2) throw err;
+      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 // Decode any audio (or the audio track of a video), downsample to 16 kHz
@@ -8883,10 +8904,17 @@ function openLectureRecorder(page) {
     if (blob.size < 2000) { appendPageAiToast(page, 'That recording was too short.'); return; }
     const banner = appendPageAiPending(page);
     if (banner) banner.textContent = 'Transcribing the lecture… (long ones take a minute)';
-    let text = '';
-    try { text = await lectureAudioToText(new File([blob], 'lecture.webm', { type: blob.type })); } catch (_) {}
+    let text = '', failReason = '';
+    try { text = await lectureAudioToText(new File([blob], 'lecture.webm', { type: blob.type })); }
+    catch (e) { failReason = String(e?.message || e || ''); }
     removePageAiPending(banner);
-    if (!text || !text.trim()) { appendPageAiToast(page, "Couldn't transcribe that — check your connection and try again."); return; }
+    if (!text || !text.trim()) {
+      const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
+      appendPageAiToast(page, netErr
+        ? "Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or use Wi‑Fi) and try again."
+        : (failReason ? `Couldn't transcribe that. (${failReason.slice(0, 120)})` : "Couldn't transcribe that — try again in a moment."));
+      return;
+    }
     page.blocks.push({ ...blankBlock('heading3'), text: `Lecture — ${new Date().toLocaleDateString()}` });
     text.trim().split(/\n{2,}/).forEach(para => { if (para.trim()) page.blocks.push({ ...blankBlock('paragraph'), text: para.trim() }); });
     touchPage(page);
@@ -8934,10 +8962,17 @@ function addLectureToPage(page, kind) {
     } catch (e) { failReason = String(e?.message || e || '').replace(/^Error:\s*/, '').slice(0, 140); }
     removePageAiPending(banner);
     if (!text || !text.trim()) {
-      const base = kind === 'photo'
-        ? "Couldn't read the photo — try a clearer, well-lit shot"
-        : "Couldn't transcribe that — check your connection and try again";
-      appendPageAiToast(page, failReason ? `${base}. (${failReason})` : `${base}.`);
+      const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
+      let msg;
+      if (netErr) {
+        msg = `Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or switch to Wi‑Fi) and try again.`;
+      } else {
+        const base = kind === 'photo'
+          ? "Couldn't read the photo — try a clearer, well-lit shot"
+          : "Couldn't transcribe that — try again in a moment";
+        msg = failReason ? `${base}. (${failReason})` : `${base}.`;
+      }
+      appendPageAiToast(page, msg);
       return;
     }
     text = latexToUnicode(text); // store real symbols, not raw LaTeX
