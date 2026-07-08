@@ -304,6 +304,8 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 .bubble-body pre { background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); margin: 8px 0; }
 .bubble-body pre code { background: transparent; padding: 0; font-size: 12px; }
 .bubble-body a { color: inherit; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.35); }
+.bubble-body .md-h { display: block; font-size: 1.04em; font-weight: 700; margin: 12px 0 4px; letter-spacing: 0.01em; }
+.bubble-body .md-h:first-child { margin-top: 0; }
 
 .menu-label .menu-sub { font-size: 12px; color: var(--muted); }
 

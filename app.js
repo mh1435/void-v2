@@ -66,6 +66,7 @@ Rules:
 - You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
 - NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
 - Match your response length to the question — short question = short answer, complex question = detailed answer
+- For math and science, write equations with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ·, ≈, ≤, ≥, ∫, ∑, Δ), NOT LaTeX. Never wrap math in $…$ or use commands like \\frac, \\omega, \\sqrt — write "ω₀ = 2π/T₀" and "x = X_max·cos(ω₀t)" directly. Write fractions inline as a/b.
 - If asked what you can do, describe the capabilities above naturally
 - Be direct, useful, and conversational
 - CRITICAL: If a LIVE CONTEXT, WEATHER LOOKUP, or KNOWLEDGE LOOKUP block appears below, that data is real and current — use it directly to answer. NEVER say "I'm just a language model", "I don't have access to real-time information", or suggest the user check a website instead — you DO have this data when it's provided below. Only say data is unavailable if no such block was given for that request.`;
@@ -2048,6 +2049,7 @@ function stopSpeaking() {
 function speak(text) {
   if (!App.settings.voiceEnabled) return;
   stopSpeaking();
+  text = speechText(text);
   // Multi-language: detect the reply's script (or use the language setting).
   // The realistic voices are English-only, so non-English speech falls back
   // to a device voice in the right language instead of mangling it.
@@ -2205,7 +2207,13 @@ function setupChat() {
     App.voiceTriggered = true;
   }
 
-  async function startNativeListening() {
+  // Long-form dictation flag. When on, the recognizer keeps re-listening across
+  // pauses (instead of stopping at the first sentence) so it can capture speech
+  // that runs for minutes — e.g. a whole lecture — not just one phrase.
+  let longDictation = false;
+  let stopDictation = false;
+
+  async function startNativeListening(longMode) {
     if (listening) return;
     App.stopWakeListening?.();
     try {
@@ -2218,14 +2226,21 @@ function setupChat() {
         }
       }
       listening = true;
+      stopDictation = false;
       sendBtn.classList.add('mic-active');
-      const result = await NativeSTT.start({ language: getSTTLang(), maxResults: 1, partialResults: false, popup: false });
-      listening = false;
-      sendBtn.classList.remove('mic-active');
-      updateSendMicBtn();
-      handleHeardText(result?.matches?.[0]);
-      if (App.settings.wakeWord && !App.voiceConvo) setTimeout(() => App.startWakeListening?.(), 600);
+      // The native STT plugin returns one utterance per start(). For long
+      // dictation we loop — re-listening and appending each phrase — until the
+      // user taps the mic again, so a 10-minute talk is captured whole. In the
+      // live-conversation loop we take a single utterance and hand back.
+      do {
+        const result = await NativeSTT.start({ language: getSTTLang(), maxResults: 1, partialResults: false, popup: false });
+        const heard = result?.matches?.[0];
+        if (heard) handleHeardText(heard);
+        if (App.voiceConvo || !longMode) break;
+      } while (listening && !stopDictation);
     } catch (_) {
+      /* start() rejects when the user stops or on a transient error — fall through */
+    } finally {
       listening = false;
       sendBtn.classList.remove('mic-active');
       updateSendMicBtn();
@@ -2238,15 +2253,32 @@ function setupChat() {
     recognizer.continuous = false;
     recognizer.interimResults = false;
     recognizer.lang = getSTTLang();
-    recognizer.addEventListener('result', (e) => handleHeardText(e.results[0][0].transcript));
+    recognizer.addEventListener('result', (e) => {
+      // In long dictation the results list grows; only commit newly-final
+      // segments so nothing is dropped or duplicated across restarts.
+      let finals = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finals += e.results[i][0].transcript;
+      }
+      if (!finals && e.results[0]) finals = e.results[0][0].transcript;
+      if (finals.trim()) handleHeardText(finals.trim());
+    });
     recognizer.addEventListener('end', () => {
+      // Chrome ends the session after a brief silence even with continuous on —
+      // restart it so long, pause-filled dictation keeps flowing.
+      if (listening && longDictation) {
+        try { recognizer.start(); return; } catch (_) {}
+      }
       listening = false;
       sendBtn.classList.remove('mic-active');
       updateSendMicBtn();
       if (App.settings.wakeWord && !App.voiceConvo) setTimeout(() => App.startWakeListening?.(), 500);
     });
-    recognizer.addEventListener('error', () => {
+    recognizer.addEventListener('error', (ev) => {
+      const benign = ev && (ev.error === 'no-speech' || ev.error === 'aborted');
+      if (benign && listening && longDictation) return; // 'end' will restart us
       listening = false;
+      longDictation = false;
       sendBtn.classList.remove('mic-active');
     });
   }
@@ -2291,11 +2323,14 @@ function setupChat() {
   // Shared entry point so speak()/generateAssistantReply can hand the mic back
   App.startListening = () => {
     if (App.vaActive) setAssistantState('listening', { transcript: '' });
-    if (NativeSTT) { startNativeListening(); return; }
+    if (NativeSTT) { startNativeListening(false); return; }
     if (!recognizer || listening) return;
     App.stopWakeListening?.();
     try {
       recognizer.lang = getSTTLang();
+      recognizer.continuous = false;
+      recognizer.interimResults = false;
+      longDictation = false;
       recognizer.start();
       listening = true;
       sendBtn.classList.add('mic-active');
@@ -2436,16 +2471,24 @@ function setupChat() {
       return;
     }
     if (NativeSTT) {
-      if (listening) { NativeSTT.stop().catch(() => {}); return; }
-      startNativeListening();
+      if (listening) { stopDictation = true; NativeSTT.stop().catch(() => {}); return; }
+      startNativeListening(!App.voiceConvo);
       return;
     }
     if (!recognizer) return;
     if (listening) {
+      longDictation = false;
       recognizer.stop();
       return;
     }
     try {
+      // Manual mic = long dictation (keep listening across pauses); the live
+      // conversation loop stays single-utterance so replies can interleave.
+      const long = !App.voiceConvo;
+      recognizer.lang = getSTTLang();
+      recognizer.continuous = long;
+      recognizer.interimResults = long;
+      longDictation = long;
       recognizer.start();
       listening = true;
       sendBtn.classList.add('mic-active');
@@ -3751,6 +3794,74 @@ function escapeHTML(str) {
 }
 
 // Lightweight markdown → HTML for chat bubbles. Escapes first, so all output is safe.
+// Turn the LaTeX/TeX that models emit into real Unicode math, so studies and
+// equations read like "ω₀ = 2π/T₀  ⇒  x = X_max·cos(ω₀t)" instead of raw
+// "$\omega_0 = \frac{2\pi}{T_0}$". Best-effort, not a full TeX engine — it just
+// covers the symbols that actually turn up in notes and homework.
+const _SUP = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻','=':'⁼','(':'⁽',')':'⁾','n':'ⁿ','i':'ⁱ','a':'ᵃ','b':'ᵇ','c':'ᶜ','d':'ᵈ','e':'ᵉ','f':'ᶠ','g':'ᵍ','h':'ʰ','j':'ʲ','k':'ᵏ','l':'ˡ','m':'ᵐ','o':'ᵒ','p':'ᵖ','r':'ʳ','s':'ˢ','t':'ᵗ','u':'ᵘ','v':'ᵛ','w':'ʷ','x':'ˣ','y':'ʸ','z':'ᶻ' };
+const _SUB = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉','+':'₊','-':'₋','=':'₌','(':'₍',')':'₎','a':'ₐ','e':'ₑ','h':'ₕ','i':'ᵢ','j':'ⱼ','k':'ₖ','l':'ₗ','m':'ₘ','n':'ₙ','o':'ₒ','p':'ₚ','r':'ᵣ','s':'ₛ','t':'ₜ','u':'ᵤ','v':'ᵥ','x':'ₓ' };
+const _TEX = {
+  alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',varepsilon:'ε',zeta:'ζ',eta:'η',theta:'θ',vartheta:'ϑ',iota:'ι',kappa:'κ',lambda:'λ',mu:'μ',nu:'ν',xi:'ξ',pi:'π',varpi:'ϖ',rho:'ρ',varrho:'ϱ',sigma:'σ',varsigma:'ς',tau:'τ',upsilon:'υ',phi:'φ',varphi:'φ',chi:'χ',psi:'ψ',omega:'ω',
+  Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',Xi:'Ξ',Pi:'Π',Sigma:'Σ',Upsilon:'Υ',Phi:'Φ',Psi:'Ψ',Omega:'Ω',
+  times:'×',div:'÷',cdot:'·',ast:'∗',pm:'±',mp:'∓',leq:'≤',le:'≤',geq:'≥',ge:'≥',neq:'≠',ne:'≠',approx:'≈',sim:'∼',cong:'≅',equiv:'≡',propto:'∝',infty:'∞',partial:'∂',nabla:'∇',
+  int:'∫',oint:'∮',sum:'∑',prod:'∏',forall:'∀',exists:'∃',neg:'¬',land:'∧',lor:'∨',in:'∈',notin:'∉',ni:'∋',subset:'⊂',subseteq:'⊆',supset:'⊃',supseteq:'⊇',cup:'∪',cap:'∩',emptyset:'∅',varnothing:'∅',
+  angle:'∠',perp:'⊥',parallel:'∥',mid:'∣',deg:'°',degree:'°',prime:'′',
+  rightarrow:'→',to:'→',gets:'←',leftarrow:'←',Rightarrow:'⇒',implies:'⇒',Leftarrow:'⇐',leftrightarrow:'↔',Leftrightarrow:'⇔',iff:'⇔',mapsto:'↦',uparrow:'↑',downarrow:'↓',longrightarrow:'→',
+  ldots:'…',cdots:'⋯',dots:'…',vdots:'⋮',ddots:'⋱',
+  left:'',right:'',bigl:'',bigr:'',Bigl:'',Bigr:'',displaystyle:'',limits:'',quad:' ',qquad:'  ',
+  sin:'sin',cos:'cos',tan:'tan',cot:'cot',sec:'sec',csc:'csc',arcsin:'arcsin',arccos:'arccos',arctan:'arctan',sinh:'sinh',cosh:'cosh',tanh:'tanh',log:'log',ln:'ln',exp:'exp',lim:'lim',max:'max',min:'min',sup:'sup',inf:'inf',det:'det',gcd:'gcd',
+};
+function _scriptify(str, map) {
+  const chars = [...String(str)];
+  if (chars.length && chars.every(c => map[c] !== undefined)) return chars.map(c => map[c]).join('');
+  return null;
+}
+function latexToUnicode(s) {
+  let t = String(s);
+  if (t.indexOf('\\') === -1 && t.indexOf('$') === -1 && !/[\^_]/.test(t)) return t;
+  // Strip math delimiters, keeping the inner math. Only unwrap $…$ when it
+  // actually looks like math, so prices ("$5") are left alone.
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  t = t.replace(/\\\[([\s\S]*?)\\\]/g, '$1').replace(/\\\(([\s\S]*?)\\\)/g, '$1');
+  t = t.replace(/\$([^$\n]+)\$/g, (m, inner) =>
+    (/[\\^_{}]/.test(inner) || /^[A-Za-z][A-Za-z0-9]?$/.test(inner.trim())) ? inner : m);
+  // \text{…}, \mathrm{…} etc. → their contents
+  t = t.replace(/\\(?:text|mathrm|mathbf|mathit|mathsf|mathcal|mathbb|boldsymbol|operatorname)\s*\{([^{}]*)\}/g, '$1');
+  // Fractions → a/b (a few passes to unwind simple nesting)
+  for (let i = 0; i < 4; i++) {
+    t = t.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (m, a, b) =>
+      `${/[+\-*/^_ ]/.test(a) ? '(' + a + ')' : a}/${/[+\-*/^_ ]/.test(b) ? '(' + b + ')' : b}`);
+  }
+  // Roots
+  t = t.replace(/\\sqrt\s*\[([^\]]*)\]\s*\{([^{}]*)\}/g, '$1√($2)');
+  t = t.replace(/\\sqrt\s*\{([^{}]*)\}/g, (m, x) => /[+\-*/^_ ]/.test(x) ? '√(' + x + ')' : '√' + x);
+  t = t.replace(/\\sqrt\s+(\w)/g, '√$1');
+  // Named commands (greek, operators, arrows, function names, spacing)
+  t = t.replace(/\\([a-zA-Z]+)\*?/g, (m, name) => _TEX[name] !== undefined ? _TEX[name] : m);
+  // Superscripts / subscripts: braced groups first, then single chars
+  t = t.replace(/\^\{([^{}]*)\}/g, (m, g) => _scriptify(g, _SUP) ?? ('^(' + g + ')'));
+  t = t.replace(/\^(\w)/g, (m, c) => _SUP[c] ?? ('^' + c));
+  t = t.replace(/_\{([^{}]*)\}/g, (m, g) => _scriptify(g, _SUB) ?? ('_' + g));
+  t = t.replace(/_(\w)/g, (m, c) => _SUB[c] ?? ('_' + c));
+  // Escaped literals and stray grouping braces / spacing macros
+  t = t.replace(/\\([{}%&#_$ ,;:!])/g, '$1');
+  t = t.replace(/[{}]/g, '');
+  t = t.replace(/[ \t]{2,}/g, ' ');
+  return t;
+}
+
+// Plain, speakable text: real symbols (not "backslash omega") with markdown
+// punctuation stripped so TTS doesn't read the formatting out loud.
+function speechText(t) {
+  t = latexToUnicode(String(t));
+  t = t.replace(/```[\s\S]*?```/g, ' ');
+  t = t.replace(/`([^`]+)`/g, '$1');
+  t = t.replace(/^\s*#{1,6}\s+/gm, '');
+  t = t.replace(/[*_#>`]/g, '');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+}
+
 function renderMarkdownLite(text) {
   const blocks = [];
   let src = String(text).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -3758,7 +3869,10 @@ function renderMarkdownLite(text) {
     return `${blocks.length - 1}`;
   });
 
+  src = latexToUnicode(src);
   src = escapeHTML(src);
+  // Headings (## Title) → bold heading lines instead of literal "## Title"
+  src = src.replace(/^\s*(#{1,6})\s+(.+)$/gm, (_, h, body) => `<strong class="md-h">${body.trim()}</strong>`);
   src = src.replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`);
   src = src.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   src = src.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
@@ -7982,7 +8096,12 @@ function renderBlocks(blocks) {
 }
 
 function inlineFormat(text) {
-  let s = escapeHTML(text || '');
+  let raw = String(text || '');
+  // Render LaTeX-y math as real symbols (ω₀, 2π/T₀, √, ²) instead of literal
+  // "$\omega_0$". Only when actual TeX markers are present, so prose with a
+  // stray underscore is left alone.
+  if (/[\\$]/.test(raw)) raw = latexToUnicode(raw);
+  let s = escapeHTML(raw);
   s = s.replace(/@\[\[([^:\]]+):([^\]]+)\]\]/g, (m, id, title) => `<span class="pg-mention" data-page="${id}">📄 ${title}</span>`);
   s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -8065,10 +8184,10 @@ function quizBlockHTML(b) {
         if (oi === q.answer) cls += ' pg-quiz-correct';
         else if (oi === chosen) cls += ' pg-quiz-wrong';
       }
-      return `<button class="${cls}" data-block-id="${b.id}" data-qi="${qi}" data-oi="${oi}" ${chosen != null ? 'disabled' : ''}>${escapeHTML(o)}</button>`;
+      return `<button class="${cls}" data-block-id="${b.id}" data-qi="${qi}" data-oi="${oi}" ${chosen != null ? 'disabled' : ''}>${escapeHTML(latexToUnicode(String(o)))}</button>`;
     }).join('');
-    const explain = chosen != null && q.explain ? `<div class="pg-quiz-explain">${escapeHTML(q.explain)}</div>` : '';
-    return `<div class="pg-quiz-q"><div class="pg-quiz-question">${qi + 1}. ${escapeHTML(q.q || '')}</div><div class="pg-quiz-opts">${opts}</div>${explain}</div>`;
+    const explain = chosen != null && q.explain ? `<div class="pg-quiz-explain">${escapeHTML(latexToUnicode(q.explain))}</div>` : '';
+    return `<div class="pg-quiz-q"><div class="pg-quiz-question">${qi + 1}. ${escapeHTML(latexToUnicode(q.q || ''))}</div><div class="pg-quiz-opts">${opts}</div>${explain}</div>`;
   }).join('');
   const scoreLine = done ? `<div class="pg-quiz-score">Score: ${correct} / ${qs.length}${done === qs.length ? ' ✓ complete' : ` (${done} answered)`}</div>` : '';
   return `<div class="pg-study-card pg-quiz"><div class="pg-study-head">🧠 Quiz <button class="pg-study-reset" data-block-id="${b.id}" data-study="quizreset">Reset</button></div>${body}${scoreLine}</div>`;
@@ -8084,8 +8203,8 @@ function flashcardsBlockHTML(b) {
     <div class="pg-study-card pg-flashcards">
       <div class="pg-study-head">🎴 Flashcards <span class="pg-fc-counter">${i + 1} / ${cards.length}</span></div>
       <button class="pg-flashcard${b.flipped ? ' pg-flipped' : ''}" data-block-id="${b.id}" data-study="flip">
-        <div class="pg-flashcard-face pg-fc-front">${escapeHTML(c.front || '')}</div>
-        <div class="pg-flashcard-face pg-fc-back">${escapeHTML(c.back || '')}</div>
+        <div class="pg-flashcard-face pg-fc-front">${escapeHTML(latexToUnicode(c.front || ''))}</div>
+        <div class="pg-flashcard-face pg-fc-back">${escapeHTML(latexToUnicode(c.back || ''))}</div>
         <div class="pg-fc-hint">${b.flipped ? 'answer' : 'tap to flip'}</div>
       </button>
       <div class="pg-fc-nav">
@@ -8654,14 +8773,15 @@ function openPageAiMenu(page, anchorEl) {
 
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
+    const UNI = ' Write any math/science with real Unicode symbols (π, ω, √, ², ₀, →), never LaTeX or $…$.';
     const prompt = act === 'summarize'
-      ? 'Summarize this page in 3-5 concise sentences. Reply in the SAME language as the material.'
-      : 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.';
+      ? 'Summarize this page in 3-5 concise sentences. Reply in the SAME language as the material.' + UNI
+      : 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.' + UNI;
     const banner = appendPageAiPending(page);
     const result = await quickAI(prompt, text);
     removePageAiPending(banner);
     if (!result) return;
-    page.blocks.push({ ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '✨' : '✅', text: result.trim() });
+    page.blocks.push({ ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '✨' : '✅', text: latexToUnicode(result.trim()) });
     touchPage(page);
     rerenderBlocks(page);
   });
@@ -8792,7 +8912,7 @@ function addLectureToPage(page, kind) {
       if (kind === 'photo') {
         const dataUrl = await downscaleImageToDataURL(file);
         const messages = [
-          { role: 'system', content: 'Read ALL text and information visible in this photo of notes, a whiteboard, a slide, or a textbook page — accurately, preserving structure (headings, lists, formulas). Output plain text only, no commentary.' },
+          { role: 'system', content: 'Read ALL text and information visible in this photo of notes, a whiteboard, a slide, or a textbook page — accurately, preserving structure (headings, lists, formulas). Write any math/science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NOT LaTeX — never use $…$, \\frac, \\omega, \\sqrt; write fractions inline as a/b. Output plain text only, no commentary.' },
           { role: 'user', content: [{ type: 'text', text: 'Transcribe everything in this image.' }, { type: 'image_url', image_url: { url: dataUrl } }] },
         ];
         try { text = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages); } catch (_) {}
@@ -8802,6 +8922,7 @@ function addLectureToPage(page, kind) {
     } catch (_) {}
     removePageAiPending(banner);
     if (!text || !text.trim()) { appendPageAiToast(page, "Couldn't read that — try a clearer photo or shorter clip."); return; }
+    text = latexToUnicode(text); // store real symbols, not raw LaTeX
     // Insert as a heading + the transcribed content, split into paragraphs.
     const src = kind === 'photo' ? 'From photo' : 'From recording';
     page.blocks.push({ ...blankBlock('heading3'), text: `${src} — ${new Date().toLocaleDateString()}` });
@@ -8851,7 +8972,7 @@ async function generatePageStudy(page, kind) {
   const banner = appendPageAiPending(page);
   if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : 'Making a cheat sheet…';
 
-  const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes.';
+  const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes. Write math and science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NEVER LaTeX — no $…$, no \\frac/\\omega/\\sqrt; write fractions inline as a/b.';
 
   if (kind === 'cheatsheet') {
     const out = await quickAI(
@@ -8860,7 +8981,7 @@ async function generatePageStudy(page, kind) {
     removePageAiPending(banner);
     if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
     page.blocks.push({ ...blankBlock('heading2'), text: 'Cheat sheet' });
-    out.trim().split('\n').forEach(line => {
+    latexToUnicode(out).trim().split('\n').forEach(line => {
       const t = line.replace(/^\s*[-*•]\s*/, '').trim();
       if (!t) return;
       if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) page.blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
