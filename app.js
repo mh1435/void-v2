@@ -7778,9 +7778,10 @@ function pagesDrillInto(parentId) {
 // Icon/label for each kind of AI-generated study sub-page, shared by the
 // Study strip (Pages hub) and the filtered list it opens into.
 const STUDY_KIND_META = {
-  quiz: { icon: '🧠', label: 'Quizzes' },
-  cheatsheet: { icon: '📋', label: 'Cheat sheets' },
-  flashcards: { icon: '🎴', label: 'Flashcards' },
+  summary: { icon: '📝', label: 'Summaries', one: 'summary' },
+  quiz: { icon: '🧠', label: 'Quizzes', one: 'quiz' },
+  cheatsheet: { icon: '📋', label: 'Cheat sheets', one: 'cheat sheet' },
+  flashcards: { icon: '🎴', label: 'Flashcards', one: 'flashcard set' },
 };
 
 /* ── List view (sidebar-as-drilldown, mobile-first) ── */
@@ -7872,7 +7873,7 @@ function renderStudyKindList(kind) {
     <div class="pg-empty">
       <div class="pg-empty-icon">${meta.icon}</div>
       <div class="pg-empty-title">No ${meta.label.toLowerCase()} yet</div>
-      <div class="pg-empty-sub">Open any notes page → ✦ AI → Make a ${meta.label.toLowerCase().replace(/s$/, '')}.</div>
+      <div class="pg-empty-sub">Open any project → ✦ AI → Make a ${meta.one || meta.label.toLowerCase()}.</div>
     </div>`;
 
   root.innerHTML = `
@@ -8082,8 +8083,13 @@ function changeBlockType(page, blockId, type) {
 function renderPageEditor(page) {
   const root = document.getElementById('pages-root');
   if (!root) return;
-  // Study sub-pages live in the Study panel below, not in the generic chips row.
-  const children = getChildren(page.id).filter(c => !c.studyKind);
+  const children = getChildren(page.id).filter(c => c.type !== 'database' || true);
+  // Every project (a regular notes page — not a database, not a study
+  // sub-page itself) carries fixed study sections: Summary, Quizzes, Cheat
+  // sheets, Flashcards. Generated material always has an obvious home, and an
+  // empty section is a one-tap Generate away.
+  const isProject = page.type !== 'database' && !page.studyKind;
+  const plainKids = isProject ? children.filter(c => !c.studyKind) : children;
   root.innerHTML = `
     <div class="pg-editor-view">
       ${pagesBreadcrumbHTML(page.parentId)}
@@ -8095,72 +8101,40 @@ function renderPageEditor(page) {
           <button class="pg-head-btn" id="pg-page-menu-btn">⋯</button>
         </div>
       </div>
+      ${isProject ? pageStudySectionsHTML(page, children) : ''}
       <div class="pg-subpages" id="pg-subpages">
-        ${children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
+        ${plainKids.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
         <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
       </div>
-      ${pageStudyPanelHTML(page)}
       <div class="pg-blocks" id="pg-blocks">${renderBlocks(page.blocks)}</div>
       <button class="pg-add-block-btn" id="pg-add-block-btn">+ Add a block</button>
       ${renderBacklinksHTML(page.id)}
     </div>`;
 
   wirePageEditorChrome(page);
-  wireStudyPanel(page);
   wireBlockEvents(page);
   applyFocusIntent();
 }
 
-// The page IS the project: raw material (writing, photos of paper, voice
-// recordings) goes into the blocks, and this panel holds the organized study
-// sections generated from it — Quizzes, Cheat sheets, Flashcards — plus quick
-// buttons to feed in more material. Hidden on study pages themselves.
-function pageStudyPanelHTML(page) {
-  if (page.studyKind || page.type === 'database') return '';
-  const kids = getChildren(page.id);
-  const sections = Object.keys(STUDY_KIND_META).map(kind => {
+// The study sections rendered at the top of every project page: one row per
+// kind (Summary / Quizzes / Cheat sheets / Flashcards) with that project's
+// generated sub-pages as chips and a Generate button.
+function pageStudySectionsHTML(page, children) {
+  const secs = Object.keys(STUDY_KIND_META).map(kind => {
     const meta = STUDY_KIND_META[kind];
-    const items = kids.filter(c => c.studyKind === kind);
-    const itemsHTML = items.length
-      ? items.map(it => `<button class="pg-subpage-chip" data-open="${it.id}">${it.icon || meta.icon} ${escapeHTML(it.title || 'Untitled')}</button>`).join('')
-      : `<span class="pg-study-none">None yet</span>`;
+    const chips = children.filter(c => c.studyKind === kind)
+      .map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || meta.icon} ${escapeHTML(c.title || 'Untitled')}</button>`)
+      .join('');
     return `
       <div class="pg-study-sec">
         <div class="pg-study-sec-head">
-          <span class="pg-study-sec-label">${meta.icon} ${meta.label}</span>
-          ${items.length ? `<span class="pg-study-count">${items.length}</span>` : ''}
-          <button class="pg-study-make" data-make="${kind}" title="Make from this page's material">＋</button>
+          <span class="pg-study-sec-name">${meta.icon} ${meta.label}</span>
+          <button class="pg-study-sec-gen" data-kind="${kind}">✦ Generate</button>
         </div>
-        <div class="pg-study-sec-items">${itemsHTML}</div>
+        <div class="pg-study-sec-items">${chips || `<span class="pg-study-sec-empty">Nothing yet — generate a ${meta.one} from these notes.</span>`}</div>
       </div>`;
   }).join('');
-  return `
-    <div class="pg-study-panel" id="pg-study-panel">
-      <div class="pg-study-panel-head">
-        <span class="pg-study-panel-title">STUDY</span>
-        <span class="pg-study-addrow">
-          <button class="pg-study-addbtn" data-add="record">🔴 Record</button>
-          <button class="pg-study-addbtn" data-add="photo">📸 Photo</button>
-          <button class="pg-study-addbtn" data-add="audio">🎙 Audio</button>
-        </span>
-      </div>
-      <div class="pg-study-secs">${sections}</div>
-    </div>`;
-}
-
-function wireStudyPanel(page) {
-  const panel = document.getElementById('pg-study-panel');
-  if (!panel) return;
-  panel.addEventListener('click', (e) => {
-    const open = e.target.closest('[data-open]')?.dataset.open;
-    if (open) { pagesOpenPage(open); return; }
-    const make = e.target.closest('[data-make]')?.dataset.make;
-    if (make) { generatePageStudy(page, make); return; }
-    const add = e.target.closest('[data-add]')?.dataset.add;
-    if (add === 'record') openLectureRecorder(page);
-    else if (add === 'photo') addLectureToPage(page, 'photo');
-    else if (add === 'audio') addLectureToPage(page, 'audio');
-  });
+  return `<div class="pg-study-sections">${secs}</div>`;
 }
 
 function wirePageEditorChrome(page) {
@@ -8184,6 +8158,9 @@ function wirePageEditorChrome(page) {
   root.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => {
     chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id));
   });
+  root.querySelectorAll('.pg-study-sec-gen').forEach(btn => {
+    btn.addEventListener('click', () => generatePageStudy(page, btn.dataset.kind));
+  });
   document.getElementById('pg-add-block-btn')?.addEventListener('click', () => {
     const last = page.blocks[page.blocks.length - 1];
     const nb = addBlockAfter(page, last ? last.id : null, 'paragraph');
@@ -8201,6 +8178,7 @@ function openPageDetailMenu(page, anchorEl) {
   const menu = document.createElement('div');
   menu.className = 'pg-ctx-menu';
   menu.innerHTML = `
+    <button data-act="paper">📜 Open as paper</button>
     <button data-act="export">Export as document</button>
     <button data-act="duplicate">Duplicate</button>
     <button data-act="delete" class="pg-ctx-danger">Delete page</button>
@@ -8209,7 +8187,11 @@ function openPageDetailMenu(page, anchorEl) {
   positionFloating(menu, anchorEl);
   menu.addEventListener('click', (e) => {
     const act = e.target.closest('button')?.dataset.act;
-    if (act === 'export') {
+    if (act === 'paper') {
+      menu.remove();
+      openPaperView(page);
+      return;
+    } else if (act === 'export') {
       const text = pageToPlainText(page);
       storeDocument(page.title || 'Untitled', text);
       openDocFormatPicker(page.title || 'Untitled', text, anchorEl);
@@ -8404,17 +8386,11 @@ function rerenderBlocks(page) {
   if (container) container.innerHTML = renderBlocks(page.blocks);
   const sub = document.getElementById('pg-subpages');
   if (sub) {
-    const children = getChildren(page.id).filter(c => !c.studyKind);
+    const children = getChildren(page.id);
     sub.innerHTML = children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('') +
       `<button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>`;
     document.getElementById('pg-add-subpage')?.addEventListener('click', () => openTemplatePicker(page.id));
     sub.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id)));
-  }
-  // Refresh the Study panel so section counts/items stay current.
-  const studyPanel = document.getElementById('pg-study-panel');
-  if (studyPanel) {
-    studyPanel.outerHTML = pageStudyPanelHTML(page);
-    wireStudyPanel(page);
   }
   const bl = document.querySelector('.pg-backlinks');
   const newBl = renderBacklinksHTML(page.id);
@@ -8939,7 +8915,8 @@ function openPageAiMenu(page, anchorEl) {
     <button data-act="lecture-photo">📸 Photo of notes/board</button>
     <button data-act="lecture-audio">🎙 Upload recording</button>
     <div class="pg-ai-section">STUDY</div>
-    <button data-act="summarize">✨ Summarize page</button>
+    <button data-act="paper">📜 Make it a paper <span class="pg-ai-hint">print / PDF</span></button>
+    <button data-act="summary">📝 Summarize <span class="pg-ai-hint">new page</span></button>
     <button data-act="cheatsheet">📋 Make a cheat sheet <span class="pg-ai-hint">new page</span></button>
     <button data-act="quiz">🧠 Make a quiz <span class="pg-ai-hint">new page</span></button>
     <button data-act="flashcards">🎴 Make flashcards <span class="pg-ai-hint">new page</span></button>
@@ -8960,18 +8937,18 @@ function openPageAiMenu(page, anchorEl) {
     if (act === 'quiz') { generatePageStudy(page, 'quiz'); return; }
     if (act === 'flashcards') { generatePageStudy(page, 'flashcards'); return; }
     if (act === 'cheatsheet') { generatePageStudy(page, 'cheatsheet'); return; }
+    if (act === 'summary') { generatePageStudy(page, 'summary'); return; }
+    if (act === 'paper') { openPaperView(page); return; }
 
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
     const UNI = ' Write any math/science with real Unicode symbols (π, ω, √, ², ₀, →), never LaTeX or $…$.';
-    const prompt = act === 'summarize'
-      ? 'Summarize this page in 3-5 concise sentences. Reply in the SAME language as the material.' + UNI
-      : 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.' + UNI;
+    const prompt = 'List the concrete action items / to-dos implied by this page as short bullet points, in the SAME language as the material. If there are none, say so briefly.' + UNI;
     const banner = appendPageAiPending(page);
     const result = await quickAI(prompt, text);
     removePageAiPending(banner);
     if (!result) return;
-    page.blocks.push({ ...blankBlock('callout'), calloutIcon: act === 'summarize' ? '✨' : '✅', text: latexToUnicode(result.trim()) });
+    page.blocks.push({ ...blankBlock('callout'), calloutIcon: '✅', text: latexToUnicode(result.trim()) });
     touchPage(page);
     rerenderBlocks(page);
   });
@@ -9227,7 +9204,7 @@ async function generatePageStudy(page, kind) {
   const material = pageToPlainText(page).slice(0, 12000);
   if (!material.trim() || material.trim().length < 20) { appendPageAiToast(page, 'Add lecture notes to the page first (✦ AI → Add lecture).'); return; }
   const banner = appendPageAiPending(page);
-  if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : 'Making a cheat sheet…';
+  if (banner) banner.textContent = kind === 'quiz' ? 'Writing quiz questions…' : kind === 'flashcards' ? 'Building flashcards…' : kind === 'summary' ? 'Summarizing your notes…' : 'Making a cheat sheet…';
 
   const LANG_RULE = ' Write everything in the SAME language and script as the material (Arabic material → Arabic, etc.). Adapt to the student\'s curriculum and grade level as reflected in the notes. Write math and science with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ≈, ≤), NEVER LaTeX — no $…$, no \\frac/\\omega/\\sqrt; write fractions inline as a/b.';
 
@@ -9235,6 +9212,29 @@ async function generatePageStudy(page, kind) {
   // 🧠 Quiz, 🎴 Flashcards) under the source notes instead of piling more
   // blocks onto the same page — so a page of raw notes grows into an
   // organized little study set you can see and jump into at a glance.
+  if (kind === 'summary') {
+    const out = await quickAI(
+      'Summarize the material into clear, well-organized study notes: short bold headings, each followed by concise bullet points covering the key ideas, definitions and results. Plain text, no intro.' + LANG_RULE,
+      material);
+    removePageAiPending(banner);
+    if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
+    const blocks = [];
+    latexToUnicode(out).trim().split('\n').forEach(line => {
+      // Require whitespace after the bullet char so "**Heading**" doesn't
+      // lose its first asterisk and leak a stray "*" into the heading text.
+      const t = line.replace(/^\s*[-*•]\s+/, '').trim();
+      if (!t) return;
+      if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
+      else if (/^\s*[-*•]\s/.test(line)) blocks.push({ ...blankBlock('bulleted'), text: t });
+      else blocks.push({ ...blankBlock('paragraph'), text: t });
+    });
+    if (!blocks.length) blocks.push(blankBlock('paragraph'));
+    const sub = createPage({ parentId: page.id, title: uniqueSubPageTitle(page.id, 'Summary'), icon: '📝', blocks, studyKind: 'summary' });
+    touchPage(page);
+    pagesOpenPage(sub.id);
+    return;
+  }
+
   if (kind === 'cheatsheet') {
     const out = await quickAI(
       'Turn the material into a compact exam cheat sheet: key facts, definitions, formulas, names and dates as dense bullet points under short bold headings. Plain text, no intro.' + LANG_RULE,
@@ -9243,7 +9243,9 @@ async function generatePageStudy(page, kind) {
     if (!out) { appendPageAiToast(page, 'Try again in a moment.'); return; }
     const blocks = [];
     latexToUnicode(out).trim().split('\n').forEach(line => {
-      const t = line.replace(/^\s*[-*•]\s*/, '').trim();
+      // Require whitespace after the bullet char so "**Heading**" doesn't
+      // lose its first asterisk and leak a stray "*" into the heading text.
+      const t = line.replace(/^\s*[-*•]\s+/, '').trim();
       if (!t) return;
       if (/^\*\*.+\*\*$/.test(line.trim()) || /^#{1,3}\s/.test(line.trim())) blocks.push({ ...blankBlock('heading3'), text: t.replace(/^#+\s*/, '').replace(/\*\*/g, '') });
       else blocks.push({ ...blankBlock('bulleted'), text: t });
@@ -9287,6 +9289,253 @@ async function generatePageStudy(page, kind) {
     return;
   }
   removePageAiPending(banner);
+}
+
+/* ── Paper: the page (e.g. a lecture transcript) rewritten as a real,
+   beautifully typeset paper — previewed on a white sheet inside VOID and
+   downloadable as a print-ready PDF. The PDF pages are rendered on a canvas,
+   so Arabic/RTL text and math symbols come out exactly as the browser draws
+   them (the old text-only PDF built here mangles anything non-Latin). ── */
+
+const PAPER_RTL_RE = /[֐-߿ࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
+
+async function openPaperView(page) {
+  const material = pageToPlainText(page).slice(0, 12000);
+  if (!material.trim() || material.trim().length < 20) { appendPageAiToast(page, 'Add lecture notes to the page first (✦ AI → Add lecture).'); return; }
+  const banner = appendPageAiPending(page);
+  if (banner) banner.textContent = 'Writing your paper…';
+  const raw = await quickAI(
+    'Rewrite the material as a clean, well-organized paper. Return ONLY valid JSON (no markdown fences, no prose): an array of 2-8 sections, each exactly {"heading":"short section title","items":[{"t":"p","text":"a paragraph"},{"t":"b","text":"a bullet point"}]}. Cover ALL the important content faithfully — organize and clean it up, never invent facts. Prefer short paragraphs and bullet lists. Write everything in the SAME language and script as the material. Write math with real Unicode symbols (π, √, ², →), never LaTeX.',
+    material);
+  removePageAiPending(banner);
+  let sections = null;
+  const parsed = parseJsonLoose(raw);
+  if (Array.isArray(parsed)) {
+    sections = parsed
+      .map(s => ({
+        heading: String(s?.heading || '').trim(),
+        items: (Array.isArray(s?.items) ? s.items : [])
+          .filter(it => it && String(it.text || '').trim())
+          .map(it => ({ t: it.t === 'b' ? 'b' : 'p', text: latexToUnicode(String(it.text).trim()) })),
+      }))
+      .filter(s => s.heading || s.items.length);
+  }
+  // If the AI is unreachable or returns junk, lay out the page's own blocks —
+  // the paper still opens, just without the AI cleanup.
+  if (!sections || !sections.length) sections = paperSectionsFromBlocks(page);
+  if (!sections.length) { appendPageAiToast(page, "Couldn't build a paper from this page yet."); return; }
+  const model = {
+    title: (page.title || 'Untitled').trim() || 'Untitled',
+    date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
+    sections,
+    rtl: PAPER_RTL_RE.test(page.title + ' ' + sections.map(s => s.heading + ' ' + s.items.map(i => i.text).join(' ')).join(' ')),
+  };
+  storeDocument(model.title, paperPlainText(model));
+  renderPaperOverlay(model);
+}
+
+function paperSectionsFromBlocks(page) {
+  const secs = [];
+  let cur = { heading: '', items: [] };
+  const pushCur = () => { if (cur.heading || cur.items.length) secs.push(cur); };
+  const walk = (blocks) => (blocks || []).forEach(b => {
+    const text = (b.text || '').trim();
+    if (/^heading/.test(b.type || '')) { if (text) { pushCur(); cur = { heading: text, items: [] }; } }
+    else if (['bulleted', 'numbered', 'todo'].includes(b.type)) { if (text) cur.items.push({ t: 'b', text }); }
+    else if (['paragraph', 'quote', 'callout', 'code', 'toggle'].includes(b.type)) { if (text) cur.items.push({ t: 'p', text }); }
+    if (b.children) walk(b.children);
+  });
+  walk(page.blocks);
+  pushCur();
+  return secs;
+}
+
+function paperPlainText(model) {
+  return model.sections.map(s =>
+    (s.heading ? s.heading + '\n' : '') +
+    s.items.map(it => (it.t === 'b' ? '• ' : '') + it.text).join('\n')
+  ).join('\n\n');
+}
+
+function renderPaperOverlay(model) {
+  document.querySelector('.paper-scrim')?.remove();
+  const scrim = document.createElement('div');
+  scrim.className = 'paper-scrim';
+  scrim.innerHTML = `
+    <div class="paper-topbar">
+      <button class="paper-top-btn" id="paper-close">✕</button>
+      <span class="paper-top-title">PAPER</span>
+      <div class="paper-top-actions">
+        <button class="paper-top-btn" id="paper-doc">⬇ Word</button>
+        <button class="paper-top-btn paper-top-primary" id="paper-pdf">⬇ PDF</button>
+      </div>
+    </div>
+    <div class="paper-scroll">
+      <div class="paper-sheet" ${model.rtl ? 'dir="rtl"' : ''}>
+        <div class="paper-head-row"><span class="paper-brand">VOID · STUDY PAPER</span><span class="paper-date">${escapeHTML(model.date)}</span></div>
+        <h1 class="paper-title">${escapeHTML(model.title)}</h1>
+        ${model.sections.map(sec => `
+          <section class="paper-sec">
+            ${sec.heading ? `<h2 class="paper-heading">${escapeHTML(sec.heading)}</h2>` : ''}
+            ${sec.items.map(it => it.t === 'b'
+              ? `<div class="paper-bullet"><span class="paper-bullet-dot">•</span><span>${escapeHTML(it.text)}</span></div>`
+              : `<p class="paper-p">${escapeHTML(it.text)}</p>`).join('')}
+          </section>`).join('')}
+        <div class="paper-foot">${escapeHTML(model.title)} — VOID</div>
+      </div>
+    </div>`;
+  document.body.appendChild(scrim);
+  scrim.querySelector('#paper-close').addEventListener('click', () => scrim.remove());
+  scrim.querySelector('#paper-pdf').addEventListener('click', () => downloadPaperPdf(model));
+  scrim.querySelector('#paper-doc').addEventListener('click', () => exportDocument(model.title, paperPlainText(model), 'doc'));
+}
+
+/* Render the paper onto A4 canvases (one per PDF page). Working in points
+   (595×842 = A4) at 2× device scale keeps print output crisp. */
+function paperCanvasPages(model) {
+  const S = 2, W = 595, H = 842, M = 62, FOOT = 46;
+  const bodyW = W - M * 2;
+  const SERIF = 'Georgia, "Noto Serif", "Times New Roman", serif';
+  const SANS = 'Inter, system-ui, sans-serif';
+  const rtl = model.rtl;
+  const X = rtl ? W - M : M;
+  const pages = [];
+  let ctx, y;
+
+  const newPage = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = W * S; canvas.height = H * S;
+    ctx = canvas.getContext('2d');
+    ctx.scale(S, S);
+    ctx.fillStyle = '#fdfcf8';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'alphabetic';
+    ctx.direction = rtl ? 'rtl' : 'ltr';
+    ctx.textAlign = rtl ? 'right' : 'left';
+    pages.push(canvas);
+    y = M;
+  };
+
+  const wrap = (text, font, maxW) => {
+    ctx.font = font;
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = []; let cur = '';
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; }
+      else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines.length ? lines : [''];
+  };
+
+  const ensure = (h) => { if (y + h > H - FOOT) newPage(); };
+
+  const drawText = (text, { font, size, lineH, color, indent = 0, hang = 0, bulletDot = false }) => {
+    const lines = wrap(text, font, bodyW - indent - hang);
+    lines.forEach((line, i) => {
+      ensure(lineH);
+      if (bulletDot && i === 0) {
+        ctx.font = '700 ' + size + 'px ' + font.split('px ')[1];
+        ctx.fillStyle = '#b7aa88';
+        ctx.fillText('•', rtl ? X - indent : X + indent, y + size);
+      }
+      ctx.font = font; ctx.fillStyle = color;
+      const tx = rtl ? X - indent - hang : X + indent + hang;
+      ctx.fillText(line, tx, y + size);
+      y += lineH;
+    });
+  };
+
+  newPage();
+
+  // Letterhead: small-caps brand + date over a hairline rule.
+  ctx.font = '600 8.5px ' + SANS; ctx.fillStyle = '#8a8578';
+  try { ctx.letterSpacing = '2px'; } catch (_) {}
+  ctx.fillText('VOID · STUDY PAPER', X, y + 8);
+  ctx.save();
+  ctx.textAlign = rtl ? 'left' : 'right';
+  ctx.fillText(model.date, rtl ? M : W - M, y + 8);
+  ctx.restore();
+  try { ctx.letterSpacing = '0px'; } catch (_) {}
+  y += 18;
+  ctx.strokeStyle = '#dcd7c9'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
+  y += 22;
+
+  drawText(model.title, { font: '700 24px ' + SERIF, size: 24, lineH: 31, color: '#1b1a17' });
+  y += 10;
+
+  model.sections.forEach(sec => {
+    if (sec.heading) {
+      ensure(52);
+      y += 12;
+      drawText(sec.heading, { font: '700 14px ' + SERIF, size: 14, lineH: 20, color: '#2a2823' });
+      ctx.strokeStyle = '#b7aa88'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      if (rtl) { ctx.moveTo(W - M, y); ctx.lineTo(W - M - 26, y); } else { ctx.moveTo(M, y); ctx.lineTo(M + 26, y); }
+      ctx.stroke();
+      y += 10;
+    }
+    sec.items.forEach(it => {
+      if (it.t === 'b') {
+        drawText(it.text, { font: '400 11px ' + SERIF, size: 11, lineH: 17.5, color: '#26241f', indent: 6, hang: 13, bulletDot: true });
+        y += 3.5;
+      } else {
+        drawText(it.text, { font: '400 11px ' + SERIF, size: 11, lineH: 17.5, color: '#26241f' });
+        y += 7;
+      }
+    });
+  });
+
+  // Footer pass: page numbers + hairline, once the total is known.
+  pages.forEach((canvas, i) => {
+    const c = canvas.getContext('2d');
+    c.strokeStyle = '#dcd7c9'; c.lineWidth = 0.8;
+    c.beginPath(); c.moveTo(M, H - 34); c.lineTo(W - M, H - 34); c.stroke();
+    c.font = '500 8.5px ' + SANS; c.fillStyle = '#8a8578';
+    c.textAlign = 'center'; c.direction = 'ltr';
+    c.fillText(`${i + 1} / ${pages.length}`, W / 2, H - 21);
+  });
+
+  return { pages, W, H };
+}
+
+// Wrap the rendered pages into a PDF by embedding each page as a JPEG
+// (DCTDecode) XObject — dependency-free, and Unicode-safe because the text
+// was already rasterized by the browser.
+function downloadPaperPdf(model) {
+  buzz();
+  const { pages, W, H } = paperCanvasPages(model);
+  const jpegs = pages.map(c => atob(c.toDataURL('image/jpeg', 0.92).split(',')[1]));
+
+  const catalogNum = 1, pagesNum = 2;
+  let nextNum = 3;
+  const pageNums = [], contentNums = [], imageNums = [];
+  jpegs.forEach(() => { pageNums.push(nextNum++); contentNums.push(nextNum++); imageNums.push(nextNum++); });
+
+  const objDefs = {};
+  objDefs[catalogNum] = `<< /Type /Catalog /Pages ${pagesNum} 0 R >>`;
+  objDefs[pagesNum] = `<< /Type /Pages /Kids [${pageNums.map(n => `${n} 0 R`).join(' ')}] /Count ${jpegs.length} >>`;
+  jpegs.forEach((jpg, i) => {
+    const stream = `q\n${W} 0 0 ${H} 0 0 cm\n/Im${i} Do\nQ`;
+    objDefs[pageNums[i]] = `<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im${i} ${imageNums[i]} 0 R >> >> /Contents ${contentNums[i]} 0 R >>`;
+    objDefs[contentNums[i]] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+    objDefs[imageNums[i]] = `<< /Type /XObject /Subtype /Image /Width ${pages[i].width} /Height ${pages[i].height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n${jpg}\nendstream`;
+  });
+
+  const totalObjs = nextNum - 1;
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (let n = 1; n <= totalObjs; n++) { offsets[n] = pdf.length; pdf += `${n} 0 obj\n${objDefs[n]}\nendobj\n`; }
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
+  for (let n = 1; n <= totalObjs; n++) pdf += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+  const bytes = new Uint8Array(pdf.length);
+  for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xff;
+  saveFileBlob(new Blob([bytes], { type: 'application/pdf' }), `${safeFileName(model.title)}.pdf`);
 }
 
 // Extract a JSON array from a model reply even if it wrapped it in prose or ``` fences.

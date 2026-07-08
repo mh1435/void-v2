@@ -2801,6 +2801,21 @@ body.reduced-motion *::after {
 }
 .pg-head-btn:active { background: var(--accent-soft); color: var(--accent); }
 
+/* Fixed study sections inside every project page: Summary / Quizzes /
+   Cheat sheets / Flashcards, each listing its generated sub-pages with a
+   one-tap Generate. */
+.pg-study-sections { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+.pg-study-sec { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px; padding: 9px 11px; }
+.pg-study-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pg-study-sec-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.pg-study-sec-gen {
+  background: none; border: 1px dashed var(--glass-border); color: var(--accent);
+  font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 10px; cursor: pointer; flex-shrink: 0;
+}
+.pg-study-sec-gen:active { background: var(--accent-soft); }
+.pg-study-sec-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pg-study-sec-empty { font-size: 11.5px; color: var(--muted); padding: 2px 1px; }
+
 .pg-subpages { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
 .pg-subpage-chip {
   display: inline-flex; align-items: center; gap: 5px; background: var(--glass-bg); border: 1px solid var(--glass-border);
@@ -3120,3 +3135,44 @@ body.reduced-motion *::after {
 .pg-rec-timer { font-family: var(--hub-mono); font-size: 30px; font-weight: 700; color: var(--text); margin: 6px 0 2px; }
 .pg-rec-hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; padding: 0 8px; }
 .pg-rec-controls { width: 100%; }
+
+/* ── Paper view: the page rewritten as a real paper — a warm white sheet on
+   the dark app, serif typography, downloadable as a print-ready PDF. ── */
+.paper-scrim { position: fixed; inset: 0; z-index: 950; background: #0a0a10; display: flex; flex-direction: column; }
+.paper-topbar {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  padding-top: calc(12px + env(safe-area-inset-top)); flex-shrink: 0;
+}
+.paper-top-title { flex: 1; text-align: center; font-family: var(--hub-display); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+.paper-top-btn {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text);
+  font-size: 12.5px; font-weight: 600; padding: 8px 13px; border-radius: 12px; cursor: pointer;
+}
+.paper-top-btn:active { background: var(--accent-soft); }
+.paper-top-actions { display: flex; gap: 6px; }
+.paper-top-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.paper-scroll { flex: 1; overflow-y: auto; padding: 6px 14px calc(30px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+.paper-sheet {
+  background: #fdfcf8; color: #26241f; max-width: 640px; margin: 0 auto;
+  border-radius: 3px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
+  padding: 34px 32px 30px; font-family: Georgia, 'Noto Serif', 'Times New Roman', serif;
+}
+.paper-head-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  font-family: Inter, system-ui, sans-serif; font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.18em; color: #8a8578; text-transform: uppercase;
+  border-bottom: 1px solid #dcd7c9; padding-bottom: 10px; margin-bottom: 22px;
+}
+.paper-date { letter-spacing: 0.04em; text-transform: none; font-weight: 500; }
+.paper-title { font-size: 26px; font-weight: 700; line-height: 1.25; color: #1b1a17; margin: 0 0 6px; }
+.paper-sec { margin-top: 20px; }
+.paper-heading { font-size: 15.5px; font-weight: 700; color: #2a2823; margin: 0 0 4px; }
+.paper-heading::after { content: ''; display: block; width: 30px; border-bottom: 2px solid #b7aa88; margin-top: 5px; }
+.paper-p { font-size: 13.5px; line-height: 1.7; margin: 10px 0 0; }
+.paper-bullet { display: flex; gap: 9px; font-size: 13.5px; line-height: 1.65; margin: 7px 0 0 6px; }
+.paper-sheet[dir="rtl"] .paper-bullet { margin: 7px 6px 0 0; }
+.paper-bullet-dot { color: #b7aa88; font-weight: 700; flex-shrink: 0; }
+.paper-foot {
+  margin-top: 34px; padding-top: 10px; border-top: 1px solid #dcd7c9; text-align: center;
+  font-family: Inter, system-ui, sans-serif; font-size: 9.5px; letter-spacing: 0.1em; color: #8a8578;
+}
