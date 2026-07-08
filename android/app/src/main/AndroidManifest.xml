@@ -21,6 +21,10 @@
 
     <!-- Microphone / Voice -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Required alongside RECORD_AUDIO for the WebView's getUserMedia (in-page
+         lecture recorder); Capacitor requests both together and denies if either
+         is missing. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Location -->
