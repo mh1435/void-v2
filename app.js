@@ -2481,9 +2481,10 @@ function setupChat() {
 
   App.stopWakeListening = () => {
     nativeWakeStop = true;
-    if (WakePlugin) { WakePlugin.stop().catch(() => {}); }
+    const p = WakePlugin ? WakePlugin.stop().catch(() => {}) : Promise.resolve();
     if (wakeRecognizer) { try { wakeRecognizer.onend = null; wakeRecognizer.stop(); } catch (_) {} wakeRecognizer = null; }
     wakeActive = false;
+    return p; // awaitable so callers can wait for the mic to actually free up
   };
 
   input.addEventListener('input', () => {
@@ -8892,11 +8893,35 @@ function openLectureRecorder(page) {
   };
 
   startBtn.addEventListener('click', async () => {
+    hintEl.textContent = 'Getting the mic ready…';
     try {
-      App.stopWakeListening?.();
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (_) {
-      hintEl.textContent = 'Microphone blocked. Enable it for VOID in Settings → Apps → VOID → Permissions.';
+      // The always-on "Okay VOID" wake word holds the mic. Ask it to release,
+      // WAIT for that, then grab the mic — retrying briefly because the native
+      // AudioRecord takes a moment to free up (otherwise: NotReadableError).
+      await App.stopWakeListening?.();
+      let micErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+          micErr = null;
+          break;
+        } catch (err) {
+          micErr = err;
+          const busy = err?.name === 'NotReadableError' || err?.name === 'AbortError';
+          if (!busy) break; // a permission/other error won't fix itself by waiting
+          await new Promise(r => setTimeout(r, 450 * (attempt + 1)));
+        }
+      }
+      if (micErr) throw micErr;
+    } catch (err) {
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+        hintEl.textContent = 'Microphone blocked. Enable it for VOID in Settings → Apps → VOID → Permissions.';
+      } else if (name === 'NotReadableError' || name === 'AbortError' || name === 'NotFoundError') {
+        hintEl.textContent = 'The mic is busy — turn off the “Okay VOID” wake word (or close other recording apps) and try again.';
+      } else {
+        hintEl.textContent = `Couldn't start the mic — ${name || err?.message || 'unknown error'}.`;
+      }
       return;
     }
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
