@@ -8082,7 +8082,8 @@ function changeBlockType(page, blockId, type) {
 function renderPageEditor(page) {
   const root = document.getElementById('pages-root');
   if (!root) return;
-  const children = getChildren(page.id).filter(c => c.type !== 'database' || true);
+  // Study sub-pages live in the Study panel below, not in the generic chips row.
+  const children = getChildren(page.id).filter(c => !c.studyKind);
   root.innerHTML = `
     <div class="pg-editor-view">
       ${pagesBreadcrumbHTML(page.parentId)}
@@ -8098,14 +8099,68 @@ function renderPageEditor(page) {
         ${children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
         <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
       </div>
+      ${pageStudyPanelHTML(page)}
       <div class="pg-blocks" id="pg-blocks">${renderBlocks(page.blocks)}</div>
       <button class="pg-add-block-btn" id="pg-add-block-btn">+ Add a block</button>
       ${renderBacklinksHTML(page.id)}
     </div>`;
 
   wirePageEditorChrome(page);
+  wireStudyPanel(page);
   wireBlockEvents(page);
   applyFocusIntent();
+}
+
+// The page IS the project: raw material (writing, photos of paper, voice
+// recordings) goes into the blocks, and this panel holds the organized study
+// sections generated from it — Quizzes, Cheat sheets, Flashcards — plus quick
+// buttons to feed in more material. Hidden on study pages themselves.
+function pageStudyPanelHTML(page) {
+  if (page.studyKind || page.type === 'database') return '';
+  const kids = getChildren(page.id);
+  const sections = Object.keys(STUDY_KIND_META).map(kind => {
+    const meta = STUDY_KIND_META[kind];
+    const items = kids.filter(c => c.studyKind === kind);
+    const itemsHTML = items.length
+      ? items.map(it => `<button class="pg-subpage-chip" data-open="${it.id}">${it.icon || meta.icon} ${escapeHTML(it.title || 'Untitled')}</button>`).join('')
+      : `<span class="pg-study-none">None yet</span>`;
+    return `
+      <div class="pg-study-sec">
+        <div class="pg-study-sec-head">
+          <span class="pg-study-sec-label">${meta.icon} ${meta.label}</span>
+          ${items.length ? `<span class="pg-study-count">${items.length}</span>` : ''}
+          <button class="pg-study-make" data-make="${kind}" title="Make from this page's material">＋</button>
+        </div>
+        <div class="pg-study-sec-items">${itemsHTML}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="pg-study-panel" id="pg-study-panel">
+      <div class="pg-study-panel-head">
+        <span class="pg-study-panel-title">STUDY</span>
+        <span class="pg-study-addrow">
+          <button class="pg-study-addbtn" data-add="record">🔴 Record</button>
+          <button class="pg-study-addbtn" data-add="photo">📸 Photo</button>
+          <button class="pg-study-addbtn" data-add="audio">🎙 Audio</button>
+        </span>
+      </div>
+      <div class="pg-study-secs">${sections}</div>
+    </div>`;
+}
+
+function wireStudyPanel(page) {
+  const panel = document.getElementById('pg-study-panel');
+  if (!panel) return;
+  panel.addEventListener('click', (e) => {
+    const open = e.target.closest('[data-open]')?.dataset.open;
+    if (open) { pagesOpenPage(open); return; }
+    const make = e.target.closest('[data-make]')?.dataset.make;
+    if (make) { generatePageStudy(page, make); return; }
+    const add = e.target.closest('[data-add]')?.dataset.add;
+    if (add === 'record') openLectureRecorder(page);
+    else if (add === 'photo') addLectureToPage(page, 'photo');
+    else if (add === 'audio') addLectureToPage(page, 'audio');
+  });
 }
 
 function wirePageEditorChrome(page) {
@@ -8349,11 +8404,17 @@ function rerenderBlocks(page) {
   if (container) container.innerHTML = renderBlocks(page.blocks);
   const sub = document.getElementById('pg-subpages');
   if (sub) {
-    const children = getChildren(page.id);
+    const children = getChildren(page.id).filter(c => !c.studyKind);
     sub.innerHTML = children.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('') +
       `<button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>`;
     document.getElementById('pg-add-subpage')?.addEventListener('click', () => openTemplatePicker(page.id));
     sub.querySelectorAll('.pg-subpage-chip[data-id]').forEach(chip => chip.addEventListener('click', () => pagesOpenPage(chip.dataset.id)));
+  }
+  // Refresh the Study panel so section counts/items stay current.
+  const studyPanel = document.getElementById('pg-study-panel');
+  if (studyPanel) {
+    studyPanel.outerHTML = pageStudyPanelHTML(page);
+    wireStudyPanel(page);
   }
   const bl = document.querySelector('.pg-backlinks');
   const newBl = renderBacklinksHTML(page.id);

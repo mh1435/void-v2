@@ -2809,6 +2809,30 @@ body.reduced-motion *::after {
 .pg-subpage-chip:active { background: var(--accent-soft); }
 .pg-subpage-add { color: var(--accent); border-style: dashed; }
 
+/* In-page Study panel: the page is the project, these are its sections */
+.pg-study-panel {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px;
+  padding: 10px 12px; margin: 2px 0 16px;
+}
+.pg-study-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.pg-study-panel-title { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.pg-study-addrow { display: flex; gap: 5px; }
+.pg-study-addbtn {
+  background: none; border: 1px dashed var(--glass-border); color: var(--muted);
+  font-size: 11px; padding: 4px 8px; border-radius: 10px; cursor: pointer; white-space: nowrap;
+}
+.pg-study-addbtn:active { background: var(--accent-soft); color: var(--accent); }
+.pg-study-secs { display: flex; flex-direction: column; gap: 8px; }
+.pg-study-sec-head { display: flex; align-items: center; gap: 7px; }
+.pg-study-sec-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.pg-study-make {
+  margin-left: auto; background: var(--accent-soft); color: var(--accent); border: none;
+  width: 22px; height: 22px; border-radius: 8px; font-size: 14px; line-height: 1; cursor: pointer;
+}
+.pg-study-make:active { transform: scale(0.94); }
+.pg-study-sec-items { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 0 2px; }
+.pg-study-none { font-size: 11px; color: var(--muted); opacity: 0.7; padding: 2px 0; }
+
 /* Blocks */
 .pg-blocks { display: flex; flex-direction: column; }
 .pg-block { display: flex; align-items: flex-start; gap: 4px; position: relative; padding: 1px 0; border-radius: 6px; }
