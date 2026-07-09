@@ -73,4 +73,5 @@ All API keys and secrets live **only in Cloudflare Worker secrets** — never in
 
 ## License
 
-MIT
+All Rights Reserved. This is proprietary, closed-source software — no
+license is granted to use, copy, modify, or redistribute it. See [LICENSE](./LICENSE).
