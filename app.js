@@ -497,21 +497,10 @@ async function transcribeStudyAudio(file) {
   appendMessage('system', `🎙 Transcribing “${file.name}”${file.size > 23 * MB ? ' — long recording, this takes a couple of minutes…' : '…'}`);
   const typingId = appendTyping();
   try {
-    let text;
-    if (file.size <= 10 * MB) {
-      // Small enough to send whole (uploads reliably on mobile), any format.
-      text = await transcribeBlob(file, file.type || 'audio/mp4', file.name);
-    } else {
-      // Too big to send whole: decode it (any audio/video the phone can play),
-      // downsample to 16 kHz mono, and transcribe in small, upload-friendly parts.
-      const chunks = await audioFileToWavChunks(file, 16000, 120);
-      const parts = [];
-      for (let i = 0; i < chunks.length; i++) {
-        updateTyping(typingId, `Transcribing… part ${i + 1} of ${chunks.length}`);
-        parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
-      }
-      text = parts.filter(Boolean).join('\n').trim();
-    }
+    // lectureAudioToText handles the small-vs-chunked split, RMS-gates near-
+    // silent audio (Whisper hallucinates on silence instead of returning
+    // nothing), and cleans up any repetition loops that slip through anyway.
+    const text = await lectureAudioToText(file, (i, n) => updateTyping(typingId, `Transcribing… part ${i} of ${n}`));
     removeTyping(typingId);
     if (!text) {
       appendMessage('system', 'Couldn\'t transcribe that recording — make sure VOID CORE is up to date and try again.');
@@ -524,10 +513,48 @@ async function transcribeStudyAudio(file) {
     saveChatHistory();
     appendMessage('assistant', msg, App.chatHistory.length - 1);
     renderStudyActionChips();
-  } catch (_) {
+  } catch (e) {
     removeTyping(typingId);
-    appendMessage('system', `Couldn't process “${file.name}” — a very long recording can exceed the phone's memory. Try a shorter section.`);
+    appendMessage('system', e?.message === 'SILENT_AUDIO'
+      ? `“${file.name}” sounds silent or too quiet to transcribe — check the recording actually captured audio.`
+      : `Couldn't process “${file.name}” — a very long recording can exceed the phone's memory. Try a shorter section.`);
   }
+}
+
+// Whisper doesn't return "nothing" when fed near-silent audio — it hallucinates:
+// repeating a phrase 2-3 times in a row, or inventing junk (a well-known failure
+// mode where it produces "please subscribe"-style filler in random languages,
+// bleeding in from its YouTube-caption training data). RMS-gate every chunk so
+// silent stretches (phone in a pocket, a pause before class starts) never reach
+// Whisper in the first place — the single biggest source of the problem.
+const SILENCE_RMS = 0.004; // well below speech, well above a phone's noise floor
+function pcmRMS(float32) {
+  let sum = 0;
+  const step = Math.max(1, Math.floor(float32.length / 40000)); // sample for speed on long buffers
+  let n = 0;
+  for (let i = 0; i < float32.length; i += step) { sum += float32[i] * float32[i]; n++; }
+  return Math.sqrt(sum / Math.max(1, n));
+}
+
+// Defensive net for hallucinated text that slips through anyway (e.g. a mostly
+// quiet chunk that trails into a repetition loop): collapse runs of 2+
+// consecutive near-identical sentences, and runs of 3+ consecutive identical
+// short phrases, down to a single occurrence.
+function dedupeHallucinatedRepeats(text) {
+  if (!text) return text;
+  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  // Sentence-level: "X. X. X." -> "X."
+  const sentences = text.match(/[^.!?\n]+[.!?]?\s*/g) || [text];
+  const out = [];
+  for (const s of sentences) {
+    const prevNorm = out.length ? norm(out[out.length - 1]) : null;
+    if (prevNorm && norm(s) === prevNorm && norm(s).length > 3) continue; // drop the repeat
+    out.push(s);
+  }
+  let cleaned = out.join('');
+  // Short-phrase loop: "bota nao, bota nao, bota nao" -> "bota nao"
+  cleaned = cleaned.replace(/\b([\wÀ-ɏ؀-ۿ]{2,20}(?:[ ,]+[\wÀ-ɏ؀-ۿ]{2,20}){0,3})\b(?:[.,]?\s+\1\b){2,}/gi, '$1');
+  return cleaned.trim();
 }
 
 async function transcribeBlob(blob, mime, name) {
@@ -577,6 +604,7 @@ async function audioFileToWavChunks(file, rate = 16000, chunkSec = 120) {
     try { ac.close(); } catch (_) {}
   }
   const chunks = [];
+  let silentSkipped = 0, totalSlices = 0;
   // Small chunks = small uploads. A 2-minute 16 kHz mono WAV is ~4 MB, which
   // uploads reliably on mobile; a 10-minute one is ~19 MB and routinely drops.
   if (decoded.sampleRate === rate) {
@@ -585,8 +613,14 @@ async function audioFileToWavChunks(file, rate = 16000, chunkSec = 120) {
     for (let off = 0; off < data.length; off += per) {
       const slice = data.subarray(off, Math.min(off + per, data.length));
       if (slice.length < rate * 0.5) break;
+      totalSlices++;
+      // Near-silent stretches (phone in a pocket, a pause) are exactly what
+      // makes Whisper hallucinate — skip them instead of transcribing silence.
+      if (pcmRMS(slice) < SILENCE_RMS) { silentSkipped++; continue; }
       chunks.push(new Blob([wavFromFloat32(slice, rate)], { type: 'audio/wav' }));
     }
+    chunks.silentSkipped = silentSkipped;
+    chunks.totalSlices = totalSlices;
     return chunks;
   }
   // Context ignored the requested rate — resample each chunk to 16 kHz.
@@ -599,8 +633,13 @@ async function audioFileToWavChunks(file, rate = 16000, chunkSec = 120) {
     src.connect(oac.destination);
     src.start(0, off, dur);
     const rendered = await oac.startRendering();
-    chunks.push(new Blob([wavFromFloat32(rendered.getChannelData(0), rate)], { type: 'audio/wav' }));
+    totalSlices++;
+    const pcm = rendered.getChannelData(0);
+    if (pcmRMS(pcm) < SILENCE_RMS) { silentSkipped++; continue; }
+    chunks.push(new Blob([wavFromFloat32(pcm, rate)], { type: 'audio/wav' }));
   }
+  chunks.silentSkipped = silentSkipped;
+  chunks.totalSlices = totalSlices;
   return chunks;
 }
 
@@ -9048,10 +9087,7 @@ function openLectureRecorder(page, onDone) {
     catch (e) { failReason = String(e?.message || e || ''); }
     removePageAiPending(banner);
     if (!text || !text.trim()) {
-      const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
-      appendPageAiToast(page, netErr
-        ? "Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or use Wi‑Fi) and try again."
-        : (failReason ? `Couldn't transcribe that. (${failReason.slice(0, 120)})` : "Couldn't transcribe that — try again in a moment."));
+      appendPageAiToast(page, transcribeFailMessage(failReason));
       return;
     }
     page.blocks.push({ ...blankBlock('heading3'), text: `Lecture — ${new Date().toLocaleDateString()}` });
@@ -9103,15 +9139,14 @@ function addLectureToPage(page, kind, onDone) {
     } catch (e) { failReason = String(e?.message || e || '').replace(/^Error:\s*/, '').slice(0, 140); }
     removePageAiPending(banner);
     if (!text || !text.trim()) {
-      const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
       let msg;
-      if (netErr) {
-        msg = `Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or switch to Wi‑Fi) and try again.`;
+      if (kind === 'photo') {
+        const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
+        msg = netErr
+          ? "Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or switch to Wi‑Fi) and try again."
+          : (failReason ? `Couldn't read the photo. (${failReason})` : "Couldn't read the photo — try a clearer, well-lit shot.");
       } else {
-        const base = kind === 'photo'
-          ? "Couldn't read the photo — try a clearer, well-lit shot"
-          : "Couldn't transcribe that — try again in a moment";
-        msg = failReason ? `${base}. (${failReason})` : `${base}.`;
+        msg = transcribeFailMessage(failReason);
       }
       appendPageAiToast(page, msg);
       return;
@@ -9232,18 +9267,50 @@ function fileToDataURL(file) {
 }
 
 // Reuses the same chunked transcription pipeline as the Study Hub.
+// Quick check-before-send: decode just far enough to measure signal level.
+// Doesn't touch the bytes actually uploaded — if we can't decode it (odd
+// codec), we don't block; Whisper gets a chance to try anyway.
+function transcribeFailMessage(failReason) {
+  if (failReason === 'SILENT_AUDIO') {
+    return "That recording sounds silent or too quiet to transcribe — check the mic wasn't muted or blocked, and hold the phone closer next time.";
+  }
+  const netErr = /failed to fetch|networkerror|load failed|timeout|timed out|network request failed/i.test(failReason);
+  if (netErr) {
+    return "Couldn't reach VOID CORE — the network request failed. This is almost always a VPN or weak signal: turn the VPN off (or use Wi‑Fi) and try again.";
+  }
+  return failReason ? `Couldn't transcribe that. (${failReason.slice(0, 120)})` : "Couldn't transcribe that — try again in a moment.";
+}
+
+async function isAudioEffectivelySilent(file) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    let decoded;
+    try { decoded = await ac.decodeAudioData(await file.arrayBuffer()); }
+    finally { try { ac.close(); } catch (_) {} }
+    return pcmRMS(decoded.getChannelData(0)) < SILENCE_RMS;
+  } catch (_) { return false; }
+}
+
 async function lectureAudioToText(file, onProgress) {
   const MB = 1024 * 1024;
-  if (file.size <= 10 * MB) return await transcribeBlob(file, file.type || 'audio/mp4', file.name);
+  if (file.size <= 10 * MB) {
+    // A quiet/silent short recording is exactly what makes Whisper hallucinate
+    // instead of returning nothing — catch it before it ever reaches the API.
+    if (await isAudioEffectivelySilent(file)) throw new Error('SILENT_AUDIO');
+    const text = await transcribeBlob(file, file.type || 'audio/mp4', file.name);
+    return dedupeHallucinatedRepeats(text);
+  }
   // Long recording: decode + split into small 2-minute WAV parts that upload
   // reliably on mobile, and report progress so the user sees it working.
   const chunks = await audioFileToWavChunks(file, 16000, 120);
+  if (!chunks.length && chunks.totalSlices > 0) throw new Error('SILENT_AUDIO'); // whole recording was quiet
   const parts = [];
   for (let i = 0; i < chunks.length; i++) {
     onProgress?.(i + 1, chunks.length);
     parts.push(await transcribeBlob(chunks[i], 'audio/wav', `part${i + 1}.wav`));
   }
-  return parts.filter(Boolean).join('\n').trim();
+  return dedupeHallucinatedRepeats(parts.filter(Boolean).join('\n').trim());
 }
 
 // Generate a cheat sheet (text blocks), quiz (interactive block), or flashcards
