@@ -7788,16 +7788,20 @@ function renderPagesList(parentId) {
       ${crumbHTML}
       ${studyStripHTML}
       <div class="pg-list-rows">${rowsHTML}</div>
-      <button class="pg-new-btn" id="pg-new-page-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New
-      </button>
+      <div class="pg-new-row">
+        <button class="pg-new-btn pg-new-btn-secondary" id="pg-new-page-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New
+        </button>
+        <button class="pg-new-btn pg-new-paper-btn" id="pg-new-paper-btn">📜 New paper</button>
+      </div>
     </div>`;
   root.querySelectorAll('.pg-study-chip').forEach(chip => {
     chip.addEventListener('click', () => renderStudyKindList(chip.dataset.studyKind));
   });
 
   document.getElementById('pg-new-page-btn')?.addEventListener('click', () => openTemplatePicker(parentId));
+  document.getElementById('pg-new-paper-btn')?.addEventListener('click', () => openNewPaperPicker(parentId));
   root.querySelectorAll('.pg-list-row').forEach(row => {
     row.addEventListener('click', (e) => {
       if (e.target.closest('.pg-row-menu-btn')) return;
@@ -8939,7 +8943,7 @@ function appendPageAiToast(page, msg) {
 // Whisper auto-detects the spoken language, so Arabic/Syrian lectures (or any
 // language) transcribe without any setting to change.
 let lectureRec = null;
-function openLectureRecorder(page) {
+function openLectureRecorder(page, onDone) {
   if (!(navigator.mediaDevices?.getUserMedia) || !window.MediaRecorder) {
     appendPageAiToast(page, 'Recording needs microphone access — grant it in your phone settings and reopen VOID.');
     return;
@@ -9054,7 +9058,8 @@ function openLectureRecorder(page) {
     text.trim().split(/\n{2,}/).forEach(para => { if (para.trim()) page.blocks.push({ ...blankBlock('paragraph'), text: para.trim() }); });
     touchPage(page);
     rerenderBlocks(page);
-    appendPageAiToast(page, 'Transcribed. Tap ✦ AI to summarize, make a quiz, or a cheat sheet.');
+    if (onDone) onDone(page);
+    else appendPageAiToast(page, 'Transcribed. Tap ✦ AI to summarize, make a quiz, or a cheat sheet.');
   });
 
   modal.querySelector('#pg-rec-cancel').addEventListener('click', () => {
@@ -9064,7 +9069,7 @@ function openLectureRecorder(page) {
   });
 }
 
-function addLectureToPage(page, kind) {
+function addLectureToPage(page, kind, onDone) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = kind === 'photo' ? 'image/*' : 'audio/*,video/*';
@@ -9120,9 +9125,82 @@ function addLectureToPage(page, kind) {
     });
     touchPage(page);
     rerenderBlocks(page);
-    appendPageAiToast(page, 'Added. Tap ✦ AI again to make a summary, quiz, or cheat sheet.');
+    if (onDone) onDone(page);
+    else appendPageAiToast(page, 'Added. Tap ✦ AI again to make a summary, quiz, or cheat sheet.');
   };
   input.click();
+}
+
+/* ── New Paper: pick a source (voice, photo, recording, or typed text) and
+   go straight from raw material to a finished, organized A4 study paper —
+   no manual "add lecture then open as paper" steps in between. ── */
+function openNewPaperPicker(parentId) {
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal">
+      <div class="pg-modal-title">📜 New paper</div>
+      <div class="pg-modal-sub">Give VOID your material and it'll write, organize, and format a clean A4 study paper automatically.</div>
+      <div class="pg-paper-src-grid">
+        <button class="pg-paper-src" data-src="record"><span class="pg-paper-src-ico">🔴</span><span>Record voice</span></button>
+        <button class="pg-paper-src" data-src="photo"><span class="pg-paper-src-ico">📸</span><span>Photo of paper</span></button>
+        <button class="pg-paper-src" data-src="audio"><span class="pg-paper-src-ico">🎙</span><span>Upload recording</span></button>
+        <button class="pg-paper-src" data-src="text"><span class="pg-paper-src-ico">📝</span><span>Type / paste</span></button>
+      </div>
+      <button class="ghost-btn full pg-modal-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('.pg-paper-src').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const src = btn.dataset.src;
+      modal.remove();
+      if (src === 'text') { openNewPaperTextModal(parentId); return; }
+      const page = createPage({ parentId, title: 'New paper', icon: '📜', blocks: [] });
+      if (src === 'record') openLectureRecorder(page, finishNewPaper);
+      else addLectureToPage(page, src, finishNewPaper);
+    });
+  });
+  modal.querySelector('.pg-modal-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function openNewPaperTextModal(parentId) {
+  closeFloatingMenus();
+  const modal = document.createElement('div');
+  modal.className = 'pg-modal-scrim';
+  modal.innerHTML = `
+    <div class="pg-modal">
+      <div class="pg-modal-title">Type or paste your notes</div>
+      <textarea class="text-input pg-paper-textarea" id="pg-paper-text" rows="8" placeholder="Paste your notes, a lecture transcript, or anything you want turned into a paper…"></textarea>
+      <button class="primary-btn full" id="pg-paper-text-go">✦ Write the paper</button>
+      <button class="ghost-btn full pg-modal-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+  const textarea = modal.querySelector('#pg-paper-text');
+  setTimeout(() => textarea.focus(), 50);
+  modal.querySelector('#pg-paper-text-go').addEventListener('click', () => {
+    const raw = textarea.value.trim();
+    if (!raw) return;
+    modal.remove();
+    const page = createPage({ parentId, title: 'New paper', icon: '📜', blocks: [] });
+    raw.split(/\n{2,}/).forEach(para => { if (para.trim()) page.blocks.push({ ...blankBlock('paragraph'), text: para.trim() }); });
+    touchPage(page);
+    finishNewPaper(page);
+  });
+  modal.querySelector('.pg-modal-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+// Land on the new page (so it isn't orphaned even if paper generation fails)
+// then immediately kick off the A4 paper from whatever material just landed.
+function finishNewPaper(page) {
+  if (page.title === 'New paper') {
+    const firstText = (page.blocks || []).map(b => (b.text || '').trim()).find(Boolean);
+    if (firstText) { page.title = firstText.slice(0, 48).trim(); touchPage(page); }
+  }
+  pagesOpenPage(page.id);
+  openPaperView(page);
 }
 
 async function downscaleImageToDataURL(file) {
