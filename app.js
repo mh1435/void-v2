@@ -195,14 +195,57 @@ function extractWeatherCity(text) {
 }
 
 async function fetchWeatherForCity(city) {
+  const loc = await geocodeCity(city);
+  if (!loc) return null;
+  return await fetchOpenMeteo(loc.lat, loc.lon, 'long');
+}
+
+// Open-Meteo: free, keyless, structured JSON — replaces wttr.in's plain-text
+// scraping (which needed defensive "is this actually HTML, not weather"
+// checks at every call site because it regularly broke).
+const WMO_WEATHER = {
+  0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
+  45: ['Fog', '🌫️'], 48: ['Icy fog', '🌫️'],
+  51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'],
+  56: ['Freezing drizzle', '🌧️'], 57: ['Freezing drizzle', '🌧️'],
+  61: ['Light rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
+  66: ['Freezing rain', '🌨️'], 67: ['Freezing rain', '🌨️'],
+  71: ['Light snow', '🌨️'], 73: ['Snow', '❄️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '❄️'],
+  80: ['Light showers', '🌦️'], 81: ['Showers', '🌧️'], 82: ['Violent showers', '⛈️'],
+  85: ['Snow showers', '🌨️'], 86: ['Heavy snow showers', '❄️'],
+  95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm w/ hail', '⛈️'], 99: ['Severe thunderstorm', '⛈️'],
+};
+function wmoWeather(code) { return WMO_WEATHER[code] || ['Unknown', '🌡️']; }
+
+async function geocodeCity(city) {
   try {
-    const wr = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%C+%t+(feels+%f)`);
-    if (wr.ok) {
-      const w = (await wr.text()).trim();
-      if (w && !w.includes('<') && w.length < 60 && !/unknown location/i.test(w)) return w;
-    }
-  } catch(_) {}
-  return null;
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const hit = d?.results?.[0];
+    return hit ? { lat: hit.latitude, lon: hit.longitude } : null;
+  } catch (_) { return null; }
+}
+
+// style 'compact' -> "☀️72°F" (matches the old %c%t format); 'long' ->
+// "Clear sky 72°F (feels 70°F)" (matches the old %C+%t+(feels+%f) format) —
+// so existing call sites that treat this as a short display string still work.
+async function fetchOpenMeteo(lat, lon, style = 'long') {
+  try {
+    const fahrenheit = (navigator.language || '').toLowerCase() === 'en-us';
+    const unit = fahrenheit ? 'fahrenheit' : 'celsius';
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code&temperature_unit=${unit}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const cur = d?.current;
+    if (!cur || cur.temperature_2m == null) return null;
+    const [desc, icon] = wmoWeather(cur.weather_code);
+    const t = Math.round(cur.temperature_2m);
+    const suffix = fahrenheit ? '°F' : '°C';
+    if (style === 'compact') return `${icon}${t}${suffix}`;
+    const feels = Math.round(cur.apparent_temperature);
+    return `${desc} ${t}${suffix} (feels ${feels}${suffix})`;
+  } catch (_) { return null; }
 }
 
 async function getWeatherLookupCtx(text) {
@@ -923,13 +966,10 @@ async function initLiveContext() {
     App.liveContext.localTime = new Date().toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
   } catch(_) {}
 
-  // Weather — validate response is plain text, not HTML
+  // Weather — Open-Meteo, using the coords we already have (no geocoding step needed)
   try {
-    const wr = await fetch(`https://wttr.in/${encodeURIComponent(App.liveContext.city)}?format=%c%t`);
-    if (wr.ok) {
-      const w = (await wr.text()).trim();
-      if (w && !w.includes('<') && w.length < 30) App.liveContext.weather = w;
-    }
+    const w = await fetchOpenMeteo(App.liveContext.lat, App.liveContext.lon, 'compact');
+    if (w) App.liveContext.weather = w;
   } catch(_) {}
 }
 
@@ -6572,11 +6612,11 @@ function openStudyVideo(loc) {
       }
       cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · fetching...`;
       cityLiveEl.style.display = '';
-      fetch(`https://wttr.in/${encodeURIComponent(loc.name)}?format=%c%t`)
-        .then(r => r.ok ? r.text() : null)
-        .then(w => {
-          const wt = w?.trim();
-          if (wt && !wt.includes('<') && wt.length < 30) cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · ${wt}`;
+      geocodeCity(loc.name)
+        .then(geo => geo ? fetchOpenMeteo(geo.lat, geo.lon, 'compact') : null)
+        .then(wt => {
+          if (wt) cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''} · ${wt}`;
+          else cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''}`;
         })
         .catch(() => {
           cityLiveEl.textContent = `${loc.flag} ${loc.name}${cityTime ? ' · ' + cityTime : ''}`;
