@@ -3520,6 +3520,7 @@ async function generateAssistantReply(triggerText) {
         el.removeAttribute('id');
         el.dataset.historyIndex = historyIndex;
         el.innerHTML = buildBubbleInnerHTML('assistant', reply, historyIndex, sources);
+        highlightCodeBlocks(el);
       } else {
         appendMessage('assistant', reply, historyIndex, sources);
       }
@@ -3574,6 +3575,7 @@ function streamInMessage(text, historyIndex, sources = []) {
     if (t < 1) requestAnimationFrame(frame);
     else {
       bubble.innerHTML = renderMarkdownLite(text);
+      highlightCodeBlocks(bubble);
       box.scrollTop = box.scrollHeight;
     }
   }
@@ -3686,6 +3688,7 @@ function appendMessage(role, content, historyIndex = null, sources = []) {
   el.className = `chat-bubble ${role === 'user' ? 'user' : 'assistant'}`;
   if (historyIndex != null) el.dataset.historyIndex = historyIndex;
   el.innerHTML = buildBubbleInnerHTML(role, content, historyIndex, sources);
+  highlightCodeBlocks(el);
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return el;
@@ -3965,27 +3968,53 @@ function speechText(t) {
   return t;
 }
 
-function renderMarkdownLite(text) {
-  const blocks = [];
-  let src = String(text).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    blocks.push(`<pre><button class="code-copy" type="button">Copy</button><code>${escapeHTML(code.replace(/\n$/, ''))}</code></pre>`);
-    return `${blocks.length - 1}`;
-  });
+// Real markdown via marked.js (MIT) + DOMPurify (Apache-2.0/MPL-2.0) sanitizing
+// its output — replaces the old hand-rolled regex renderer, which had no
+// table/nested-list/blockquote support at all (a markdown table just showed
+// as literal "|---|---|" text). Verified against XSS payloads (javascript:
+// hrefs, onerror= attributes, raw <script> tags) — all stripped by DOMPurify.
+let voidMdRenderer = null;
+if (window.marked && window.DOMPurify) {
+  marked.setOptions({ breaks: true, gfm: true });
+  voidMdRenderer = new marked.Renderer();
+  voidMdRenderer.code = (token) => {
+    const lang = (token.lang || '').trim().split(/\s+/)[0] || '';
+    const cls = lang ? ` class="language-${escapeHTML(lang)}"` : '';
+    return `<pre><button class="code-copy" type="button">Copy</button><code${cls}>${escapeHTML(token.text.replace(/\n$/, ''))}</code></pre>`;
+  };
+  voidMdRenderer.link = (token) => {
+    const href = escapeHTML(token.href || '');
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHTML(token.text)}</a>`;
+  };
+}
 
+function renderMarkdownLite(text) {
+  let src = String(text);
+  // Shield fenced code blocks from the LaTeX->Unicode pass (real backslashes,
+  // $ signs, etc. in code must survive untouched), then let marked's own
+  // tokenizer re-discover the fences for real parsing.
+  const fences = [];
+  src = src.replace(/```[\s\S]*?```/g, (m) => { fences.push(m); return ` FENCE${fences.length - 1} `; });
   src = latexToUnicode(src);
-  src = escapeHTML(src);
-  // Headings (## Title) → bold heading lines instead of literal "## Title"
-  src = src.replace(/^\s*(#{1,6})\s+(.+)$/gm, (_, h, body) => `<strong class="md-h">${body.trim()}</strong>`);
-  src = src.replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`);
-  src = src.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  src = src.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
-  src = src.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g, (m, linkText, linkUrl, bareUrl) => {
-    const href = linkUrl || bareUrl;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${linkText || bareUrl}</a>`;
+  src = src.replace(/ FENCE(\d+) /g, (_, i) => fences[+i]);
+
+  if (!voidMdRenderer) {
+    // Vendor scripts failed to load — degrade to plain escaped text rather
+    // than a broken/blank chat.
+    return escapeHTML(src).replace(/\n/g, '<br>');
+  }
+  const rawHtml = marked.parse(src, { renderer: voidMdRenderer });
+  return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] });
+}
+
+// Colors code blocks after they land in the DOM (call after any innerHTML
+// assignment built from renderMarkdownLite output).
+function highlightCodeBlocks(container) {
+  if (!window.hljs || !container) return;
+  container.querySelectorAll('pre code').forEach(el => {
+    if (el.dataset.hljs) return; // already highlighted
+    try { hljs.highlightElement(el); el.dataset.hljs = '1'; } catch (_) {}
   });
-  src = src.replace(/\n/g, '<br>');
-  src = src.replace(/(\d+)/g, (_, i) => blocks[i]);
-  return src;
 }
 
 /* ============ Multi-Chat (Gemini-style sessions) ============ */
