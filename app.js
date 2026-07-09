@@ -1065,58 +1065,28 @@ function showOnboarding() {
 }
 
 function bootApp() {
-  loadSettings();
-  applyTheme(App.settings.theme);
-  applyGlassStyle(App.settings.glass);
-  syncNativeLang();
+  // One failing subsystem must never kill the whole app: before this guard, a
+  // single throw here left EVERY button dead (nothing after it got wired).
+  const safe = (fn) => { try { fn(); } catch (e) { console.error('boot step failed:', fn.name || fn, e); } };
+  safe(loadSettings);
+  safe(() => applyTheme(App.settings.theme));
+  safe(() => applyGlassStyle(App.settings.glass));
+  safe(syncNativeLang);
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
     if (App.settings.theme === 'auto') applyTheme('auto');
   });
-  setupNav();
-  setupSettingsPanels();
-  setupThemePicker();
-  setupChat();
-  setupMessageActions();
-  setupGameHub();
-  setupVoice();
-  setupCommandsPanel();
-  setupTasksPanel();
-  setupPreferencesPanel();
-  setupProviderPicker();
-  setupPersonaPicker();
-  setupImageStylePicker();
-  setupPlusMenu();
-  setupChatMenu();
-  setupSyncPanel();
-  setupMemoryPanel();
-  setupDocFormatPicker();
-  setupDocumentsPanel();
-  setupGemsPanel();
-  setupGitHubPanel();
-  setupGitHubPushSheet();
-  setupStudyMode();
-  setupNavDrawer();
-  setupClonedPanels();
-  refreshPlanUI();
-  handlePaymentReturn();
-  verifyPlanFromServer();
-  loadTasks();
-  loadCommands();
-  loadChats();
-  loadMemoryFacts();
-  loadBookmarks();
-  loadDocuments();
-  loadGems();
-  loadPages();
-  setupPagesHub();
-  loadGitHub();
-  updateUserDisplay();
-  initLiveContext();
-  initQuoteWidget();
-  renderWelcomeGreeting();
-  checkForAppUpdate();
-  applyPendingShare();
-  maybeStartTour();
+  [
+    setupNav, setupSettingsPanels, setupThemePicker, setupChat, setupMessageActions,
+    setupGameHub, setupVoice, setupCommandsPanel, setupTasksPanel, setupPreferencesPanel,
+    setupProviderPicker, setupPersonaPicker, setupImageStylePicker, setupPlusMenu,
+    setupChatMenu, setupSyncPanel, setupMemoryPanel, setupDocFormatPicker,
+    setupDocumentsPanel, setupGemsPanel, setupGitHubPanel, setupGitHubPushSheet,
+    setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
+    handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
+    loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
+    loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
+    renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
+  ].forEach(safe);
 }
 
 /* ============ First-run feature tour ============ */

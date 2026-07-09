@@ -1074,10 +1074,33 @@ div:has(> .widget-close), div:has(> [data-remove]) {
 }
 .workspace-mode-card:hover { background: rgba(255,255,255,0.06); }
 .workspace-mode-card:active { transform: scale(0.96); }
-#ws-gaming-btn { border-color: rgba(255,140,0,0.25); }
+/* Each card carries its own glow color; a slow breathe animation makes the
+   border/halo gently pulse — on all three cards, including Pages in purple. */
+.workspace-mode-card { animation: ws-breathe 3.8s ease-in-out infinite; }
+#ws-gaming-btn { --ws-glow: 255,140,0; animation-delay: 0s; }
+#ws-study-btn { --ws-glow: 100,200,255; animation-delay: 0.6s; }
+#ws-pages-btn { --ws-glow: 155,135,255; animation-delay: 1.2s; }
 #ws-gaming-btn:hover { border-color: rgba(255,140,0,0.55); box-shadow: 0 8px 28px rgba(255,140,0,0.15); }
-#ws-study-btn { border-color: rgba(100,200,255,0.2); }
 #ws-study-btn:hover { border-color: rgba(100,200,255,0.45); box-shadow: 0 8px 28px rgba(100,200,255,0.15); }
+#ws-pages-btn:hover { border-color: rgba(155,135,255,0.5); box-shadow: 0 8px 28px rgba(155,135,255,0.16); }
+@keyframes ws-breathe {
+  0%, 100% { border-color: rgba(var(--ws-glow, 155,135,255), 0.2); box-shadow: 0 6px 18px rgba(var(--ws-glow, 155,135,255), 0.07); }
+  50% { border-color: rgba(var(--ws-glow, 155,135,255), 0.5); box-shadow: 0 10px 30px rgba(var(--ws-glow, 155,135,255), 0.2); }
+}
+@media (prefers-reduced-motion: reduce) { .workspace-mode-card { animation: none; } }
+
+/* The satisfying press-shrink from the workspace cards, everywhere it belongs */
+.primary-btn, .ghost-btn, .pg-head-btn, .pg-new-btn, .pg-study-sec-gen,
+.plus-chip, .plus-tool, .welcome-chip, .pg-subpage-chip, .pg-study-chip,
+.gamehub-tab-btn, .util-badge, .pg-template-card {
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+.primary-btn:active, .ghost-btn:active, .pg-head-btn:active, .pg-new-btn:active,
+.pg-study-sec-gen:active, .plus-chip:active, .plus-tool:active, .welcome-chip:active,
+.pg-subpage-chip:active, .pg-study-chip:active, .gamehub-tab-btn:active,
+.util-badge:active, .pg-template-card:active {
+  transform: scale(0.96);
+}
 .ws-mode-icon { display: flex; align-items: center; justify-content: center; }
 .ws-mode-name {
   font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--text);
