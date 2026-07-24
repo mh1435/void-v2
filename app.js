@@ -8183,8 +8183,8 @@ function renderPageEditor(page) {
           <button class="pg-head-btn" id="pg-page-menu-btn">⋯</button>
         </div>
       </div>
-      ${isProject ? pageStudySectionsHTML(page, children) : ''}
       ${pageHabitsHTML(page)}
+      ${isProject ? pageStudySectionsHTML(page, children) : ''}
       <div class="pg-subpages" id="pg-subpages">
         ${plainKids.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
         <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
