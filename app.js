@@ -8184,6 +8184,7 @@ function renderPageEditor(page) {
         </div>
       </div>
       ${isProject ? pageStudySectionsHTML(page, children) : ''}
+      ${pageHabitsHTML(page)}
       <div class="pg-subpages" id="pg-subpages">
         ${plainKids.map(c => `<button class="pg-subpage-chip" data-id="${c.id}">${c.icon || '📄'} ${escapeHTML(c.title || 'Untitled')}</button>`).join('')}
         <button class="pg-subpage-chip pg-subpage-add" id="pg-add-subpage">+ Sub-page</button>
@@ -8219,6 +8220,76 @@ function pageStudySectionsHTML(page, children) {
   return `<div class="pg-study-sections">${secs}</div>`;
 }
 
+function pageHabitsHTML(page) {
+  if (page.type === 'database' || page.studyKind) return '';
+  const habits = page.habits || [];
+  if (habits.length === 0) return '';
+
+  const habitCards = habits.map(h => {
+    const percent = Math.min(Math.round((h.current / h.target) * 100), 100);
+    const circumference = 2 * Math.PI * 30;
+    const offset = circumference * (1 - percent / 100);
+    return `
+      <div class="habit-card" data-habit-id="${h.id}">
+        <div class="habit-header">
+          <div>
+            <div class="habit-title">${h.emoji || '🎯'} ${escapeHTML(h.title || 'Untitled')}</div>
+            <div class="habit-target">${h.current} / ${h.target} ${h.unit || 'units'}</div>
+          </div>
+          <div class="habit-actions">
+            <button class="action-btn habit-edit-btn" title="Edit">✎</button>
+            <button class="action-btn habit-menu-btn" title="More">⋯</button>
+          </div>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-ring-container">
+            <svg class="progress-ring" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="pg-${h.id}" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                </linearGradient>
+              </defs>
+              <circle class="progress-ring-bg" cx="50" cy="50" r="30" />
+              <circle class="progress-ring-fill" cx="50" cy="50" r="30" style="stroke-dashoffset: ${offset};" />
+            </svg>
+            <div class="progress-text">
+              <div class="progress-number">${percent}</div>
+              <div class="progress-label">%</div>
+            </div>
+          </div>
+
+          <div class="progress-info">
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" style="width: ${percent}%"></div>
+            </div>
+            <div class="progress-meta">
+              <span>${h.current} ${h.unit || 'units'}</span>
+              <span>Streak: ${h.streak || 0}d</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <button class="quick-action-btn habit-increment-btn" data-habit-id="${h.id}" data-amount="${Math.max(1, Math.round(h.target / 5))}">
+            <span>+${Math.max(1, Math.round(h.target / 5))}</span> ${escapeHTML(h.unit || 'unit')}
+          </button>
+          <button class="quick-action-btn secondary-action-btn habit-log-btn" data-habit-id="${h.id}">
+            <span>📝</span> Log
+          </button>
+        </div>
+
+        <div class="controls">
+          <button class="control-btn habit-snooze-btn" data-habit-id="${h.id}">Snooze 1h</button>
+          <button class="control-btn habit-dismiss-btn" data-habit-id="${h.id}">Dismiss</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div class="pg-habits-section">${habitCards}</div>`;
+}
+
 function wirePageEditorChrome(page) {
   const root = document.getElementById('pages-root');
   root.querySelectorAll('.pg-crumb').forEach(c => {
@@ -8252,7 +8323,112 @@ function wirePageEditorChrome(page) {
   });
   document.getElementById('pg-ai-btn')?.addEventListener('click', (e) => openPageAiMenu(page, e.currentTarget));
   document.getElementById('pg-page-menu-btn')?.addEventListener('click', (e) => openPageDetailMenu(page, e.currentTarget));
+
+  // Habit card event listeners
+  root.querySelectorAll('.habit-increment-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const habitId = btn.dataset.habitId;
+      const amount = parseInt(btn.dataset.amount);
+      updateHabitProgress(page, habitId, amount);
+    });
+  });
+  root.querySelectorAll('.habit-log-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const habitId = btn.dataset.habitId;
+      const habit = page.habits?.find(h => h.id === habitId);
+      if (habit) {
+        const amount = prompt(`Log ${habit.title} (${habit.unit || 'units'}):`, '10');
+        if (amount) {
+          updateHabitProgress(page, habitId, parseInt(amount));
+        }
+      }
+    });
+  });
+  root.querySelectorAll('.habit-snooze-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const habitId = btn.dataset.habitId;
+      snoozeHabit(page, habitId);
+    });
+  });
+  root.querySelectorAll('.habit-dismiss-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const habitId = btn.dataset.habitId;
+      dismissHabit(page, habitId);
+    });
+  });
+  root.querySelectorAll('.habit-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.habit-card');
+      const habitId = card.dataset.habitId;
+      editHabit(page, habitId);
+    });
+  });
+
   // (.pg-mention click wiring happens in wireBlockEvents(), called right after this.)
+}
+
+function updateHabitProgress(page, habitId, amount) {
+  if (!page.habits) page.habits = [];
+  const habit = page.habits.find(h => h.id === habitId);
+  if (habit) {
+    habit.current = Math.min(habit.current + amount, habit.target);
+    touchPage(page);
+    renderPageEditor(page);
+  }
+}
+
+function snoozeHabit(page, habitId) {
+  appendPageAiToast(page, '⏰ Reminder snoozed for 1 hour');
+}
+
+function dismissHabit(page, habitId) {
+  if (!page.habits) return;
+  const idx = page.habits.findIndex(h => h.id === habitId);
+  if (idx >= 0) {
+    page.habits[idx].dismissed = true;
+    touchPage(page);
+    renderPageEditor(page);
+  }
+}
+
+function editHabit(page, habitId) {
+  if (!page.habits) return;
+  const habit = page.habits.find(h => h.id === habitId);
+  if (!habit) return;
+
+  const newTitle = prompt('Habit title:', habit.title);
+  if (newTitle != null) {
+    habit.title = newTitle || 'Untitled';
+    touchPage(page);
+    renderPageEditor(page);
+  }
+}
+
+function addHabitToPage(page) {
+  if (!page.habits) page.habits = [];
+  const title = prompt('What habit do you want to track?');
+  if (!title) return;
+
+  const target = prompt('Target (e.g., 200 for pages, 60 for minutes):', '200');
+  if (!target) return;
+
+  const unit = prompt('Unit (e.g., Pages, Minutes, Books):', 'units');
+
+  const habit = {
+    id: 'h-' + Math.random().toString(36).slice(2, 9),
+    title,
+    target: parseInt(target) || 100,
+    unit: unit || 'units',
+    current: 0,
+    emoji: '🎯',
+    streak: 0,
+    dismissed: false,
+    createdAt: Date.now(),
+  };
+
+  page.habits.push(habit);
+  touchPage(page);
+  renderPageEditor(page);
 }
 
 function openPageDetailMenu(page, anchorEl) {
