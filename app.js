@@ -9172,6 +9172,265 @@ async function runAiOnSelection(ta, act) {
 }
 
 /* ── AI: page-level command menu (writing + study generation) ── */
+/* ── Habit Intent Parsing ──
+   Parse natural language commands into structured habit actions:
+   "track my daily 200-page study goal"
+   "remind me to exercise 60 minutes tomorrow"
+   "add a habit: read 30 pages daily"
+*/
+
+function parseHabitIntent(text) {
+  const lower = text.toLowerCase().trim();
+
+  // Keywords that signal habit-related intent
+  const isHabitIntent = /\b(track|habit|goal|reminder|remind|log|record|add.*habit|daily|weekly|exercise|study|read|meditate|workout|practice|learn)\b/.test(lower);
+  if (!isHabitIntent) return null;
+
+  // Action detection
+  let action = 'view_progress';
+  const hasNumber = /\d+/.test(lower);
+  const hasUnit = /\b(pages?|minutes?|hours?|mins?|km|miles?|books?|reps?|sets?)\b/i.test(lower);
+
+  if (/\b(create|add|start|set|make|new)\b.*\b(habit|goal)\b/i.test(lower)) {
+    action = 'create_habit';
+  }
+  else if (/\b(track|want|trying to)\b/i.test(lower) && hasNumber && hasUnit) {
+    // "track 200 pages" or "want to exercise 60 min" = create habit
+    action = 'create_habit';
+  }
+  else if (/\b(update|change|edit|adjust|modify)\b.*\b(habit|goal|target)\b/i.test(lower)) {
+    action = 'update_habit';
+  }
+  else if (/\b(log|record|increment)\b/i.test(lower) && hasNumber && hasUnit) {
+    action = 'update_progress';
+  }
+  else if (/\b(reminde?r|alert|alarm)/i.test(lower) && /\b(at|@)\b/i.test(lower)) {
+    action = 'set_reminder';
+  }
+
+  // Extract habit title/topic
+  const titlePatterns = [
+    /(?:habit|goal|track)[\s:]*(?:of\s+)?(?:my\s+)?["']?([^"'.!?,;]+?)["']?(?:\s+(?:for|at|every|daily|weekly|monthly|in)|\s*$)/i,
+    /(?:want to|like to|trying to)[\s:]+([^.!?,;]+?)(?:\s+(?:for|at|every|daily|weekly|monthly|in)|\s*$)/i,
+    /^(?:add|create|start|make|set)[\s:]+(?:a\s+)?(?:habit|goal)?\s*:?\s*["']?([^"'.!?,;]+?)["']?(?:\s+(?:for|at|every|daily|weekly|monthly)|\s*$)/i,
+    /(?:track|log)[\s:]+(?:my\s+)?(?:daily\s+)?["']?([^"'.!?,;]+?)["']?(?:\s+(?:for|at|every)|\s*$)/i,
+  ];
+  let title = '';
+  for (const pattern of titlePatterns) {
+    const match = lower.match(pattern);
+    if (match) {
+      title = match[1].trim().replace(/^(?:the|my|a|an)\s+/i, '');
+      break;
+    }
+  }
+  if (!title && /\b(study|exercise|read|meditate|workout|practice|learn)\b/.test(lower)) {
+    const words = lower.match(/\b(study|exercise|read|meditate|workout|practice|learn|run|code|write|draw|sing|swim)\b/);
+    if (words) title = words[1].charAt(0).toUpperCase() + words[1].slice(1);
+  }
+
+  // Extract target number and unit
+  let target = null, unit = '', emoji = '🎯';
+  const numberPatterns = [
+    /(\d+)\s*(pages?|pg|p\b)/i,
+    /(\d+)\s*(minutes?|mins?|min\b|hours?|hrs?|hr\b)/i,
+    /(\d+)\s*(books?|items?|tasks?|reps?|sets?|km|miles?|mi\b)/i,
+    /(\d+)\s*(?:per|a|one)\s*(day|week|month|year)/i,
+  ];
+  for (const pattern of numberPatterns) {
+    const match = lower.match(pattern);
+    if (match) {
+      target = parseInt(match[1]);
+      unit = match[2].toLowerCase().replace(/s$/, '');
+      break;
+    }
+  }
+
+  // Emoji inference
+  const emojiMap = {
+    study: '📚', read: '📚', learn: '📚', code: '💻',
+    exercise: '💪', workout: '💪', run: '🏃', swim: '🏊',
+    meditate: '🧘', yoga: '🧘', practice: '🎯',
+    write: '✍️', draw: '🎨', sing: '🎤', sleep: '😴',
+  };
+  const titleLower = (title || '').toLowerCase();
+  for (const [key, em] of Object.entries(emojiMap)) {
+    if (titleLower.includes(key)) { emoji = em; break; }
+  }
+
+  // Time extraction (for reminders)
+  let time = null, repeat = 'daily';
+  const timeMatch = lower.match(/(?:at|@)\s*(\d{1,2}):?(\d{2})?\s*(?:am|pm)?/i);
+  if (timeMatch) {
+    const hour = parseInt(timeMatch[1]);
+    const min = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+    time = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+
+  // Repeat frequency
+  if (/\b(daily|everyday|every day)\b/i.test(lower)) repeat = 'daily';
+  else if (/\b(weekly|every week|once a week)\b/i.test(lower)) repeat = 'weekly';
+  else if (/\b(monthly|every month|once a month)\b/i.test(lower)) repeat = 'monthly';
+  else if (/\b(once|one time)\b/i.test(lower)) repeat = 'once';
+
+  return {
+    action,
+    title: title || 'Untitled',
+    target: target || 100,
+    unit: unit || 'units',
+    time,
+    repeat,
+    emoji,
+    confidence: title && target ? 0.9 : (title || target ? 0.6 : 0.3),
+    raw: text,
+  };
+}
+
+function handleHabitIntent(page, intent) {
+  if (!page.habits) page.habits = [];
+
+  switch (intent.action) {
+    case 'create_habit': {
+      const existing = page.habits.find(h => h.title.toLowerCase() === intent.title.toLowerCase());
+      if (existing) {
+        return { success: false, message: `You already have a "${existing.title}" habit. Edit it instead?` };
+      }
+      const habit = {
+        id: 'h-' + Math.random().toString(36).slice(2, 9),
+        title: intent.title,
+        target: intent.target,
+        unit: intent.unit,
+        current: 0,
+        emoji: intent.emoji,
+        streak: 0,
+        dismissed: false,
+        repeat: intent.repeat,
+        time: intent.time,
+        createdAt: Date.now(),
+      };
+      page.habits.push(habit);
+      touchPage(page);
+      return { success: true, habit, message: `✅ Created habit: ${habit.emoji} ${habit.title} (${habit.target} ${habit.unit}${intent.time ? ` daily at ${intent.time}` : ''})` };
+    }
+
+    case 'update_progress': {
+      // Find the most relevant habit
+      const habit = page.habits.length === 1
+        ? page.habits[0]
+        : page.habits.find(h => intent.title.toLowerCase().includes(h.title.toLowerCase()) || h.title.toLowerCase().includes(intent.title.toLowerCase()));
+
+      if (!habit) {
+        return { success: false, message: 'No matching habit found. Create one first.' };
+      }
+
+      const oldCurrent = habit.current;
+      habit.current = Math.min(habit.current + intent.target, habit.target);
+      const progress = Math.round((habit.current / habit.target) * 100);
+      touchPage(page);
+
+      const delta = habit.current - oldCurrent;
+      const message = progress === 100
+        ? `🎉 ${habit.title} complete! You've logged ${habit.current} ${habit.unit}.`
+        : `✅ Logged +${delta} ${habit.unit}. You're at ${progress}% (${habit.current}/${habit.target}).`;
+
+      return { success: true, habit, message };
+    }
+
+    case 'set_reminder': {
+      const habit = page.habits.length === 1
+        ? page.habits[0]
+        : page.habits.find(h => intent.title.toLowerCase().includes(h.title.toLowerCase()) || h.title.toLowerCase().includes(intent.title.toLowerCase()));
+
+      if (!habit) {
+        return { success: false, message: 'No matching habit. Create one first.' };
+      }
+
+      if (!intent.time) {
+        return { success: false, message: 'What time should I remind you? (e.g., "at 7:30 AM")' };
+      }
+
+      habit.reminderTime = intent.time;
+      habit.reminderRepeat = intent.repeat;
+      touchPage(page);
+
+      return { success: true, message: `⏰ Reminder set: I'll remind you about ${habit.emoji} ${habit.title} at ${intent.time} ${intent.repeat}.` };
+    }
+
+    case 'view_progress': {
+      if (page.habits.length === 0) {
+        return { success: true, message: 'No habits tracked yet. Create one to get started!' };
+      }
+
+      const summaries = page.habits.map(h => {
+        const percent = Math.round((h.current / h.target) * 100);
+        return `${h.emoji} **${h.title}**: ${percent}% (${h.current}/${h.target} ${h.unit})`;
+      }).join('\n');
+
+      return { success: true, message: `📊 Your habits:\n${summaries}` };
+    }
+
+    default:
+      return { success: false, message: 'Unknown habit action.' };
+  }
+}
+
+function openHabitCommandDialog(page) {
+  const scrim = document.createElement('div');
+  scrim.className = 'habit-dialog-scrim';
+  scrim.innerHTML = `
+    <div class="habit-dialog">
+      <div class="habit-dialog-head">
+        <span>🎯 Habit Command</span>
+        <button class="habit-dialog-close">✕</button>
+      </div>
+      <div class="habit-dialog-body">
+        <div class="habit-dialog-label">Tell me what you want to track:</div>
+        <input type="text" class="habit-dialog-input" placeholder="e.g., 'Track 200 pages of study daily'" autofocus>
+        <div class="habit-dialog-examples">
+          <div class="habit-example">Track 60 minutes of exercise daily</div>
+          <div class="habit-example">Set a reminder for study at 7:30 AM</div>
+          <div class="habit-example">Log 15 pages of reading</div>
+        </div>
+      </div>
+      <div class="habit-dialog-actions">
+        <button class="habit-dialog-btn habit-dialog-cancel">Cancel</button>
+        <button class="habit-dialog-btn habit-dialog-submit">Submit</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(scrim);
+
+  const input = scrim.querySelector('.habit-dialog-input');
+  const submitBtn = scrim.querySelector('.habit-dialog-submit');
+  const cancelBtn = scrim.querySelector('.habit-dialog-cancel');
+  const closeBtn = scrim.querySelector('.habit-dialog-close');
+
+  const close = () => scrim.remove();
+  const submit = async () => {
+    const command = input.value.trim();
+    if (!command) return;
+    close();
+
+    const intent = parseHabitIntent(command);
+    if (!intent || intent.confidence < 0.3) {
+      appendPageAiToast(page, '❓ I didn\'t understand that. Try: "Track [goal] [amount] [unit]"');
+      return;
+    }
+
+    const result = handleHabitIntent(page, intent);
+    appendPageAiToast(page, result.message);
+    renderPageEditor(page);
+  };
+
+  submitBtn.addEventListener('click', submit);
+  cancelBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+  input.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') submit();
+  });
+
+  setTimeout(() => input.focus(), 100);
+}
+
 function openPageAiMenu(page, anchorEl) {
   closeFloatingMenus();
   const menu = document.createElement('div');
@@ -9187,6 +9446,10 @@ function openPageAiMenu(page, anchorEl) {
     <button data-act="cheatsheet">📋 Make a cheat sheet <span class="pg-ai-hint">new page</span></button>
     <button data-act="quiz">🧠 Make a quiz <span class="pg-ai-hint">new page</span></button>
     <button data-act="flashcards">🎴 Make flashcards <span class="pg-ai-hint">new page</span></button>
+    <div class="pg-ai-section">HABITS & GOALS</div>
+    <button data-act="habit-ask">🎯 Ask about habits <span class="pg-ai-hint">natural language</span></button>
+    <button data-act="habit-list">📊 View my habits</button>
+    <button data-act="habit-new">➕ Add new habit</button>
     <div class="pg-ai-section">WRITING</div>
     <button data-act="actions">✅ Find action items</button>
     <button data-act="translate">🌐 Translate ▸</button>
@@ -9206,6 +9469,14 @@ function openPageAiMenu(page, anchorEl) {
     if (act === 'cheatsheet') { generatePageStudy(page, 'cheatsheet'); return; }
     if (act === 'summary') { generatePageStudy(page, 'summary'); return; }
     if (act === 'paper') { openPaperView(page); return; }
+    if (act === 'habit-ask') { openHabitCommandDialog(page); return; }
+    if (act === 'habit-list') {
+      const result = handleHabitIntent(page, { action: 'view_progress' });
+      appendPageAiToast(page, result.message);
+      renderPageEditor(page);
+      return;
+    }
+    if (act === 'habit-new') { addHabitToPage(page); return; }
 
     const text = pageToPlainText(page).slice(0, 12000);
     if (!text.trim()) { appendPageAiToast(page, 'Add some notes to the page first.'); return; }
