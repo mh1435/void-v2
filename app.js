@@ -8223,7 +8223,6 @@ function pageStudySectionsHTML(page, children) {
 function pageHabitsHTML(page) {
   if (page.type === 'database' || page.studyKind) return '';
   const habits = page.habits || [];
-  if (habits.length === 0) return '';
 
   const habitCards = habits.map(h => {
     const percent = Math.min(Math.round((h.current / h.target) * 100), 100);
@@ -8287,7 +8286,16 @@ function pageHabitsHTML(page) {
       </div>`;
   }).join('');
 
-  return `<div class="pg-habits-section">${habitCards}</div>`;
+  return `
+    <div class="pg-habits-section">
+      <div class="pg-habits-header">
+        <span class="pg-habits-title">🎯 HABITS</span>
+        <button class="pg-habits-add-btn" id="pg-add-habit-btn">+ Add habit</button>
+      </div>
+      <div class="pg-habits-cards">
+        ${habitCards || '<div class="pg-habits-empty">No habits yet — track your goals</div>'}
+      </div>
+    </div>`;
 }
 
 function wirePageEditorChrome(page) {
@@ -8314,6 +8322,7 @@ function wirePageEditorChrome(page) {
   root.querySelectorAll('.pg-study-sec-gen').forEach(btn => {
     btn.addEventListener('click', () => generatePageStudy(page, btn.dataset.kind));
   });
+  document.getElementById('pg-add-habit-btn')?.addEventListener('click', () => addHabitToPage(page));
   document.getElementById('pg-add-block-btn')?.addEventListener('click', () => {
     const last = page.blocks[page.blocks.length - 1];
     const nb = addBlockAfter(page, last ? last.id : null, 'paragraph');
