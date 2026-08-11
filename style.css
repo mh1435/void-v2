@@ -3692,3 +3692,42 @@ body.reduced-motion *::after {
   color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
 }
 .nav-drawer-icon-btn:active { background: var(--accent-soft); color: var(--accent); }
+
+/* ── Global bottom nav: floating pill bar, persistent across every screen.
+   Active item = white rounded pill with icon+label; inactive = plain muted
+   icon only — matches the reference design exactly. ── */
+.bottom-nav {
+  position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 2px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 600;
+  max-width: calc(100vw - 24px);
+}
+.bnav-item {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; color: var(--muted);
+  padding: 10px; border-radius: 999px; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, padding 0.15s ease;
+  flex-shrink: 0;
+}
+.bnav-item .bnav-ico { display: flex; align-items: center; justify-content: center; }
+.bnav-item .bnav-label { display: none; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.bnav-item.active { background: #fff; color: #0a0a0f; padding: 10px 16px; }
+.bnav-item.active .bnav-label { display: inline; }
+.bnav-item:active { transform: scale(0.95); }
+
+/* Reserve room above the floating bar so it never sits on top of content —
+   every screen keeps working exactly as before, just with extra bottom
+   clearance. */
+.chat-box { margin-bottom: 74px; }
+.settings-layout { padding-bottom: 90px; }
+.dashboard-root { padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
+.pages-root .pg-editor-view, .pages-root .pg-db-view { padding-bottom: 130px; }
+.gamehub-container { padding-bottom: 74px; }

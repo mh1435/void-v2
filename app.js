@@ -1165,7 +1165,7 @@ function bootApp() {
     setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
     handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
-    setupDashboard, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
+    setupDashboard, setupBottomNav, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
     renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
   ].forEach(safe);
 }
@@ -5252,6 +5252,58 @@ function openDashboard() {
 
 function setupDashboard() {
   document.getElementById('dash-back-btn')?.addEventListener('click', () => switchTab('tab-chat'));
+}
+
+/* ============ Global bottom nav ============ */
+// Floating pill bar (Dashboard / Canvas / Voice / Chat / Settings) that
+// persists across every screen. Its active state is derived from the DOM
+// (which view-wrapper/tab is showing) via a MutationObserver, so every
+// existing way of switching screens keeps working untouched — this never
+// needs to know about them.
+
+function showMainApp() {
+  document.getElementById('view-settings')?.classList.remove('active');
+  document.getElementById('view-main')?.classList.add('active');
+}
+
+function handleBottomNavClick(target) {
+  if (target === 'dashboard') { openDashboard(); }
+  else if (target === 'canvas') { showMainApp(); switchTab('tab-gamehub'); }
+  else if (target === 'voice') { showMainApp(); switchTab('tab-chat'); document.getElementById('voice-convo-btn')?.click(); }
+  else if (target === 'chat') { showMainApp(); switchTab('tab-chat'); }
+  else if (target === 'settings') {
+    document.getElementById('view-main')?.classList.remove('active');
+    document.getElementById('view-settings')?.classList.add('active');
+  }
+  updateBottomNavActive();
+}
+
+function updateBottomNavActive() {
+  const bar = document.getElementById('bottom-nav');
+  if (!bar) return;
+  let active = 'chat';
+  if (document.getElementById('view-settings')?.classList.contains('active')) {
+    active = 'settings';
+  } else if (document.getElementById('tab-dashboard')?.classList.contains('active')) {
+    active = 'dashboard';
+  } else if (document.getElementById('tab-gamehub')?.classList.contains('active')) {
+    active = 'canvas';
+  }
+  bar.querySelectorAll('[data-bnav]').forEach(btn => btn.classList.toggle('active', btn.dataset.bnav === active));
+}
+
+function setupBottomNav() {
+  const bar = document.getElementById('bottom-nav');
+  if (!bar) return;
+  bar.querySelectorAll('[data-bnav]').forEach(btn => {
+    btn.addEventListener('click', () => handleBottomNavClick(btn.dataset.bnav));
+  });
+  const obs = new MutationObserver(updateBottomNavActive);
+  ['view-main', 'view-settings', 'tab-dashboard', 'tab-gamehub', 'tab-chat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+  updateBottomNavActive();
 }
 
 function dashboardGreeting() {
