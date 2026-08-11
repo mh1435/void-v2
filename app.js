@@ -1165,7 +1165,7 @@ function bootApp() {
     setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
     handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
-    setupDashboard, setupBottomNav, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
+    setupDashboard, setupBottomNav, setupCanvas, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
     renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
   ].forEach(safe);
 }
@@ -1435,7 +1435,7 @@ function switchTabRaw(targetId) {
 
 // Sub-pages (drill-downs) bring their own back+title header, so the top-level
 // VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
-const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages', 'tab-dashboard'];
+const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages', 'tab-dashboard', 'tab-canvas'];
 function updateAppChromeForTab(targetId) {
   const chatMenuBtn = document.getElementById('chat-menu-btn');
   const wordmark = document.getElementById('workspace-wordmark');
@@ -2245,6 +2245,13 @@ function setAssistantState(state, opts = {}) {
   if (status) status.textContent = opts.status !== undefined ? opts.status : defaultStatus;
   if (transcript && opts.transcript !== undefined) transcript.textContent = opts.transcript;
   if (reply && opts.reply !== undefined) reply.textContent = opts.reply;
+
+  const tapHint = document.getElementById('va-tap-hint');
+  if (tapHint) tapHint.style.display = state === 'listening' ? 'none' : '';
+  const pillMic = document.getElementById('va-pill-mic');
+  if (pillMic) pillMic.textContent = state === 'listening' ? '🎙 Listening' : '🎙 Ready';
+  const pillState = document.getElementById('va-pill-state');
+  if (pillState) pillState.textContent = { listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking' }[state] || 'Idle';
 }
 
 function showAssistantOverlay() {
@@ -2449,9 +2456,19 @@ function setupChat() {
   }
 
   // Overlay close button → exit live voice mode (reuses the toggle-off path)
-  document.getElementById('va-close')?.addEventListener('click', () => {
+  const closeVoiceOverlay = () => {
     hideAssistantOverlay();
     if (App.voiceConvo && convoBtn) convoBtn.click();
+  };
+  document.getElementById('va-close')?.addEventListener('click', closeVoiceOverlay);
+  document.getElementById('va-chat-link')?.addEventListener('click', closeVoiceOverlay);
+
+  // Tap the orb to (re)start listening — e.g. after a reply finishes and
+  // it's waiting idle, or if the mic wasn't already open.
+  document.getElementById('va-orb-wrap')?.addEventListener('click', () => {
+    const ov = document.getElementById('va-overlay');
+    if (ov?.dataset.state === 'listening' || ov?.dataset.state === 'thinking') return;
+    App.startListening?.();
   });
 
   /* ===== Wake word: "Okay VOID" (like "Okay Google") ===== */
@@ -5268,7 +5285,7 @@ function showMainApp() {
 
 function handleBottomNavClick(target) {
   if (target === 'dashboard') { openDashboard(); }
-  else if (target === 'canvas') { showMainApp(); switchTab('tab-gamehub'); }
+  else if (target === 'canvas') { showMainApp(); openCanvas(); }
   else if (target === 'voice') { showMainApp(); switchTab('tab-chat'); document.getElementById('voice-convo-btn')?.click(); }
   else if (target === 'chat') { showMainApp(); switchTab('tab-chat'); }
   else if (target === 'settings') {
@@ -5286,7 +5303,7 @@ function updateBottomNavActive() {
     active = 'settings';
   } else if (document.getElementById('tab-dashboard')?.classList.contains('active')) {
     active = 'dashboard';
-  } else if (document.getElementById('tab-gamehub')?.classList.contains('active')) {
+  } else if (document.getElementById('tab-canvas')?.classList.contains('active')) {
     active = 'canvas';
   }
   bar.querySelectorAll('[data-bnav]').forEach(btn => btn.classList.toggle('active', btn.dataset.bnav === active));
@@ -5299,11 +5316,213 @@ function setupBottomNav() {
     btn.addEventListener('click', () => handleBottomNavClick(btn.dataset.bnav));
   });
   const obs = new MutationObserver(updateBottomNavActive);
-  ['view-main', 'view-settings', 'tab-dashboard', 'tab-gamehub', 'tab-chat'].forEach(id => {
+  ['view-main', 'view-settings', 'tab-dashboard', 'tab-canvas', 'tab-chat'].forEach(id => {
     const el = document.getElementById(id);
     if (el) obs.observe(el, { attributes: true, attributeFilter: ['class'] });
   });
   updateBottomNavActive();
+}
+
+/* ============ Canvas ============ */
+// A pannable, dotted-grid board holding draggable live widgets (Weather,
+// Time). Widget positions persist per account. Purely additive — the
+// existing Workspace tab is untouched and still reachable from its own
+// top pill.
+
+const CANVAS_WIDGET_META = {
+  weather: { icon: '🌤', label: 'Weather' },
+  time: { icon: '🕐', label: 'Time' },
+};
+
+function loadCanvasWidgets() {
+  try {
+    const raw = localStorage.getItem(userKey('canvasWidgets'));
+    App.canvasWidgets = raw ? JSON.parse(raw) : [
+      { id: 'w-weather', type: 'weather', x: 20, y: 20 },
+      { id: 'w-time', type: 'time', x: 20, y: 190 },
+    ];
+  } catch (_) { App.canvasWidgets = []; }
+}
+
+function saveCanvasWidgets() {
+  try { localStorage.setItem(userKey('canvasWidgets'), JSON.stringify(App.canvasWidgets || [])); } catch (_) {}
+}
+
+function openCanvas() {
+  switchTabRaw('tab-canvas');
+  renderCanvas();
+}
+
+function canvasZoom(delta) {
+  App.canvasZoomLevel = Math.max(0.6, Math.min(1.6, (App.canvasZoomLevel || 1) + delta));
+  const inner = document.getElementById('canvas-inner');
+  if (inner) inner.style.transform = `scale(${App.canvasZoomLevel})`;
+}
+
+function canvasFitToScreen() {
+  App.canvasZoomLevel = 1;
+  const inner = document.getElementById('canvas-inner');
+  if (inner) inner.style.transform = 'scale(1)';
+  const board = document.getElementById('canvas-board');
+  if (board) board.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+}
+
+function canvasWidgetInnerHTML(w) {
+  if (w.type === 'weather') {
+    const lc = App.liveContext || {};
+    if (!lc.city) {
+      return `<div class="cw-title">WEATHER</div><div class="cw-empty-note">Location not available yet</div>`;
+    }
+    const wx = App.canvasWeatherFull;
+    const iconTemp = lc.weather || '';
+    return `
+      <div class="cw-title">WEATHER</div>
+      <div class="cw-loc">📍 ${escapeHTML(lc.city)}${lc.country ? ', ' + escapeHTML(lc.country) : ''}</div>
+      <div class="cw-main-row">
+        <span class="cw-icon">${escapeHTML((iconTemp.match(/^\D+/) || [''])[0])}</span>
+        <span class="cw-temp">${wx ? Math.round(wx.temp) + '°' : escapeHTML(iconTemp.replace(/^\D+/, ''))}</span>
+      </div>
+      <div class="cw-cond">${wx ? escapeHTML(wx.desc) : ''}</div>
+      ${wx ? `
+      <div class="cw-grid">
+        <div class="cw-grid-cell"><span>Feels like</span><b>${Math.round(wx.feels)}°</b></div>
+        <div class="cw-grid-cell"><span>Humidity</span><b>${wx.humidity}%</b></div>
+        <div class="cw-grid-cell"><span>Wind</span><b>${wx.wind} km/h</b></div>
+        <div class="cw-grid-cell"><span>Pressure</span><b>${wx.pressure} hPa</b></div>
+      </div>` : ''}
+    `;
+  }
+  if (w.type === 'time') {
+    const now = new Date();
+    return `
+      <div class="cw-title">TIME</div>
+      <div class="cw-clock-ico">🕐</div>
+      <div class="cw-clock-value">${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+      <div class="cw-clock-sub">${Intl.DateTimeFormat().resolvedOptions().timeZone || ''}</div>
+    `;
+  }
+  return '';
+}
+
+function renderCanvas() {
+  const inner = document.getElementById('canvas-inner');
+  const empty = document.getElementById('canvas-empty');
+  if (!inner) return;
+  const widgets = App.canvasWidgets || [];
+  empty.style.display = widgets.length ? 'none' : 'flex';
+  inner.innerHTML = widgets.map(w => `
+    <div class="canvas-widget" data-widget-id="${w.id}" data-type="${w.type}" style="left:${w.x}px; top:${w.y}px;">
+      ${App.canvasEditMode ? `<button class="cw-del-btn" data-del-widget="${w.id}">✕</button>` : ''}
+      <div class="cw-body">${canvasWidgetInnerHTML(w)}</div>
+    </div>`).join('');
+  inner.style.transform = `scale(${App.canvasZoomLevel || 1})`;
+
+  // Fetch real full weather data once (if we have coords and don't have it yet).
+  if (widgets.some(w => w.type === 'weather') && !App.canvasWeatherFull && App.liveContext?.lat != null) {
+    fetchCanvasWeatherFull();
+  }
+
+  wireCanvasWidgetDrag();
+  inner.querySelectorAll('[data-del-widget]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      App.canvasWidgets = (App.canvasWidgets || []).filter(w => w.id !== btn.dataset.delWidget);
+      saveCanvasWidgets();
+      renderCanvas();
+    });
+  });
+}
+
+async function fetchCanvasWeatherFull() {
+  const lc = App.liveContext;
+  if (!lc?.lat) return;
+  try {
+    const fahrenheit = (navigator.language || '').toLowerCase() === 'en-us';
+    const unit = fahrenheit ? 'fahrenheit' : 'celsius';
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lc.lat}&longitude=${lc.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,surface_pressure,weather_code&temperature_unit=${unit}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const cur = d?.current;
+    if (!cur || cur.temperature_2m == null) return;
+    const [desc] = wmoWeather(cur.weather_code);
+    App.canvasWeatherFull = {
+      temp: cur.temperature_2m, feels: cur.apparent_temperature,
+      humidity: Math.round(cur.relative_humidity_2m), wind: Math.round(cur.wind_speed_10m),
+      pressure: Math.round(cur.surface_pressure), desc,
+    };
+    renderCanvas();
+  } catch (_) {}
+}
+
+function wireCanvasWidgetDrag() {
+  const board = document.getElementById('canvas-board');
+  document.querySelectorAll('.canvas-widget').forEach(el => {
+    let dragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
+    el.addEventListener('pointerdown', (e) => {
+      if (!App.canvasEditMode) return;
+      if (e.target.closest('[data-del-widget]')) return;
+      dragging = true;
+      el.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+      origX = parseFloat(el.style.left) || 0; origY = parseFloat(el.style.top) || 0;
+      el.classList.add('dragging');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const zoom = App.canvasZoomLevel || 1;
+      const nx = origX + (e.clientX - startX) / zoom;
+      const ny = origY + (e.clientY - startY) / zoom;
+      el.style.left = `${Math.max(0, nx)}px`;
+      el.style.top = `${Math.max(0, ny)}px`;
+    });
+    const finish = () => {
+      if (!dragging) return;
+      dragging = false;
+      el.classList.remove('dragging');
+      const id = el.dataset.widgetId;
+      const w = (App.canvasWidgets || []).find(w => w.id === id);
+      if (w) { w.x = parseFloat(el.style.left) || 0; w.y = parseFloat(el.style.top) || 0; saveCanvasWidgets(); }
+    };
+    el.addEventListener('pointerup', finish);
+    el.addEventListener('pointercancel', finish);
+  });
+}
+
+function setupCanvas() {
+  loadCanvasWidgets();
+  App.canvasZoomLevel = 1;
+  App.canvasEditMode = false;
+
+  document.getElementById('canvas-clearall-btn')?.addEventListener('click', () => {
+    App.canvasWidgets = [];
+    saveCanvasWidgets();
+    renderCanvas();
+  });
+  document.getElementById('canvas-edit-btn')?.addEventListener('click', (e) => {
+    App.canvasEditMode = !App.canvasEditMode;
+    e.currentTarget.classList.toggle('active', App.canvasEditMode);
+    renderCanvas();
+  });
+  document.getElementById('canvas-zoomin-btn')?.addEventListener('click', () => canvasZoom(0.15));
+  document.getElementById('canvas-zoomout-btn')?.addEventListener('click', () => canvasZoom(-0.15));
+  document.getElementById('canvas-fit-btn')?.addEventListener('click', () => canvasFitToScreen());
+  document.getElementById('canvas-empty')?.addEventListener('click', (e) => {
+    const type = e.target.closest('[data-add-widget]')?.dataset.addWidget;
+    if (!type) return;
+    App.canvasWidgets = App.canvasWidgets || [];
+    App.canvasWidgets.push({ id: 'w-' + Math.random().toString(36).slice(2, 9), type, x: 20, y: 20 });
+    saveCanvasWidgets();
+    renderCanvas();
+  });
+
+  // Live clock tick — self-checks the DOM each second so it works no matter
+  // how many times the tab is opened/closed, no interval bookkeeping needed.
+  setInterval(() => {
+    if (!document.getElementById('tab-canvas')?.classList.contains('active')) return;
+    document.querySelectorAll('.canvas-widget[data-type="time"] .cw-clock-value').forEach(el => {
+      el.textContent = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    });
+  }, 1000);
 }
 
 function dashboardGreeting() {

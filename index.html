@@ -96,14 +96,26 @@ if ('serviceWorker' in navigator) {
 
   <!-- Voice assistant overlay (Gemini / "Okay Google" style) -->
   <div class="va-overlay" id="va-overlay" aria-hidden="true">
+    <div class="va-head">
+      <div class="va-head-title">
+        <div class="va-name">VOID</div>
+        <div class="va-sub">AI Assistant</div>
+      </div>
+      <button class="va-chat-link" id="va-chat-link">Chat</button>
+    </div>
     <button class="va-close" id="va-close" aria-label="Close">✕</button>
-    <div class="va-orb-wrap">
+    <div class="va-tap-hint" id="va-tap-hint">Tap to activate</div>
+    <div class="va-orb-wrap" id="va-orb-wrap">
       <div class="va-orb" id="va-orb">
         <span class="va-ring"></span>
         <span class="va-ring"></span>
         <span class="va-ring"></span>
         <span class="va-core"></span>
       </div>
+    </div>
+    <div class="va-pills">
+      <span class="va-pill" id="va-pill-mic">🎙 Ready</span>
+      <span class="va-pill" id="va-pill-state">Idle</span>
     </div>
     <div class="va-status" id="va-status">Listening…</div>
     <div class="va-transcript" id="va-transcript"></div>
@@ -707,6 +719,42 @@ if ('serviceWorker' in navigator) {
         <div class="hud-right"></div>
       </div>
       <div id="dashboard-root" class="dashboard-root"></div>
+    </div>
+
+    <!-- Canvas: a pannable dotted board holding draggable live widgets
+         (Weather, Time). Purely additive; Workspace stays exactly where it
+         was, reachable from its own top pill. -->
+    <div class="view-tab" id="tab-canvas">
+      <div class="canvas-topbar">
+        <button class="canvas-clearall-btn" id="canvas-clearall-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+          Clear All
+        </button>
+      </div>
+      <div class="canvas-board" id="canvas-board">
+        <div class="canvas-inner" id="canvas-inner"></div>
+        <div class="canvas-empty" id="canvas-empty" style="display:none">
+          <div class="canvas-empty-title">No widgets on your canvas</div>
+          <div class="canvas-empty-row">
+            <button class="canvas-empty-btn" data-add-widget="weather">🌤 Weather</button>
+            <button class="canvas-empty-btn" data-add-widget="time">🕐 Time</button>
+          </div>
+        </div>
+      </div>
+      <div class="canvas-toolbar">
+        <button class="canvas-tool-btn" id="canvas-edit-btn" aria-label="Edit widgets">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+        </button>
+        <button class="canvas-tool-btn" id="canvas-zoomin-btn" aria-label="Zoom in">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="canvas-tool-btn" id="canvas-zoomout-btn" aria-label="Zoom out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="canvas-tool-btn" id="canvas-fit-btn" aria-label="Fit to screen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+      </div>
     </div>
 
   </main>
