@@ -61,6 +61,8 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 - Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
+- Habit & goal tracking: project pages can carry habit cards (progress rings, quick-log, streaks); ask in natural language ("track 200 pages of study daily") to create or update one
+- General support: you can ask VOID about installation, supported features, troubleshooting, AI providers, voice interaction, documents, media, and general product usage. Some features may require optional services or provider credentials (e.g. an API key for a specific AI provider, or device permissions for voice/camera).
 
 Rules:
 - You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
@@ -1163,7 +1165,7 @@ function bootApp() {
     setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
     handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
-    loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
+    setupDashboard, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
     renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
   ].forEach(safe);
 }
@@ -1433,7 +1435,7 @@ function switchTabRaw(targetId) {
 
 // Sub-pages (drill-downs) bring their own back+title header, so the top-level
 // VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
-const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages'];
+const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages', 'tab-dashboard'];
 function updateAppChromeForTab(targetId) {
   const chatMenuBtn = document.getElementById('chat-menu-btn');
   const wordmark = document.getElementById('workspace-wordmark');
@@ -5238,6 +5240,153 @@ function newChat() {
   switchTab('tab-chat');
 }
 
+/* ============ Dashboard ============ */
+// At-a-glance home screen: greeting, activity stats, system status, quick
+// actions, recent conversations. Reachable from the nav drawer; every other
+// entry point (chat, workspace, pages, settings) is untouched.
+
+function openDashboard() {
+  switchTabRaw('tab-dashboard');
+  renderDashboard();
+}
+
+function setupDashboard() {
+  document.getElementById('dash-back-btn')?.addEventListener('click', () => switchTab('tab-chat'));
+}
+
+function dashboardGreeting() {
+  const h = new Date().getHours();
+  if (h < 5) return 'Good night';
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function dashboardProviderLabel() {
+  const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
+  const names = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', together: 'Together AI', mistral: 'Mistral', pollinations: 'Pollinations.ai' };
+  return names[order[0]] || 'VOID Core';
+}
+
+function dashboardApiConnected() {
+  const s = App.settings;
+  return !!(s.geminiKey || s.groqKey || s.apiKey || s.togetherKey || s.mistralKey);
+}
+
+function renderDashboard() {
+  const root = document.getElementById('dashboard-root');
+  if (!root) return;
+
+  const chats = App.chats || [];
+  const totalMessages = chats.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
+  const aiReplies = chats.reduce((sum, c) => sum + (c.messages || []).filter(m => m.role === 'assistant').length, 0);
+  const recent = [...chats].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
+  const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  root.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-greeting">${dashboardGreeting()}</div>
+        <div class="dash-date">${escapeHTML(dateStr)}</div>
+      </div>
+      <button class="dash-sparkle-btn" id="dash-newchat-btn" aria-label="New chat">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.9L18.5 9l-4.9 1.6L12 15.5l-1.6-4.9L5.5 9l4.9-1.6z"/><path d="M19 15l.8 2.4L22 18l-2.2.6L19 21l-.8-2.4L16 18l2.2-.6z"/></svg>
+      </button>
+    </div>
+
+    <div class="dash-stats-row">
+      <div class="dash-stat-card">
+        <div class="dash-stat-num">${chats.length}</div>
+        <div class="dash-stat-label">Conversations</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-num">${totalMessages}</div>
+        <div class="dash-stat-label">Messages</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-num">${aiReplies}</div>
+        <div class="dash-stat-label">AI replies</div>
+      </div>
+    </div>
+
+    <div class="dash-status-card">
+      <div class="dash-status-title">System status</div>
+      <div class="dash-status-row"><span>AI Model</span><span class="dash-status-val"><span class="dash-dot"></span>${escapeHTML(dashboardProviderLabel())}</span></div>
+      <div class="dash-status-row"><span>Mode</span><span class="dash-status-val"><span class="dash-dot"></span>${escapeHTML((App.settings.responseMode || 'standard').replace(/^./, c => c.toUpperCase()))}</span></div>
+      <div class="dash-status-row"><span>API</span><span class="dash-status-val"><span class="dash-dot${dashboardApiConnected() ? '' : ' off'}"></span>${dashboardApiConnected() ? 'Connected' : 'Not set'}</span></div>
+      <div class="dash-status-row"><span>Text-to-Speech</span><span class="dash-status-val"><span class="dash-dot${App.settings.voiceEnabled ? '' : ' off'}"></span>${App.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span></div>
+    </div>
+
+    <div class="dash-section-label">Quick actions</div>
+    <div class="dash-actions-grid">
+      <button class="dash-action-btn" data-dash-act="voice">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        Voice
+      </button>
+      <button class="dash-action-btn" data-dash-act="newchat">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        New chat
+      </button>
+      <button class="dash-action-btn" data-dash-act="pages">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Pages
+      </button>
+      <button class="dash-action-btn" data-dash-act="tasks">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Tasks
+      </button>
+      <button class="dash-action-btn" data-dash-act="settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+
+    <div class="dash-section-label dash-section-label-row">
+      <span>Recent conversations</span>
+      ${recent.length ? '<span class="dash-viewall" id="dash-viewall-btn">View all ›</span>' : ''}
+    </div>
+    <div class="dash-recent-list">
+      ${recent.length ? recent.map(c => {
+        const last = c.messages?.[c.messages.length - 1];
+        const preview = last ? msgText(last.content).slice(0, 60) : 'No messages yet';
+        const isActive = c.id === App.currentChatId;
+        return `
+        <div class="dash-recent-item" data-chat-id="${c.id}">
+          <span class="dash-recent-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <span class="dash-recent-body">
+            <span class="dash-recent-title">${escapeHTML(c.title || 'New chat')}</span>
+            <span class="dash-recent-sub">${escapeHTML(preview)}</span>
+          </span>
+          ${isActive ? '<span class="dash-recent-active">Active</span>' : ''}
+        </div>`;
+      }).join('') : '<div class="dash-recent-empty">No conversations yet — start one!</div>'}
+    </div>
+  `;
+
+  root.querySelector('#dash-newchat-btn')?.addEventListener('click', newChat);
+  root.querySelectorAll('[data-dash-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const act = btn.dataset.dashAct;
+      if (act === 'voice') { switchTab('tab-chat'); document.getElementById('voice-convo-btn')?.click(); }
+      else if (act === 'newchat') { newChat(); }
+      else if (act === 'pages') { openPagesHub(); }
+      else if (act === 'tasks') {
+        document.getElementById('view-main').classList.remove('active');
+        document.getElementById('view-settings').classList.add('active');
+        openSettingsPanel('panel-tasks');
+      }
+      else if (act === 'settings') {
+        document.getElementById('view-main').classList.remove('active');
+        document.getElementById('view-settings').classList.add('active');
+      }
+    });
+  });
+  root.querySelectorAll('.dash-recent-item').forEach(item => {
+    item.addEventListener('click', () => switchChat(item.dataset.chatId));
+  });
+  root.querySelector('#dash-viewall-btn')?.addEventListener('click', () => { switchTab('tab-chat'); openNavDrawer(); });
+}
+
 function switchChat(id) {
   const chat = App.chats.find(c => c.id === id);
   if (!chat) return;
@@ -5339,6 +5488,8 @@ function setupNavDrawer() {
   if (scrim) scrim.addEventListener('click', closeNavDrawer);
   const nc = document.getElementById('nav-newchat-btn');
   if (nc) nc.addEventListener('click', newChat);
+  const dashBtn = document.getElementById('nav-dashboard-btn');
+  if (dashBtn) dashBtn.addEventListener('click', () => { closeNavDrawer(); openDashboard(); });
   const prof = document.getElementById('nav-profile-btn');
   if (prof) prof.addEventListener('click', () => {
     closeNavDrawer();

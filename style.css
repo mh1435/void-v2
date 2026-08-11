@@ -3622,3 +3622,73 @@ body.reduced-motion *::after {
 .habit-dialog-submit:active {
   background: linear-gradient(135deg, #5558e3 0%, #7a4ee7 100%);
 }
+
+/* ── Dashboard: at-a-glance home (greeting, stats, system status, quick
+   actions, recent conversations). Additive tab — doesn't touch any other
+   screen. ── */
+.dashboard-root { flex: 1; overflow-y: auto; padding: 16px 16px calc(30px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+
+.dash-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+.dash-greeting { font-family: var(--hub-display); font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.dash-date { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.dash-sparkle-btn {
+  width: 38px; height: 38px; border-radius: 12px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  color: var(--accent); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+}
+.dash-sparkle-btn:active { background: var(--accent-soft); }
+
+.dash-stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.dash-stat-card {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px;
+  padding: 14px 10px; text-align: left;
+}
+.dash-stat-num { font-size: 22px; font-weight: 800; color: var(--text); font-family: var(--hub-display); }
+.dash-stat-label { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+
+.dash-status-card {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px;
+  padding: 14px 16px; margin-bottom: 20px;
+}
+.dash-status-title { font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.dash-status-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12.5px; color: var(--muted); padding: 7px 0; border-top: 1px solid var(--glass-border);
+}
+.dash-status-row:first-of-type { border-top: none; }
+.dash-status-val { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
+.dash-dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; flex-shrink: 0; }
+.dash-dot.off { background: var(--muted); }
+
+.dash-section-label { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 4px 0 10px; }
+.dash-section-label-row { display: flex; justify-content: space-between; align-items: center; }
+.dash-viewall { font-size: 11.5px; color: var(--accent); font-weight: 600; cursor: pointer; }
+
+.dash-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.dash-action-btn {
+  display: flex; align-items: center; gap: 8px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.dash-action-btn:active { background: var(--accent-soft); color: var(--accent); }
+
+.dash-recent-list { display: flex; flex-direction: column; gap: 6px; }
+.dash-recent-item {
+  display: flex; align-items: center; gap: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 12px; padding: 11px 12px; cursor: pointer;
+}
+.dash-recent-item:active { background: var(--accent-soft); }
+.dash-recent-ico {
+  width: 30px; height: 30px; border-radius: 9px; background: var(--card-soft); color: var(--muted);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.dash-recent-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dash-recent-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-recent-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-recent-active { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 8px; flex-shrink: 0; }
+.dash-recent-empty { font-size: 12.5px; color: var(--muted); padding: 16px 4px; text-align: center; }
+
+.nav-drawer-head-actions { display: flex; align-items: center; gap: 8px; }
+.nav-drawer-icon-btn {
+  width: 32px; height: 32px; border-radius: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+}
+.nav-drawer-icon-btn:active { background: var(--accent-soft); color: var(--accent); }
