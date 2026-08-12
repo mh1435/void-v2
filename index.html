@@ -727,6 +727,11 @@ if ('serviceWorker' in navigator) {
          was, reachable from its own top pill. -->
     <div class="view-tab" id="tab-canvas">
       <div class="canvas-topbar">
+        <button class="canvas-clearall-btn" id="canvas-add-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add
+        </button>
+        <div class="canvas-add-menu" id="canvas-add-menu" style="display:none"></div>
         <button class="canvas-clearall-btn" id="canvas-clearall-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
           Clear All
@@ -736,10 +741,7 @@ if ('serviceWorker' in navigator) {
         <div class="canvas-inner" id="canvas-inner"></div>
         <div class="canvas-empty" id="canvas-empty" style="display:none">
           <div class="canvas-empty-title">No widgets on your canvas</div>
-          <div class="canvas-empty-row">
-            <button class="canvas-empty-btn" data-add-widget="weather">🌤 Weather</button>
-            <button class="canvas-empty-btn" data-add-widget="time">🕐 Time</button>
-          </div>
+          <div class="canvas-empty-row" id="canvas-empty-row"></div>
         </div>
       </div>
       <div class="canvas-toolbar">

@@ -3765,7 +3765,16 @@ body.reduced-motion *::after {
 /* ── Canvas: pannable dotted board with draggable live widgets. ── */
 .canvas-topbar {
   position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px; z-index: 20;
+  display: flex; gap: 8px;
 }
+.canvas-add-menu {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 21;
+  flex-direction: column; gap: 6px; padding: 8px;
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+.canvas-add-menu .canvas-empty-btn { text-align: left; white-space: nowrap; }
 .canvas-clearall-btn {
   display: flex; align-items: center; gap: 6px;
   background: var(--glass-bg-strong); border: 1px solid var(--glass-border); color: var(--text);
@@ -3822,6 +3831,21 @@ body.reduced-motion *::after {
 .cw-clock-ico { font-size: 20px; text-align: center; margin: 2px 0; }
 .cw-clock-value { font-family: var(--hub-mono); font-size: 20px; font-weight: 700; color: var(--text); text-align: center; }
 .cw-clock-sub { font-size: 10px; color: var(--muted); text-align: center; margin-top: 3px; }
+
+.cw-sat-map {
+  position: relative; width: 100%; height: 64px; border-radius: 8px; margin-bottom: 8px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  background-image: linear-gradient(var(--glass-border) 1px, transparent 1px), linear-gradient(90deg, var(--glass-border) 1px, transparent 1px);
+  background-size: 100% 33.33%, 12.5% 100%;
+  border: 1px solid var(--glass-border);
+}
+.cw-sat-dot {
+  position: absolute; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent); transform: translate(-50%, -50%);
+}
+.cw-sat-dot::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 1px solid var(--accent); opacity: 0.5;
+}
 
 .canvas-toolbar {
   position: fixed; right: 14px; bottom: 130px; z-index: 20;

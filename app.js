@@ -5667,7 +5667,21 @@ function setupBottomNav() {
 const CANVAS_WIDGET_META = {
   weather: { icon: '🌤', label: 'Weather' },
   time: { icon: '🕐', label: 'Time' },
+  satellite: { icon: '🛰', label: 'Satellite (ISS)' },
 };
+
+function canvasWidgetPickerButtonsHTML() {
+  return Object.entries(CANVAS_WIDGET_META).map(([type, m]) =>
+    `<button class="canvas-empty-btn" data-add-widget="${type}">${m.icon} ${escapeHTML(m.label)}</button>`
+  ).join('');
+}
+
+function addCanvasWidget(type) {
+  App.canvasWidgets = App.canvasWidgets || [];
+  App.canvasWidgets.push({ id: 'w-' + Math.random().toString(36).slice(2, 9), type, x: 20, y: 20 });
+  saveCanvasWidgets();
+  renderCanvas();
+}
 
 function loadCanvasWidgets() {
   try {
@@ -5736,6 +5750,23 @@ function canvasWidgetInnerHTML(w) {
       <div class="cw-clock-sub">${Intl.DateTimeFormat().resolvedOptions().timeZone || ''}</div>
     `;
   }
+  if (w.type === 'satellite') {
+    const iss = App.issPosition;
+    if (!iss) {
+      return `<div class="cw-title">ISS TRACKER</div><div class="cw-empty-note">Locating the ISS…</div>`;
+    }
+    const xPct = ((iss.lon + 180) / 360) * 100;
+    const yPct = ((90 - iss.lat) / 180) * 100;
+    return `
+      <div class="cw-title">ISS TRACKER</div>
+      <div class="cw-sat-map"><div class="cw-sat-dot" style="left:${xPct.toFixed(1)}%; top:${yPct.toFixed(1)}%;"></div></div>
+      <div class="cw-loc">📍 ${iss.lat.toFixed(2)}°, ${iss.lon.toFixed(2)}°</div>
+      <div class="cw-grid">
+        <div class="cw-grid-cell"><span>Altitude</span><b>${Math.round(iss.altitude)} km</b></div>
+        <div class="cw-grid-cell"><span>Speed</span><b>${Math.round(iss.velocity)} km/h</b></div>
+      </div>
+    `;
+  }
   return '';
 }
 
@@ -5745,6 +5776,10 @@ function renderCanvas() {
   if (!inner) return;
   const widgets = App.canvasWidgets || [];
   empty.style.display = widgets.length ? 'none' : 'flex';
+  const pickerRow = document.getElementById('canvas-empty-row');
+  if (pickerRow) pickerRow.innerHTML = canvasWidgetPickerButtonsHTML();
+  const addMenu = document.getElementById('canvas-add-menu');
+  if (addMenu) addMenu.innerHTML = canvasWidgetPickerButtonsHTML();
   inner.innerHTML = widgets.map(w => `
     <div class="canvas-widget" data-widget-id="${w.id}" data-type="${w.type}" style="left:${w.x}px; top:${w.y}px;">
       ${App.canvasEditMode ? `<button class="cw-del-btn" data-del-widget="${w.id}">✕</button>` : ''}
@@ -5755,6 +5790,9 @@ function renderCanvas() {
   // Fetch real full weather data once (if we have coords and don't have it yet).
   if (widgets.some(w => w.type === 'weather') && !App.canvasWeatherFull && App.liveContext?.lat != null) {
     fetchCanvasWeatherFull();
+  }
+  if (widgets.some(w => w.type === 'satellite') && !App.issPosition && !App._issFetching) {
+    fetchISSPosition();
   }
 
   wireCanvasWidgetDrag();
@@ -5787,6 +5825,24 @@ async function fetchCanvasWeatherFull() {
     };
     renderCanvas();
   } catch (_) {}
+}
+
+// Real live position of the ISS (public tracking API, no key needed) —
+// not a decorative animation, an actual current lat/lon/altitude/speed.
+async function fetchISSPosition() {
+  if (App._issFetching) return;
+  App._issFetching = true;
+  try {
+    const r = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (typeof d.latitude !== 'number' || typeof d.longitude !== 'number') return;
+    App.issPosition = { lat: d.latitude, lon: d.longitude, altitude: d.altitude, velocity: d.velocity };
+    renderCanvas();
+  } catch (_) {
+  } finally {
+    App._issFetching = false;
+  }
 }
 
 function wireCanvasWidgetDrag() {
@@ -5843,20 +5899,38 @@ function setupCanvas() {
   document.getElementById('canvas-fit-btn')?.addEventListener('click', () => canvasFitToScreen());
   document.getElementById('canvas-empty')?.addEventListener('click', (e) => {
     const type = e.target.closest('[data-add-widget]')?.dataset.addWidget;
+    if (type) addCanvasWidget(type);
+  });
+  document.getElementById('canvas-add-menu')?.addEventListener('click', (e) => {
+    const type = e.target.closest('[data-add-widget]')?.dataset.addWidget;
     if (!type) return;
-    App.canvasWidgets = App.canvasWidgets || [];
-    App.canvasWidgets.push({ id: 'w-' + Math.random().toString(36).slice(2, 9), type, x: 20, y: 20 });
-    saveCanvasWidgets();
-    renderCanvas();
+    addCanvasWidget(type);
+    document.getElementById('canvas-add-menu').style.display = 'none';
+  });
+  document.getElementById('canvas-add-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById('canvas-add-menu');
+    if (menu) menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+  });
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('canvas-add-menu');
+    if (!menu || menu.style.display === 'none') return;
+    if (!e.target.closest('#canvas-add-menu') && !e.target.closest('#canvas-add-btn')) menu.style.display = 'none';
   });
 
-  // Live clock tick — self-checks the DOM each second so it works no matter
-  // how many times the tab is opened/closed, no interval bookkeeping needed.
+  // Live clock tick and periodic ISS refresh — self-checks the DOM each
+  // second so it works no matter how many times the tab is opened/closed,
+  // no interval bookkeeping needed.
+  let issTick = 0;
   setInterval(() => {
     if (!document.getElementById('tab-canvas')?.classList.contains('active')) return;
     document.querySelectorAll('.canvas-widget[data-type="time"] .cw-clock-value').forEach(el => {
       el.textContent = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     });
+    issTick++;
+    if (issTick % 15 === 0 && (App.canvasWidgets || []).some(w => w.type === 'satellite')) {
+      fetchISSPosition();
+    }
   }, 1000);
 }
 
