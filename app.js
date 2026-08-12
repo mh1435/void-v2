@@ -328,6 +328,37 @@ async function getNewsHeadlinesCtx(text) {
   } catch (_) { return { ctx: '', source: null }; }
 }
 
+// "Summarize this video: <youtube link>" — real transcript access requires
+// either a paid API or reverse-engineering YouTube's private caption
+// endpoints, which is fragile and was confirmed unreliable when tested
+// (empty responses even for videos with known captions). Rather than fake a
+// summary from the title alone, this grounds the reply in the video's real
+// metadata (title/channel, via YouTube's public CORS-enabled oEmbed API)
+// and tells the model plainly that it hasn't watched the video — asking it
+// to request the transcript/description text if the user wants a real
+// content summary, which then flows through the same paste-to-composer
+// path as any other text.
+function extractYouTubeVideoId(text) {
+  const m = text.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+async function getYouTubeLookupCtx(text) {
+  const videoId = extractYouTubeVideoId(text);
+  if (!videoId) return { ctx: '', source: null };
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+    if (!r.ok) return { ctx: '', source: null };
+    const d = await r.json();
+    if (!d.title) return { ctx: '', source: null };
+    return {
+      ctx: `\n\nYOUTUBE VIDEO LOOKUP: "${d.title}" by ${d.author_name || 'unknown channel'} (${url}). This is only the real title and channel — you have NOT watched this video and don't know its actual content. If asked to summarize it, say what the title/channel suggest at most, and ask the user to paste the transcript or description if they want a real content summary. Never invent what happens in the video.`,
+      source: { label: `YouTube: ${d.title}`, url },
+    };
+  } catch (_) { return { ctx: '', source: null }; }
+}
+
 // Natural-language image-generation intent ("draw me a dragon", "generate an
 // image of a sunset", "make a picture of..."). Deliberately narrow so it
 // only fires on clear requests, not every mention of the word "image".
@@ -3815,14 +3846,15 @@ async function generateAssistantReply(triggerText) {
   const knowledge = askingAboutImage ? { ctx: '', source: null } : await getKnowledgeLookupCtx(triggerText || '');
   const web = askingAboutImage ? { ctx: '', source: null } : await getWebSearchCtx(triggerText || '');
   const news = askingAboutImage ? { ctx: '', source: null } : await getNewsHeadlinesCtx(triggerText || '');
-  const sources = [knowledge.source, web.source, news.source].filter(Boolean);
+  const youtube = askingAboutImage ? { ctx: '', source: null } : await getYouTubeLookupCtx(triggerText || '');
+  const sources = [knowledge.source, web.source, news.source, youtube.source].filter(Boolean);
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
   const recent = App.chatHistory.slice(-20).map((m, i, arr) =>
     (i < arr.length - 1 && Array.isArray(m.content))
       ? { role: m.role, content: msgText(m.content) + ' [attached an image earlier]' }
       : m);
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx + web.ctx + news.ctx) }, ...recent];
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx + web.ctx + news.ctx + youtube.ctx) }, ...recent];
 
   let reply = null;
   let lastError = null;
