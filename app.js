@@ -1398,6 +1398,7 @@ function showOnboarding() {
 }
 
 function bootApp() {
+  App.sessionStartTime = Date.now();
   // One failing subsystem must never kill the whole app: before this guard, a
   // single throw here left EVERY button dead (nothing after it got wired).
   const safe = (fn) => { try { fn(); } catch (e) { console.error('boot step failed:', fn.name || fn, e); } };
@@ -5597,6 +5598,12 @@ function openDashboard() {
 
 function setupDashboard() {
   document.getElementById('dash-back-btn')?.addEventListener('click', () => switchTab('tab-chat'));
+  // Uptime ticks and ping/battery drift, so refresh the Device card
+  // periodically while the tab is actually visible.
+  setInterval(() => {
+    if (!document.getElementById('tab-dashboard')?.classList.contains('active')) return;
+    fetchDeviceStats();
+  }, 30000);
 }
 
 /* ============ Global bottom nav ============ */
@@ -5872,6 +5879,47 @@ function dashboardApiConnected() {
   return !!(s.geminiKey || s.groqKey || s.apiKey || s.togetherKey || s.mistralKey || s.claudeKey || s.localLLMUrl);
 }
 
+function dashboardUptimeStr() {
+  const mins = Math.floor((Date.now() - (App.sessionStartTime || Date.now())) / 60000);
+  if (mins < 1) return '<1m';
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function dashboardRecentErrorCount() {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return (App.activityLog || []).filter(e => e.type === 'error' && e.ts >= cutoff).length;
+}
+
+// Battery and VOID CORE latency both need an async probe, so they start
+// undefined (renders as "—") and fill in once fetchDeviceStats() resolves —
+// same lazy-fetch-then-rerender pattern as the Canvas weather widget.
+async function fetchDeviceStats() {
+  if (App._deviceStatsFetching) return;
+  App._deviceStatsFetching = true;
+  try {
+    if (navigator.getBattery && !App.deviceBattery) {
+      try {
+        const batt = await navigator.getBattery();
+        const sync = () => { App.deviceBattery = { level: Math.round(batt.level * 100), charging: batt.charging }; renderDashboard(); };
+        sync();
+        batt.addEventListener('levelchange', sync);
+        batt.addEventListener('chargingchange', sync);
+      } catch (_) {}
+    }
+    if (VOID_CORE_API.url) {
+      try {
+        const t0 = performance.now();
+        await fetch(`${VOID_CORE_API.url}/`, { method: 'GET', cache: 'no-store' });
+        App.deviceLatencyMs = Math.round(performance.now() - t0);
+      } catch (_) { App.deviceLatencyMs = null; }
+    }
+  } finally {
+    App._deviceStatsFetching = false;
+    renderDashboard();
+  }
+}
+
 function renderDashboard() {
   const root = document.getElementById('dashboard-root');
   if (!root) return;
@@ -5914,6 +5962,14 @@ function renderDashboard() {
       <div class="dash-status-row"><span>Mode</span><span class="dash-status-val"><span class="dash-dot"></span>${escapeHTML((App.settings.responseMode || 'standard').replace(/^./, c => c.toUpperCase()))}</span></div>
       <div class="dash-status-row"><span>API</span><span class="dash-status-val"><span class="dash-dot${dashboardApiConnected() ? '' : ' off'}"></span>${dashboardApiConnected() ? 'Connected' : 'Not set'}</span></div>
       <div class="dash-status-row"><span>Text-to-Speech</span><span class="dash-status-val"><span class="dash-dot${App.settings.voiceEnabled ? '' : ' off'}"></span>${App.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span></div>
+    </div>
+
+    <div class="dash-status-card">
+      <div class="dash-status-title">Device</div>
+      <div class="dash-status-row"><span>Battery</span><span class="dash-status-val"><span class="dash-dot${App.deviceBattery && App.deviceBattery.level <= 20 && !App.deviceBattery.charging ? ' off' : ''}"></span>${App.deviceBattery ? `${App.deviceBattery.level}%${App.deviceBattery.charging ? ' ⚡' : ''}` : '—'}</span></div>
+      <div class="dash-status-row"><span>VOID CORE ping</span><span class="dash-status-val"><span class="dash-dot${App.deviceLatencyMs == null ? ' off' : ''}"></span>${App.deviceLatencyMs != null ? `${App.deviceLatencyMs} ms` : (App.deviceLatencyMs === null ? 'Unreachable' : '—')}</span></div>
+      <div class="dash-status-row"><span>Session uptime</span><span class="dash-status-val"><span class="dash-dot"></span>${dashboardUptimeStr()}</span></div>
+      <div class="dash-status-row"><span>Errors (24h)</span><span class="dash-status-val"><span class="dash-dot${dashboardRecentErrorCount() > 0 ? ' off' : ''}"></span>${dashboardRecentErrorCount()}</span></div>
     </div>
 
     <div class="dash-section-label">Quick actions</div>
@@ -5994,6 +6050,10 @@ function renderDashboard() {
     item.addEventListener('click', () => switchChat(item.dataset.chatId));
   });
   root.querySelector('#dash-viewall-btn')?.addEventListener('click', () => { switchTab('tab-chat'); openNavDrawer(); });
+
+  if (App.deviceBattery === undefined && App.deviceLatencyMs === undefined && !App._deviceStatsFetching) {
+    fetchDeviceStats();
+  }
 }
 
 function switchChat(id) {
