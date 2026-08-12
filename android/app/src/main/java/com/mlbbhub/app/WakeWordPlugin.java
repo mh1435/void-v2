@@ -17,16 +17,34 @@ import com.getcapacitor.annotation.PermissionCallback;
 @CapacitorPlugin(
     name = "WakeWord",
     permissions = {
-        @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "mic")
+        @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "mic"),
+        // Android 13+ silently drops the foreground-service notification
+        // without this — the service still starts, but the user never sees
+        // it and (on stricter OEM battery managers) it gets killed faster
+        // since there's nothing telling Android "keep this alive". Missing
+        // this was the actual cause of "nothing appears, nothing answers".
+        @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notif")
     }
 )
 public class WakeWordPlugin extends Plugin {
 
+    private boolean hasMic() {
+        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasNotif() {
+        if (Build.VERSION.SDK_INT < 33) return true; // permission doesn't exist pre-13
+        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
-        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            requestPermissionForAlias("mic", call, "micPermCallback");
+        if (!hasMic() || !hasNotif()) {
+            // Requests every permission declared on this plugin (mic + notif) in
+            // one system prompt sequence.
+            requestAllPermissions(call, "wakePermCallback");
             return;
         }
         launch();
@@ -34,8 +52,11 @@ public class WakeWordPlugin extends Plugin {
     }
 
     @PermissionCallback
-    private void micPermCallback(PluginCall call) {
-        if (getPermissionState("mic") == com.getcapacitor.PermissionState.GRANTED) {
+    private void wakePermCallback(PluginCall call) {
+        // Mic is what actually gates functionality — a declined notification
+        // permission still lets the service run (just invisibly), so don't
+        // block on it. Only fail hard if mic itself was denied.
+        if (hasMic()) {
             launch();
             call.resolve();
         } else {

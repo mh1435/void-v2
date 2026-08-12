@@ -936,11 +936,30 @@ public class FloatingService extends Service {
     }
 
     private String callAPI() {
+        // A photo shared to VOID (or attached in-app) rides along on the most
+        // recent user turn, same multimodal shape the web chat sends —
+        // "Hey VOID, what's in this photo" works whether the app is open or
+        // the wake word fired it while closed.
+        boolean attachImage = PendingSharedImage.has();
         try {
             JSONArray msgs = new JSONArray();
             msgs.put(new JSONObject().put("role", "system").put("content", SYS_PROMPT));
             List<String[]> slice = history.subList(Math.max(0, history.size() - 10), history.size());
-            for (String[] m : slice) msgs.put(new JSONObject().put("role", m[0]).put("content", m[1]));
+            for (int i = 0; i < slice.size(); i++) {
+                String[] m = slice.get(i);
+                boolean isLastUserTurn = attachImage && i == slice.size() - 1 && "user".equals(m[0]);
+                if (isLastUserTurn) {
+                    JSONArray content = new JSONArray();
+                    content.put(new JSONObject().put("type", "text").put("text", m[1]));
+                    JSONObject imageUrl = new JSONObject().put("url", "data:"
+                        + (PendingSharedImage.mimeType == null ? "image/jpeg" : PendingSharedImage.mimeType)
+                        + ";base64," + PendingSharedImage.base64);
+                    content.put(new JSONObject().put("type", "image_url").put("image_url", imageUrl));
+                    msgs.put(new JSONObject().put("role", "user").put("content", content));
+                } else {
+                    msgs.put(new JSONObject().put("role", m[0]).put("content", m[1]));
+                }
+            }
 
             JSONObject body = new JSONObject();
             body.put("model", "");
@@ -966,6 +985,7 @@ public class FloatingService extends Service {
                 String ln;
                 while ((ln = br.readLine()) != null) sb.append(ln);
             }
+            if (attachImage) PendingSharedImage.clear(); // one-shot, like the web chat's attach preview
             return new JSONObject(sb.toString())
                 .getJSONArray("choices").getJSONObject(0)
                 .getJSONObject("message").getString("content").trim();

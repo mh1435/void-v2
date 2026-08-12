@@ -1,9 +1,14 @@
 package com.mlbbhub.app;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Base64;
 import com.getcapacitor.BridgeActivity;
 import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 
 public class MainActivity extends BridgeActivity {
 
@@ -16,6 +21,7 @@ public class MainActivity extends BridgeActivity {
     private String pendingWakeCmd = null;
     private String pendingAttach = null;
     private boolean pendingSong = false;
+    private boolean pendingImageShare = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -24,6 +30,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SystemPlugin.class);
         super.onCreate(savedInstanceState);
         captureShare(getIntent());
+        captureImageShare(getIntent());
         captureWake(getIntent());
         captureAttach(getIntent());
     }
@@ -32,9 +39,11 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         captureShare(intent);
+        captureImageShare(intent);
         captureWake(intent);
         captureAttach(intent);
         attemptDeliverShare(0);
+        attemptDeliverImageShare(0);
         attemptDeliverWake(0);
         attemptDeliverAttach(0);
         attemptDeliverSong(0);
@@ -45,9 +54,58 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         IN_FOREGROUND = true;
         attemptDeliverShare(0);
+        attemptDeliverImageShare(0);
         attemptDeliverWake(0);
         attemptDeliverAttach(0);
         attemptDeliverSong(0);
+    }
+
+    // A photo shared to VOID from Gallery/Camera/any app ("Share" → VOID).
+    // Read off the main thread since decoding+base64-encoding a full-size
+    // photo can take a noticeable moment.
+    private void captureImageShare(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+        String type = intent.getType();
+        if (type == null || !type.startsWith("image/")) return;
+        Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        if (uri == null) return;
+        final String mime = type;
+        new Thread(() -> {
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) return;
+                ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                byte[] chunk = new byte[8192];
+                int n;
+                while ((n = in.read(chunk)) != -1) buf.write(chunk, 0, n);
+                String b64 = Base64.encodeToString(buf.toByteArray(), Base64.NO_WRAP);
+                PendingSharedImage.set(b64, mime);
+                pendingImageShare = true;
+                runOnUiThread(() -> attemptDeliverImageShare(0));
+            } catch (Exception ignored) {
+                // Unreadable/revoked URI — silently drop rather than leave a stuck flag.
+            }
+        }).start();
+    }
+
+    // Tell the web layer a shared image is ready. Retries like the other
+    // share hooks, since app.js may not have finished loading yet.
+    private void attemptDeliverImageShare(final int attempt) {
+        if (!pendingImageShare || bridge == null) return;
+        if (!PendingSharedImage.has()) { pendingImageShare = false; return; }
+        final String b64Payload = JSONObject.quote(PendingSharedImage.base64);
+        final String mimePayload = JSONObject.quote(PendingSharedImage.mimeType == null ? "image/jpeg" : PendingSharedImage.mimeType);
+        bridge.getWebView().evaluateJavascript(
+            "window.__voidReceiveImageShare?(window.__voidReceiveImageShare(" + b64Payload + "," + mimePayload + "),'ok'):'no'",
+            value -> {
+                if ("\"ok\"".equals(value)) {
+                    pendingImageShare = false;
+                    // Keep PendingSharedImage set (not cleared) — the wake-word
+                    // voice pill can still answer questions about the same
+                    // photo later even after it's landed in the chat.
+                } else if (attempt < 20) {
+                    bridge.getWebView().postDelayed(() -> attemptDeliverImageShare(attempt + 1), 800);
+                }
+            });
     }
 
     private void captureAttach(Intent intent) {

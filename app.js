@@ -89,6 +89,26 @@ function applyPendingShare() {
   App.pendingShare = null;
 }
 
+/* Share-a-photo-to-VOID: MainActivity delivers a shared image (base64) here.
+   Reuses the same App.pendingImage the in-app camera/attach picker uses, so
+   it rides along on the next message exactly like any other attached photo
+   — and the wake-word voice pill can answer questions about it too, since
+   PendingSharedImage.java on the native side holds the same data. */
+window.__voidReceiveImageShare = (base64, mimeType) => {
+  if (!base64) return;
+  App.pendingImage = `data:${mimeType || 'image/jpeg'};base64,${base64}`;
+  applyPendingImageShare();
+};
+function applyPendingImageShare() {
+  if (!App.pendingImage) return;
+  try { switchTab('tab-chat'); } catch (_) {}
+  const preview = document.getElementById('attach-preview');
+  const previewImg = document.getElementById('attach-preview-img');
+  if (previewImg) previewImg.src = App.pendingImage;
+  if (preview) preview.style.display = '';
+  document.getElementById('attach-btn')?.classList.add('active');
+}
+
 /* Personas — selectable modes that reshape how VOID responds.
    `icon` is a monochrome line SVG shown in pickers (professional look);
    `emoji` is kept as a data fallback for anything older that reads it. */
@@ -2513,7 +2533,19 @@ function setupChat() {
   App.startWakeListening = () => {
     if (!App.settings.wakeWord) return;
     // Native app → hand off to the always-on background service.
-    if (WakePlugin) { WakePlugin.start().catch(() => {}); return; }
+    if (WakePlugin) {
+      WakePlugin.start().catch(() => {
+        // The only rejection WakeWordPlugin.start() sends is a denied mic
+        // permission — surface it instead of failing silently (this was the
+        // actual bug: users saw no notification and no error, ever).
+        App.settings.wakeWord = false;
+        saveSettings();
+        const wakeToggle = document.getElementById('toggle-wake-word');
+        if (wakeToggle) wakeToggle.checked = false;
+        appendMessage?.('system', '⚠️ Wake word couldn\'t start — microphone permission was denied. Turn it back on in Settings to ask again.');
+      });
+      return;
+    }
     if (wakeActive || App.voiceConvo || listening) return;
     if (NativeSTT) { startNativeWakeLoop(); return; }
     if (!SpeechRecognition) return;

@@ -66,6 +66,15 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
+            <!-- Share a photo from any app (Gallery, Camera, etc.) straight into
+                 VOID — analyzed like any other attached image, and readable by
+                 the wake-word voice pill too ("Hey VOID, what's in this?"). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+
         </activity>
 
         <!-- Floating assistant overlay service -->
