@@ -303,6 +303,31 @@ async function getKnowledgeLookupCtx(text) {
   } catch(_) { return { ctx: '', source: null }; }
 }
 
+// Generic "what's the news today" — no topic, so getWebSearchCtx's
+// single-subject DuckDuckGo lookup doesn't fire. Grounds the reply in
+// Wikipedia's real "In the news" current-events feed instead of letting
+// the model invent headlines.
+function isGenericNewsQuery(text) {
+  return /^(?:what'?s (?:the |in the |today'?s )?news(?: today)?|today'?s news|top headlines|latest news|give me the news|news update|what'?s happening (?:in the world|today)|any news today)[.?!]*$/i.test(text.trim());
+}
+
+async function getNewsHeadlinesCtx(text) {
+  if (!isGenericNewsQuery(text)) return { ctx: '', source: null };
+  try {
+    const now = new Date();
+    const path = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${String(now.getUTCDate()).padStart(2, '0')}`;
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/feed/featured/${path}`);
+    if (!r.ok) return { ctx: '', source: null };
+    const d = await r.json();
+    const items = (d.news || []).slice(0, 5).map(n => (n.story || '').replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    if (!items.length) return { ctx: '', source: null };
+    return {
+      ctx: `\n\nTOP HEADLINES today (Wikipedia Current Events): ${items.map((t, i) => `${i + 1}. ${t}`).join(' ')}`,
+      source: { label: 'Wikipedia Current Events', url: 'https://en.wikipedia.org/wiki/Portal:Current_events' },
+    };
+  } catch (_) { return { ctx: '', source: null }; }
+}
+
 // Natural-language image-generation intent ("draw me a dragon", "generate an
 // image of a sunset", "make a picture of..."). Deliberately narrow so it
 // only fires on clear requests, not every mention of the word "image".
@@ -3764,14 +3789,15 @@ async function generateAssistantReply(triggerText) {
   const weatherCtx = askingAboutImage ? '' : await getWeatherLookupCtx(triggerText || '');
   const knowledge = askingAboutImage ? { ctx: '', source: null } : await getKnowledgeLookupCtx(triggerText || '');
   const web = askingAboutImage ? { ctx: '', source: null } : await getWebSearchCtx(triggerText || '');
-  const sources = [knowledge.source, web.source].filter(Boolean);
+  const news = askingAboutImage ? { ctx: '', source: null } : await getNewsHeadlinesCtx(triggerText || '');
+  const sources = [knowledge.source, web.source, news.source].filter(Boolean);
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
   const recent = App.chatHistory.slice(-20).map((m, i, arr) =>
     (i < arr.length - 1 && Array.isArray(m.content))
       ? { role: m.role, content: msgText(m.content) + ' [attached an image earlier]' }
       : m);
-  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx + web.ctx) }, ...recent];
+  const messages = [{ role: 'system', content: buildSystemPrompt(weatherCtx + knowledge.ctx + web.ctx + news.ctx) }, ...recent];
 
   let reply = null;
   let lastError = null;
