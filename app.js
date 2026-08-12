@@ -1173,9 +1173,8 @@ function bootApp() {
 /* ============ First-run feature tour ============ */
 
 const TOUR_STEPS = [
-  { sel: '#plus-btn', title: 'Quick actions', body: 'Tap + to attach an image, switch chat modes, go hands-free with Live voice, or change AI providers.' },
-  { sel: '#chat-menu-btn', title: 'Chat options', body: 'Share, export, rename, or delete the current chat from here.' },
-  { sel: '.tab-pill[data-target="tab-gamehub"]', title: 'Workspace', body: 'MLBB hero guides and Study Mode — with a Pomodoro timer and focus stats — live here.' },
+  { sel: '#plus-btn', title: 'Quick actions', body: 'Tap + to attach an image, switch chat modes, go hands-free with Live voice, change AI providers, or open Chat options (share/export/rename/delete this chat).' },
+  { sel: '#bottom-nav', title: 'Navigate VOID', body: 'Dashboard, Canvas, Voice, Chat, and Settings — always one tap away. Workspace and your chat history live inside Dashboard now.' },
 ];
 
 function maybeStartTour() {
@@ -1433,26 +1432,15 @@ function switchTabRaw(targetId) {
   updateAppChromeForTab(targetId);
 }
 
-// Sub-pages (drill-downs) bring their own back+title header, so the top-level
-// VOID/INTELLIGENCE/WORKSPACE bar hides for them instead of stacking two headers.
-const SUB_PAGE_TABS = ['tab-hub-detail', 'tab-study-grid', 'trivia-view', 'tab-pages', 'tab-dashboard', 'tab-canvas'];
-function updateAppChromeForTab(targetId) {
-  const chatMenuBtn = document.getElementById('chat-menu-btn');
-  const wordmark = document.getElementById('workspace-wordmark');
-  const isChat = targetId === 'tab-chat';
-  if (chatMenuBtn) {
-    // display:none on Workspace so it doesn't reserve phantom width next to
-    // the wordmark — that reserved space was crowding VOID into the pill.
-    chatMenuBtn.style.display = isChat ? '' : 'none';
-    chatMenuBtn.style.pointerEvents = isChat ? '' : 'none';
-  }
-  // The VOID wordmark fills that same left slot on Workspace (where the
-  // chat-options menu doesn't apply) — never both at once.
-  if (wordmark) wordmark.style.display = (!isChat && targetId === 'tab-gamehub') ? '' : 'none';
+// Every tab now hides the old top VOID/INTELLIGENCE-WORKSPACE bar — the
+// bottom nav (Dashboard/Canvas/Voice/Chat/Settings) is the single source of
+// navigation now. Workspace moved to a Dashboard quick action, and the old
+// chat-options (⋮) menu moved into the "+" tools sheet as "Chat options" —
+// both keep working exactly as before, just reached from a different door.
+function updateAppChromeForTab() {
   document.getElementById('chat-menu')?.classList.remove('open');
-
   const appHeader = document.getElementById('app-hud-header');
-  if (appHeader) appHeader.style.display = SUB_PAGE_TABS.includes(targetId) ? 'none' : '';
+  if (appHeader) appHeader.style.display = 'none';
 }
 
 /* ============ Settings panel navigation ============ */
@@ -5610,6 +5598,14 @@ function renderDashboard() {
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Settings
       </button>
+      <button class="dash-action-btn" data-dash-act="workspace">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Workspace
+      </button>
+      <button class="dash-action-btn" data-dash-act="history">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+        History
+      </button>
     </div>
 
     <div class="dash-section-label dash-section-label-row">
@@ -5650,6 +5646,8 @@ function renderDashboard() {
         document.getElementById('view-main').classList.remove('active');
         document.getElementById('view-settings').classList.add('active');
       }
+      else if (act === 'workspace') { switchTab('tab-gamehub'); }
+      else if (act === 'history') { switchTab('tab-chat'); openNavDrawer(); }
     });
   });
   root.querySelectorAll('.dash-recent-item').forEach(item => {
@@ -5968,6 +5966,7 @@ function setupPlusMenu() {
     else if (act === 'mode') document.getElementById('persona-pick-btn')?.click();
     else if (act === 'provider') document.getElementById('provider-pick-btn')?.click();
     else if (act === 'live') document.getElementById('voice-convo-btn')?.click();
+    else if (act === 'chatoptions') document.getElementById('chat-menu')?.classList.add('open');
   };
 
   menu.querySelectorAll('.persona-item, .plus-chip').forEach(row => {

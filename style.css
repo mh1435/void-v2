@@ -105,6 +105,12 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   transform: scale(1);
 }
 
+/* The top VOID/INTELLIGENCE-WORKSPACE bar is retired in favor of the
+   bottom nav — hidden by default (not just after a JS tab-switch) so it
+   never flashes visible on first load. Sub-page headers (.hud-header on
+   Pages/Dashboard/Canvas) are a different, still-visible instance. */
+#app-hud-header { display: none; }
+
 .hud-header {
   height: 54px;
   background: var(--glass-bg-strong);
