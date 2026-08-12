@@ -2959,8 +2959,30 @@ function setupChat() {
   }
   if (cameraInput) cameraInput.addEventListener('change', () => ingestImageFile(cameraInput));
 
-  // Generic file picker: images attach for vision; readable text files get
-  // pasted into the composer as context; anything else is declined honestly.
+  // Big notes/PDFs become study material with action chips instead of
+  // flooding the composer; short ones get pasted into the composer as context.
+  const ingestFileText = (file, content) => {
+    if (content.length > 20000) {
+      App.studyContext = { source: file.name, text: content.slice(0, 500000) };
+      const msg = `**Loaded — ${file.name}** (${Math.round(content.length / 1000)}k characters)\n\n${content.slice(0, 500)}…`;
+      App.chatHistory.push({ role: 'assistant', content: msg });
+      saveChatHistory();
+      appendMessage('assistant', msg, App.chatHistory.length - 1);
+      renderStudyActionChips();
+    } else {
+      const inputEl = document.getElementById('chat-input');
+      if (inputEl) {
+        inputEl.value = `Here's the file "${file.name}":\n\n${content}\n\n`;
+        inputEl.dispatchEvent(new Event('input'));
+        inputEl.focus();
+        inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+      }
+    }
+  };
+
+  // Generic file picker: images attach for vision; PDFs get their text
+  // extracted; readable text files get pasted into the composer as context;
+  // anything else is declined honestly.
   const fileInput = document.getElementById('file-input');
   if (fileInput) fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
@@ -2973,10 +2995,31 @@ function setupChat() {
       fileInput.value = '';
       return;
     }
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      if (file.size > 25 * 1024 * 1024) {
+        appendMessage('system', `“${file.name}” is too large to read here (25 MB max for PDFs).`);
+        fileInput.value = '';
+        return;
+      }
+      appendMessage('system', `Reading ${file.name}…`);
+      file.arrayBuffer().then(async (buf) => {
+        const text = await extractPdfText(buf);
+        fileInput.value = '';
+        if (!text || text.length < 20) {
+          appendMessage('system', `Couldn't extract readable text from "${file.name}" — it may be a scanned/image-only PDF, or use a font encoding this reader doesn't support yet.`);
+          return;
+        }
+        ingestFileText(file, text);
+      }).catch(() => {
+        fileInput.value = '';
+        appendMessage('system', `Couldn't read "${file.name}" — the file may be corrupted or password-protected.`);
+      });
+      return;
+    }
     const textLike = (file.type || '').startsWith('text/')
       || /\.(txt|md|markdown|csv|json|log|xml|yml|yaml|html|css|js|ts|jsx|tsx|py|java|kt|c|cpp|h|sh|sql|ini|conf|toml)$/i.test(file.name);
     if (!textLike) {
-      appendMessage('system', `I can read images, recordings/videos, and text files — “${file.name}” isn't one of those yet.`);
+      appendMessage('system', `I can read images, recordings/videos, PDFs, and text files — “${file.name}” isn't one of those yet.`);
       fileInput.value = '';
       return;
     }
@@ -2987,25 +3030,7 @@ function setupChat() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const content = String(reader.result || '');
-      if (content.length > 20000) {
-        // Big notes become study material with action chips instead of
-        // flooding the composer.
-        App.studyContext = { source: file.name, text: content.slice(0, 500000) };
-        const msg = `**Loaded — ${file.name}** (${Math.round(content.length / 1000)}k characters)\n\n${content.slice(0, 500)}…`;
-        App.chatHistory.push({ role: 'assistant', content: msg });
-        saveChatHistory();
-        appendMessage('assistant', msg, App.chatHistory.length - 1);
-        renderStudyActionChips();
-      } else {
-        const inputEl = document.getElementById('chat-input');
-        if (inputEl) {
-          inputEl.value = `Here's the file "${file.name}":\n\n${content}\n\n`;
-          inputEl.dispatchEvent(new Event('input'));
-          inputEl.focus();
-          inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
-        }
-      }
+      ingestFileText(file, String(reader.result || ''));
       fileInput.value = '';
     };
     reader.readAsText(file);
@@ -4702,6 +4727,99 @@ function buildPdf(title, body) {
   for (let n = 1; n <= totalObjs; n++) pdf += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
   pdf += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
   return pdf;
+}
+
+// --- PDF reading: dependency-free text extraction. ---
+// A full pdf.js bundle isn't worth the weight for "read me this PDF" — the
+// browser already ships a native zlib inflate (DecompressionStream), which
+// covers the common case: FlateDecode-compressed content streams with plain
+// Tj/TJ text-showing operators. PDFs using subset/custom font encodings
+// (common from some scanners and design tools) won't decode into readable
+// text; extractPdfText returns whatever it found, and the caller treats a
+// too-short result as "couldn't read this one" rather than showing garbage.
+async function inflatePdfStream(bytes) {
+  const ds = new DecompressionStream('deflate');
+  const writer = ds.writable.getWriter();
+  // Both promises must be caught here, not left dangling — an invalid
+  // stream rejects writer.write() independently of the reader, and an
+  // uncaught rejection on it surfaces as an unhandled-rejection error even
+  // though the reader-side try/catch below already handles the failure.
+  writer.write(bytes).catch(() => {});
+  writer.close().catch(() => {});
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+function unescapePdfLiteralString(s) {
+  return s
+    .replace(/\\([0-7]{1,3})/g, (_, o) => String.fromCharCode(parseInt(o, 8) & 0xff))
+    .replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, '\t')
+    .replace(/\\([()\\])/g, '$1');
+}
+
+// Pulls literal-string operands out of Tj (single string) and TJ (array of
+// strings + kerning numbers) text-showing operators, in document order.
+function extractTextOperatorsFromStream(streamText) {
+  const out = [];
+  const strRe = /\(((?:[^()\\]|\\.)*)\)/g;
+  const tjArrayRe = /\[((?:[^\[\]\\]|\\.)*)\]\s*TJ/g;
+  const tjRe = /\(((?:[^()\\]|\\.)*)\)\s*Tj/g;
+  let m;
+  while ((m = tjArrayRe.exec(streamText))) {
+    let line = '', sm;
+    strRe.lastIndex = 0;
+    while ((sm = strRe.exec(m[1]))) line += unescapePdfLiteralString(sm[1]);
+    if (line) out.push(line);
+  }
+  while ((m = tjRe.exec(streamText))) out.push(unescapePdfLiteralString(m[1]));
+  return out.join(' ');
+}
+
+// TextDecoder('latin1') is windows-1252 per the WHATWG encoding spec, not
+// raw ISO-8859-1 — it remaps bytes 0x80-0x9F to other code points, which
+// corrupts a byte<->string round-trip on binary PDF stream data (zlib output
+// hits that range constantly). String.fromCharCode is the actual 1:1 map.
+function bytesToBinaryString(bytes) {
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  return s;
+}
+
+async function extractPdfText(arrayBuffer) {
+  const raw = bytesToBinaryString(new Uint8Array(arrayBuffer));
+  const streamRe = /stream\r?\n([\s\S]*?)endstream/g;
+  const parts = [];
+  let m;
+  while ((m = streamRe.exec(raw))) {
+    // The PDF spec requires an end-of-line marker before "endstream" that
+    // isn't part of the stream data itself — leaving it in trips the
+    // browser's strict DecompressionStream ("junk after end of compressed
+    // data") even though the actual payload is valid.
+    const chunk = m[1].replace(/\r\n$|\n$|\r$/, '');
+    const streamBytes = new Uint8Array(chunk.length);
+    for (let i = 0; i < chunk.length; i++) streamBytes[i] = chunk.charCodeAt(i) & 0xff;
+    let text;
+    try {
+      const inflated = await inflatePdfStream(streamBytes);
+      text = bytesToBinaryString(inflated);
+    } catch (_) {
+      text = m[1]; // not FlateDecode — could be an uncompressed content stream (e.g. our own exported PDFs) or binary image data; the Tj/TJ check below filters out the latter
+    }
+    if (/\bT[jJ]\b/.test(text)) parts.push(extractTextOperatorsFromStream(text));
+  }
+  return parts.join('\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function exportDocument(title, content, fmt) {
