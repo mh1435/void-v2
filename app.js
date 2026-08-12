@@ -58,6 +58,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Knowledge lookups: "who is X" / "what is X" / "tell me about X" pull a real Wikipedia summary, injected as a KNOWLEDGE LOOKUP block below
 - /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
 - Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
+- Device control (Android app, needs the user to enable "VOID Device Control" in Settings → Accessibility once): navigate the device ("go back", "go home", "recent apps", "show notifications", "lock screen", "split screen"), take a screenshot, scroll/swipe, tap or long-press anything by description ("click the submit button"), fill in text fields ("type john@x.com into the email field"), read and describe what's on screen ("what's on my screen?"), and read current notifications ("read my notifications") — separately needs Notification access enabled in Settings
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 - Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
@@ -65,7 +66,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - General support: you can ask VOID about installation, supported features, troubleshooting, AI providers, voice interaction, documents, media, and general product usage. Some features may require optional services or provider credentials (e.g. an API key for a specific AI provider, or device permissions for voice/camera).
 
 Rules:
-- You CANNOT open apps, settings, or links yourself — the app layer does that before messages reach you. If an open-app request still reaches you, it was NOT executed: say you couldn't do it and suggest rephrasing as "open <app name>". NEVER claim you opened or launched something.
+- You CANNOT open apps, settings, or links, navigate the device, take screenshots, tap/scroll/fill anything, or read the screen/notifications yourself — the app layer does all of that before messages reach you, when it recognizes the command. If one of these requests still reaches you as a normal chat message, it means the app layer did NOT recognize/execute it: say so plainly and suggest rephrasing it more directly (e.g. "go back", "take a screenshot", "click the X button"). NEVER claim you did one of these actions yourself.
 - NEVER proactively mention MLBB, gaming, or hero builds unless the user brings it up first
 - Match your response length to the question — short question = short answer, complex question = detailed answer
 - For math and science, write equations with real Unicode symbols (π, ω, θ, √, ², ₀, →, ×, ·, ≈, ≤, ≥, ∫, ∑, Δ), NOT LaTeX. Never wrap math in $…$ or use commands like \\frac, \\omega, \\sqrt — write "ω₀ = 2π/T₀" and "x = X_max·cos(ω₀t)" directly. Write fractions inline as a/b.
@@ -518,6 +519,181 @@ function detectAppAction(text) {
     }
   }
   return null;
+}
+
+/* ── Device control (Accessibility Service) — navigation, gestures,
+   screenshots, screen reading, click-by-description, auto-fill, and
+   notification reading. Checked BEFORE detectAppAction() in sendMessage()
+   so e.g. "show notifications" doesn't fall through to "open an app called
+   'notifications'". Returns null for anything that isn't one of these. ── */
+function detectDeviceControlAction(text) {
+  const t = text.trim().replace(/[.?!]+$/, '').trim().toLowerCase();
+  let m;
+
+  if (/^(?:go\s+)?back$|^go\s+back(?:\s+a\s+page)?$/.test(t)) return { type: 'back' };
+  if (/^(?:go\s+)?home$|^go\s+to\s+(?:the\s+)?home\s*screen$/.test(t)) return { type: 'home' };
+  if (/^(?:show|open)\s+recent(?:s|\s+apps)?$|^(?:app\s+switcher|recents)$/.test(t)) return { type: 'recents' };
+  if (/^(?:show|open|pull down)\s+(?:my\s+)?notifications?(?:\s+shade)?$/.test(t) && !/read|check|list|what/.test(t)) return { type: 'notif_shade' };
+  if (/^(?:open|show)\s+quick\s+settings$/.test(t)) return { type: 'quick_settings' };
+  if (/^lock(?:\s+(?:my\s+)?(?:phone|screen|device))?$/.test(t)) return { type: 'lock' };
+  if (/^(?:toggle\s+)?split\s*screen$/.test(t)) return { type: 'split_screen' };
+  if (/^(?:take\s+a\s+)?screenshot$|^capture\s+(?:the\s+)?screen$/.test(t)) return { type: 'screenshot' };
+
+  if ((m = t.match(/^(?:scroll|swipe)\s+(up|down|left|right)$/))) return { type: 'scroll', direction: m[1] };
+
+  if (/^(?:what(?:'s|\s+is)\s+on\s+(?:my\s+)?screen\??|read\s+(?:the\s+|my\s+)?screen|describe\s+(?:my\s+)?screen|analyze\s+(?:my\s+)?screen)$/.test(t)) {
+    return { type: 'read_screen' };
+  }
+
+  if ((m = t.match(/^(?:read|check|list|what(?:'s|\s+are))\s+my\s+notifications?(?:\s+from\s+(.+))?$/))) {
+    return { type: 'read_notifications', appFilter: m[1] || '' };
+  }
+
+  if ((m = t.match(/^(?:click|tap|press)(?:\s+on)?\s+(?:the\s+)?(.+?)(?:\s+button)?$/))) {
+    return { type: 'click', query: m[1].trim() };
+  }
+  if ((m = t.match(/^long\s*press\s+(?:the\s+)?(.+)$/))) {
+    return { type: 'long_press', query: m[1].trim() };
+  }
+
+  // "type my email into the email field" / "fill in the search box with cats" / "enter John in the name field"
+  if ((m = t.match(/^(?:type|enter)\s+(.+?)\s+(?:into|in)\s+(?:the\s+)?(.+?)(?:\s+field|\s+box)?$/))) {
+    return { type: 'fill_field', value: m[1].trim(), label: m[2].trim() };
+  }
+  if ((m = t.match(/^fill\s+(?:in\s+)?(?:the\s+)?(.+?)(?:\s+field|\s+box)?\s+with\s+(.+)$/))) {
+    return { type: 'fill_field', label: m[1].trim(), value: m[2].trim() };
+  }
+
+  return null;
+}
+
+function deviceControlPlugin() {
+  return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidAccessibility : null;
+}
+
+// Runs a detectDeviceControlAction() result. Every branch is a thin wrapper
+// over VoidAccessibilityPlugin — the actual navigation/gesture/read logic
+// all lives natively in VoidAccessibilityService, since only the OS-level
+// Accessibility API can see and act on other apps' screens.
+async function runDeviceControlAction(action) {
+  const plugin = deviceControlPlugin();
+  if (!plugin) {
+    appendMessage('system', '📵 Device control needs the VOID Android app — not available in the browser.');
+    return;
+  }
+
+  if (action.type === 'read_notifications') {
+    const enabled = (await plugin.isNotificationAccessEnabled().catch(() => ({ value: false })))?.value;
+    if (!enabled) {
+      appendMessage('system', '🔔 VOID needs Notification access to read your notifications — opening that settings screen. Find "VOID AI" in the list and turn it on, then ask again.');
+      plugin.openNotificationSettings().catch(() => {});
+      return;
+    }
+    const res = await plugin.readNotifications({ appFilter: action.appFilter || '' }).catch(() => null);
+    const list = res?.notifications || [];
+    if (!list.length) { appendMessage('system', '🔔 No notifications right now.'); return; }
+    const lines = list.slice(0, 15).map(n => `• **${escapeHTML(n.title || n.app)}** — ${escapeHTML(n.text || '')}`);
+    appendMessage('system', `🔔 **Notifications:**\n${lines.join('\n')}`);
+    return;
+  }
+
+  // Everything else needs the Accessibility service specifically.
+  const enabled = (await plugin.isEnabled().catch(() => ({ value: false })))?.value;
+  if (!enabled) {
+    appendMessage('system', '🔓 VOID needs Device Control turned on to do that — opening Settings. Find "VOID Device Control" under Accessibility and enable it, then ask again.');
+    plugin.openSettings().catch(() => {});
+    return;
+  }
+
+  switch (action.type) {
+    case 'back': {
+      const r = await plugin.back().catch(() => null);
+      appendMessage('system', r?.ok ? '◀️ Went back.' : "Couldn't go back from here.");
+      return;
+    }
+    case 'home': {
+      const r = await plugin.home().catch(() => null);
+      appendMessage('system', r?.ok ? '🏠 Home.' : "Couldn't go home.");
+      return;
+    }
+    case 'recents': {
+      const r = await plugin.recents().catch(() => null);
+      appendMessage('system', r?.ok ? '🗂 Recent apps.' : "Couldn't open recents.");
+      return;
+    }
+    case 'notif_shade': {
+      const r = await plugin.notifications().catch(() => null);
+      appendMessage('system', r?.ok ? '🔔 Notification shade opened.' : "Couldn't open notifications.");
+      return;
+    }
+    case 'quick_settings': {
+      const r = await plugin.quickSettings().catch(() => null);
+      appendMessage('system', r?.ok ? '⚙️ Quick Settings opened.' : "Couldn't open Quick Settings.");
+      return;
+    }
+    case 'lock': {
+      const r = await plugin.lockScreen().catch(() => null);
+      appendMessage('system', r?.ok ? '🔒 Locked.' : "Couldn't lock the screen (needs Android 9+).");
+      return;
+    }
+    case 'split_screen': {
+      const r = await plugin.toggleSplitScreen().catch(() => null);
+      appendMessage('system', r?.ok ? '🗗 Split screen toggled.' : "Couldn't toggle split screen.");
+      return;
+    }
+    case 'screenshot': {
+      const typingId = appendTyping();
+      const r = await plugin.screenshot().catch(() => null);
+      removeTyping(typingId);
+      if (r?.ok && r.dataUrl) appendImageMessage(r.dataUrl, 'Screenshot');
+      else appendMessage('system', `📵 ${r?.error || "Couldn't take a screenshot."}`);
+      return;
+    }
+    case 'scroll': {
+      const r = await plugin.scroll({ direction: action.direction }).catch(() => null);
+      appendMessage('system', r?.ok ? `📜 Scrolled ${action.direction}.` : `Couldn't scroll ${action.direction}.`);
+      return;
+    }
+    case 'click': {
+      const r = await plugin.clickByDescription({ query: action.query }).catch(() => null);
+      appendMessage('system', r?.ok ? `👆 Tapped "${action.query}".` : `I couldn't find "${action.query}" on screen.`);
+      return;
+    }
+    case 'long_press': {
+      // No dedicated find+long-press native method — find it via readScreen(),
+      // then long-press its bounds directly.
+      const dump = await plugin.readScreen().catch(() => null);
+      const q = action.query.toLowerCase();
+      const hit = (dump?.nodes || []).find(n => (n.text || '').toLowerCase().includes(q) || (n.desc || '').toLowerCase().includes(q));
+      if (!hit) { appendMessage('system', `I couldn't find "${action.query}" on screen.`); return; }
+      const cx = (hit.bounds.left + hit.bounds.right) / 2, cy = (hit.bounds.top + hit.bounds.bottom) / 2;
+      const r = await plugin.longPress({ x: cx, y: cy }).catch(() => null);
+      appendMessage('system', r?.ok ? `👆 Long-pressed "${action.query}".` : `Couldn't long-press "${action.query}".`);
+      return;
+    }
+    case 'fill_field': {
+      const r = await plugin.fillField({ label: action.label, value: action.value }).catch(() => null);
+      appendMessage('system', r?.ok ? `⌨️ Filled "${action.label}" with "${action.value}".` : `I couldn't find a field matching "${action.label}".`);
+      return;
+    }
+    case 'read_screen': {
+      const dump = await plugin.readScreen().catch(() => null);
+      const nodes = dump?.nodes || [];
+      if (!nodes.length) { appendMessage('system', "I couldn't read anything on screen right now."); return; }
+      const summary = nodes.map(n => (n.text || n.desc || '').trim()).filter(Boolean).slice(0, 120).join(' · ');
+      if (!summary) { appendMessage('system', "The screen doesn't have any readable text right now."); return; }
+      const typingId = appendTyping();
+      const described = await quickAI(
+        'The user asked what\'s on their phone screen. Below is a flat dump of on-screen text and labels (order roughly top-to-bottom, left-to-right, may include duplicates/UI chrome). ' +
+        'Describe what app/screen this looks like and what\'s on it in 2-4 natural sentences — don\'t just repeat the raw list.',
+        summary);
+      removeTyping(typingId);
+      appendMessage('assistant', described || `Here's what's on screen: ${summary.slice(0, 400)}`);
+      return;
+    }
+    default:
+      appendMessage('system', "I didn't understand that device command.");
+  }
 }
 
 /* ============ Learn mode — Notion-AI-style study coach with voice ============ */
@@ -1717,6 +1893,19 @@ async function refreshPermissions() {
     setEl('perm-geo-status', cap1(await q('geolocation')));
   }
   setEl('perm-notif-status', ('Notification' in window) ? cap1(Notification.permission) : 'Unsupported');
+
+  const plugin = deviceControlPlugin();
+  if (plugin) {
+    const acc = await plugin.isEnabled().catch(() => ({ value: false }));
+    setEl('perm-accessibility-status', acc?.value ? 'Enabled' : 'Not enabled');
+    const accBtn = document.getElementById('perm-accessibility-btn'); if (accBtn) accBtn.textContent = acc?.value ? 'Enabled' : 'Enable';
+    const notif = await plugin.isNotificationAccessEnabled().catch(() => ({ value: false }));
+    setEl('perm-notiflisten-status', notif?.value ? 'Enabled' : 'Not enabled');
+    const notifBtn = document.getElementById('perm-notiflisten-btn'); if (notifBtn) notifBtn.textContent = notif?.value ? 'Enabled' : 'Enable';
+  } else {
+    setEl('perm-accessibility-status', 'Needs Android app');
+    setEl('perm-notiflisten-status', 'Needs Android app');
+  }
 }
 function cap1(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown'; }
 
@@ -1803,6 +1992,18 @@ function setupClonedPanels() {
   if (notifPermBtn) notifPermBtn.addEventListener('click', async () => {
     if ('Notification' in window) { try { await Notification.requestPermission(); } catch (e) {} }
     refreshPermissions();
+  });
+  const accessibilityBtn = document.getElementById('perm-accessibility-btn');
+  if (accessibilityBtn) accessibilityBtn.addEventListener('click', async () => {
+    const plugin = deviceControlPlugin();
+    if (!plugin) { appendMessage?.('system', '📵 Device Control needs the VOID Android app.'); return; }
+    await plugin.openSettings().catch(() => {});
+  });
+  const notifListenBtn = document.getElementById('perm-notiflisten-btn');
+  if (notifListenBtn) notifListenBtn.addEventListener('click', async () => {
+    const plugin = deviceControlPlugin();
+    if (!plugin) { appendMessage?.('system', '📵 Notification access needs the VOID Android app.'); return; }
+    await plugin.openNotificationSettings().catch(() => {});
   });
 
   // Color mode segmented
@@ -3332,6 +3533,13 @@ async function sendMessage() {
     }
     return;
   }
+
+  // Device control — navigation, gestures, screenshots, screen reading,
+  // click-by-description, auto-fill, notifications. Checked before
+  // detectAppAction() so "show notifications" etc. isn't mistaken for
+  // "open an app called notifications".
+  const deviceCtrl = detectDeviceControlAction(text);
+  if (deviceCtrl) { appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn(); await runDeviceControlAction(deviceCtrl); return; }
 
   // Natural-language device actions — open any app, any settings screen, or a
   // link ("open proton vpn", "open wifi settings", "play lo-fi on youtube").

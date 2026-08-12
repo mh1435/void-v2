@@ -1492,6 +1492,24 @@ if ('serviceWorker' in navigator) {
       <div class="setting-row"><div class="setting-label"><span>Microphone</span><span class="setting-sub" id="perm-mic-status">Not granted</span></div><button class="ghost-btn compact" id="perm-mic-btn">Allow</button></div>
       <div class="setting-row"><div class="setting-label"><span>Location</span><span class="setting-sub" id="perm-geo-status">Not granted</span></div><button class="ghost-btn compact" id="perm-geo-btn">Allow</button></div>
       <div class="setting-row"><div class="setting-label"><span>Notifications</span><span class="setting-sub" id="perm-notif-status">Not granted</span></div><button class="ghost-btn compact" id="perm-notif-btn">Allow</button></div>
+
+      <div class="settings-section-label" style="margin-top:18px;">DEVICE CONTROL</div>
+      <div class="setting-row">
+        <div class="setting-label">
+          <span>Device Control</span>
+          <span class="setting-sub" id="perm-accessibility-status">Not enabled</span>
+        </div>
+        <button class="ghost-btn compact" id="perm-accessibility-btn">Enable</button>
+      </div>
+      <p class="muted small" style="margin:4px 2px 10px;">Lets VOID navigate your phone, take screenshots, tap/scroll anywhere, read the screen, and fill in fields — only when you ask it to, by voice or text.</p>
+      <div class="setting-row">
+        <div class="setting-label">
+          <span>Notification Access</span>
+          <span class="setting-sub" id="perm-notiflisten-status">Not enabled</span>
+        </div>
+        <button class="ghost-btn compact" id="perm-notiflisten-btn">Enable</button>
+      </div>
+      <p class="muted small" style="margin:4px 2px 0;">Lets VOID read your current notifications when you ask ("read my notifications").</p>
     </div>
   </div>
 

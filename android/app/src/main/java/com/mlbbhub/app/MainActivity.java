@@ -28,6 +28,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FloatingPlugin.class);
         registerPlugin(WakeWordPlugin.class);
         registerPlugin(SystemPlugin.class);
+        registerPlugin(VoidAccessibilityPlugin.class);
         super.onCreate(savedInstanceState);
         captureShare(getIntent());
         captureImageShare(getIntent());

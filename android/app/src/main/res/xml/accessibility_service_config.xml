@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares what VOID's accessibility service is allowed to do and why.
+     canPerformGestures + canRetrieveWindowContent are what make screen
+     reading, tapping-by-description, and gesture automation possible;
+     Android shows this description on the "Turn on VOID Device Control"
+     confirmation screen the user has to manually approve. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canRequestTouchExplorationMode="false"
+    android:canTakeScreenshot="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

@@ -4,4 +4,5 @@
     <string name="title_activity_main">VOID AI</string>
     <string name="package_name">com.void.ai</string>
     <string name="custom_url_scheme">com.void.ai</string>
+    <string name="accessibility_service_description">Lets VOID navigate your device on command — go back/home, open the recents or notifications shade, take screenshots, tap or scroll anywhere, read what\'s on screen, and fill in fields — only when you ask it to.</string>
 </resources>
