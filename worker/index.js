@@ -43,6 +43,7 @@ export default {
     if (url.pathname.startsWith('/image-edit')) return handleImageEdit(request, env);
     if (url.pathname.startsWith('/song-id')) return handleSongId(request, env);
     if (url.pathname.startsWith('/transcribe')) return handleTranscribe(request, env);
+    if (url.pathname.startsWith('/v1/claude')) return handleClaudeProxy(request);
     if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
     let body;
     try { body = await request.json(); } catch { return cors(JSON.stringify({ error: 'Invalid JSON' }), 400); }
@@ -213,6 +214,56 @@ async function handleVisionGemini(messages, max_tokens, env) {
   const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
   if (!text) throw new Error('gemini vision empty');
   return cors(JSON.stringify({ choices: [{ message: { role: 'assistant', content: text } }] }));
+}
+
+/* ── Claude (Anthropic) bring-your-own-key proxy ──────────────────────
+   Anthropic's API rejects direct browser calls (no CORS allow-list for
+   arbitrary web origins), so the client can't call api.anthropic.com
+   itself — this worker does it server-to-server instead. The user's own
+   key rides along in the Authorization header exactly like every other
+   OpenAI-compatible provider the client already calls directly; it's
+   never stored, just relayed for this one request. Converts both
+   directions (OpenAI-shaped request in, OpenAI-shaped response out) so
+   the client's existing callOpenAICompatStream() needs zero special-casing. */
+async function handleClaudeProxy(request) {
+  if (request.method !== 'POST') return cors(JSON.stringify({ error: 'Method not allowed' }), 405);
+  const auth = request.headers.get('Authorization') || '';
+  const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!apiKey) return cors(JSON.stringify({ error: { message: 'Claude API key missing' } }), 401);
+
+  let body; try { body = await request.json(); } catch { return cors(JSON.stringify({ error: { message: 'Invalid JSON' } }), 400); }
+  const messages = body.messages || [];
+  const system = messages.find(m => m.role === 'system');
+  const claudeMessages = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: Array.isArray(m.content)
+      ? m.content.map(p => p.type === 'image_url'
+          ? { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: (p.image_url?.url || '').split(',')[1] || '' } }
+          : { type: 'text', text: p.text || '' })
+      : String(m.content ?? ''),
+  }));
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: body.model || 'claude-sonnet-4-5-20250929',
+        max_tokens: body.max_tokens || 1024,
+        ...(system ? { system: system.content } : {}),
+        messages: claudeMessages,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      return cors(JSON.stringify({ error: { message: data?.error?.message || `Claude ${res.status}` } }), res.status || 502);
+    }
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    return cors(JSON.stringify({ choices: [{ message: { role: 'assistant', content: text } }] }));
+  } catch (e) {
+    return cors(JSON.stringify({ error: { message: String(e) } }), 502);
+  }
 }
 
 /* ── Song recognition (Shazam-style, fully in-app) ───────────────────

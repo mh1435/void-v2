@@ -10,6 +10,8 @@ const App = {
     groqKey: '', groqModel: 'llama-3.3-70b-versatile',
     togetherKey: '', togetherModel: 'meta-llama/Llama-3.2-70B-Instruct-Turbo',
     mistralKey: '', mistralModel: 'mistral-large-latest',
+    claudeKey: '', claudeModel: 'claude-sonnet-4-5-20250929',
+    localLLMUrl: '', localLLMModel: 'local-model',
     providerOrder: ['gemini', 'groq', 'openrouter'],
     mapProvider: 'google',
     lang: 'en',
@@ -571,6 +573,59 @@ function deviceControlPlugin() {
   return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidAccessibility : null;
 }
 
+/* ============ Activity log ============ */
+// Every wake-word trigger, device-control command, and error, timestamped.
+// Capped at 200 entries so it can't grow unbounded in localStorage.
+const ACTIVITY_LOG_MAX = 200;
+
+function loadActivityLog() {
+  try {
+    const raw = localStorage.getItem(userKey('activityLog'));
+    App.activityLog = raw ? JSON.parse(raw) : [];
+  } catch (_) { App.activityLog = []; }
+}
+
+function saveActivityLog() {
+  try { localStorage.setItem(userKey('activityLog'), JSON.stringify(App.activityLog || [])); } catch (_) {}
+}
+
+// type: 'wake' | 'command' | 'error'
+function logActivity(type, text) {
+  if (!App.activityLog) App.activityLog = [];
+  App.activityLog.unshift({ ts: Date.now(), type, text });
+  if (App.activityLog.length > ACTIVITY_LOG_MAX) App.activityLog.length = ACTIVITY_LOG_MAX;
+  saveActivityLog();
+  const list = document.getElementById('activitylog-list');
+  if (list && document.getElementById('panel-activitylog')?.classList.contains('active')) renderActivityLog();
+}
+
+function setupActivityLogPanel() {
+  loadActivityLog();
+  document.getElementById('activitylog-clear-btn')?.addEventListener('click', () => {
+    App.activityLog = [];
+    saveActivityLog();
+    renderActivityLog();
+  });
+}
+
+function renderActivityLog() {
+  const list = document.getElementById('activitylog-list');
+  if (!list) return;
+  const entries = App.activityLog || [];
+  if (!entries.length) {
+    list.innerHTML = '<p class="muted small" style="padding:16px 2px;">Nothing logged yet.</p>';
+    return;
+  }
+  const ICON = { wake: '👂', command: '⚡', error: '⚠️' };
+  list.innerHTML = entries.map(e => `
+    <div class="setting-row" style="align-items:flex-start;">
+      <div class="setting-label">
+        <span>${ICON[e.type] || '•'} ${escapeHTML(e.text)}</span>
+        <span class="setting-sub">${new Date(e.ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+      </div>
+    </div>`).join('');
+}
+
 // Runs a detectDeviceControlAction() result. Every branch is a thin wrapper
 // over VoidAccessibilityPlugin — the actual navigation/gesture/read logic
 // all lives natively in VoidAccessibilityService, since only the OS-level
@@ -581,6 +636,7 @@ async function runDeviceControlAction(action) {
     appendMessage('system', '📵 Device control needs the VOID Android app — not available in the browser.');
     return;
   }
+  logActivity('command', action.type + (action.query ? `: "${action.query}"` : action.direction ? `: ${action.direction}` : ''));
 
   if (action.type === 'read_notifications') {
     const enabled = (await plugin.isNotificationAccessEnabled().catch(() => ({ value: false })))?.value;
@@ -1361,7 +1417,7 @@ function bootApp() {
     setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
     handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
-    setupDashboard, setupBottomNav, setupCanvas, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
+    setupDashboard, setupBottomNav, setupCanvas, setupActivityLogPanel, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
     renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
   ].forEach(safe);
 }
@@ -1669,6 +1725,9 @@ function setupSettingsPanels() {
       App.settings.apiKey = document.getElementById('input-api-key').value.trim() || App.settings.apiKey;
       App.settings.togetherKey = document.getElementById('input-together-key').value.trim() || App.settings.togetherKey;
       App.settings.mistralKey = document.getElementById('input-mistral-key').value.trim() || App.settings.mistralKey;
+      App.settings.claudeKey = document.getElementById('input-claude-key').value.trim() || App.settings.claudeKey;
+      App.settings.localLLMUrl = document.getElementById('input-localllm-url').value.trim() || App.settings.localLLMUrl;
+      App.settings.localLLMModel = document.getElementById('input-localllm-model').value.trim() || App.settings.localLLMModel;
       const ok = saveSettings();
       flashButton(saveKeysBtn, ok ? 'SAVED' : 'FAILED');
       updateModelIndicator();
@@ -2042,6 +2101,9 @@ function openSettingsPanel(panelId) {
     setVal('input-api-key', App.settings.apiKey);
     setVal('input-together-key', App.settings.togetherKey);
     setVal('input-mistral-key', App.settings.mistralKey);
+    setVal('input-claude-key', App.settings.claudeKey);
+    setVal('input-localllm-url', App.settings.localLLMUrl);
+    setVal('input-localllm-model', App.settings.localLLMModel);
   } else if (panelId === 'panel-models') {
     setVal('input-gemini-model', App.settings.geminiModel);
     setVal('input-groq-model', App.settings.groqModel);
@@ -2070,6 +2132,8 @@ function openSettingsPanel(panelId) {
     hydrateCapabilities();
   } else if (panelId === 'panel-permissions') {
     refreshPermissions();
+  } else if (panelId === 'panel-activitylog') {
+    renderActivityLog();
   } else if (panelId === 'panel-colormode') {
     syncColorModeSeg();
     applyGlassStyle(App.settings.glass);
@@ -2709,6 +2773,7 @@ function setupChat() {
     wakeCooldown = true; setTimeout(() => { wakeCooldown = false; }, 2500);
     App.stopWakeListening();
     buzz(60);
+    logActivity('wake', rest ? `"Okay VOID, ${rest}"` : '"Okay VOID"');
     if (!App.voiceConvo) {
       App.voiceConvo = true;
       convoBtn?.classList.add('active');
@@ -3747,7 +3812,7 @@ async function generateAssistantReply(triggerText) {
   // User hit Stop with nothing streamed yet — don't cascade into other providers.
   if (!reply && !abortSignal.aborted) {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const tryProviders = [...order, 'together', 'mistral', 'pollinations'];
+  const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm', 'pollinations'];
   const tried = new Set();
 
   for (const p of tryProviders) {
@@ -3769,6 +3834,15 @@ async function generateAssistantReply(triggerText) {
       } else if (p === 'mistral' && App.settings.mistralKey) {
         reply = await callOpenAICompatStream('https://api.mistral.ai/v1/chat/completions',
           App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk, abortSignal); break;
+      } else if (p === 'claude' && App.settings.claudeKey && VOID_CORE_API.url) {
+        // Anthropic blocks direct browser calls (no CORS allow-list), so this
+        // goes through VOID CORE's /v1/claude passthrough instead — the key
+        // still comes from and stays with the user, just relayed server-side.
+        reply = await callOpenAICompatStream(`${VOID_CORE_API.url}/v1/claude`,
+          App.settings.claudeKey, App.settings.claudeModel || 'claude-sonnet-4-5-20250929', messages, onChunk, abortSignal); break;
+      } else if (p === 'localllm' && App.settings.localLLMUrl) {
+        reply = await callOpenAICompatStream(App.settings.localLLMUrl,
+          '', App.settings.localLLMModel || 'local-model', messages, onChunk, abortSignal); break;
       } else if (p === 'pollinations') {
         reply = await callPollinations(messages); break;
       }
@@ -3814,6 +3888,7 @@ async function generateAssistantReply(triggerText) {
       // status code that means nothing to the user and hides what actually
       // failed first.
       appendMessage('system', '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.');
+      logActivity('error', `Chat: all providers failed${lastError ? ' (' + lastError.message + ')' : ''}`);
     }
   }
   } finally {
@@ -5788,13 +5863,13 @@ function dashboardGreeting() {
 
 function dashboardProviderLabel() {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const names = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', together: 'Together AI', mistral: 'Mistral', pollinations: 'Pollinations.ai' };
+  const names = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', together: 'Together AI', mistral: 'Mistral', claude: 'Claude', localllm: 'Local LLM', pollinations: 'Pollinations.ai' };
   return names[order[0]] || 'VOID Core';
 }
 
 function dashboardApiConnected() {
   const s = App.settings;
-  return !!(s.geminiKey || s.groqKey || s.apiKey || s.togetherKey || s.mistralKey);
+  return !!(s.geminiKey || s.groqKey || s.apiKey || s.togetherKey || s.mistralKey || s.claudeKey || s.localLLMUrl);
 }
 
 function renderDashboard() {
@@ -6343,22 +6418,25 @@ function renderProviderPicker() {
   const list = document.getElementById('provider-list');
   if (!list) return;
 
-  if (VOID_CORE_API.url) {
-    list.innerHTML = `
-      <div class="void-core-status">
-        <div class="void-core-status-row">
-          <span class="void-core-dot"></span>
-          <div class="void-core-info">
-            <span class="void-core-name">VOID CORE</span>
-            <span class="void-core-sub">13 AI providers — fully automatic</span>
-          </div>
-          <span class="provider-tag active-tag">ACTIVE</span>
+  // VOID CORE is always tried first (the free, no-setup shared backend) — but
+  // it's not the ONLY option: if the user adds their own key for something
+  // (including Claude/Local LLM, which VOID CORE doesn't route to), that
+  // still needs to be visible and selectable below, not hidden behind this
+  // status card. Previously this returned early here, which meant there was
+  // no way to ever pick a personal provider — including the new ones.
+  const voidCoreCard = VOID_CORE_API.url ? `
+    <div class="void-core-status">
+      <div class="void-core-status-row">
+        <span class="void-core-dot"></span>
+        <div class="void-core-info">
+          <span class="void-core-name">VOID CORE</span>
+          <span class="void-core-sub">13 AI providers — fully automatic</span>
         </div>
-        <p class="void-core-note">VOID CORE automatically routes to the fastest available AI. No setup needed.</p>
+        <span class="provider-tag active-tag">ACTIVE</span>
       </div>
-    `;
-    return;
-  }
+      <p class="void-core-note">VOID CORE automatically routes to the fastest available AI and is tried first, always. Add your own key below to also use a specific provider.</p>
+    </div>
+  ` : '';
 
   const providers = [
     { id: 'gemini', name: 'Gemini', sub: 'Google AI - fast & capable', configured: !!App.settings.geminiKey },
@@ -6366,12 +6444,14 @@ function renderProviderPicker() {
     { id: 'openrouter', name: 'OpenRouter', sub: 'Multi-model gateway', configured: !!App.settings.apiKey },
     { id: 'together', name: 'Together AI', sub: 'Open-source models', configured: !!App.settings.togetherKey },
     { id: 'mistral', name: 'Mistral', sub: 'European AI', configured: !!App.settings.mistralKey },
+    { id: 'claude', name: 'Claude', sub: 'Anthropic — strong reasoning', configured: !!App.settings.claudeKey },
+    { id: 'localllm', name: 'Local LLM', sub: 'Your own server (Ollama, LM Studio, …)', configured: !!App.settings.localLLMUrl },
     { id: 'pollinations', name: 'Pollinations.ai', sub: 'Free - no key needed', configured: true, free: true },
   ];
 
   const active = (App.settings.providerOrder || [])[0];
 
-  list.innerHTML = providers.map(p => `
+  list.innerHTML = voidCoreCard + providers.map(p => `
     <div class="provider-item${p.id === active ? ' selected' : ''}${!p.configured ? ' unconfigured' : ''}" data-id="${p.id}">
       <span class="provider-dot${p.configured ? ' on' : ''}"></span>
       <div class="provider-info">
@@ -6380,7 +6460,7 @@ function renderProviderPicker() {
       </div>
       <div class="provider-tags">
         ${p.free ? '<span class="provider-tag free-tag">FREE</span>' : ''}
-        ${p.id === active ? '<span class="provider-tag active-tag">ACTIVE</span>' : ''}
+        ${p.id === active && !VOID_CORE_API.url ? '<span class="provider-tag active-tag">ACTIVE</span>' : ''}
         ${!p.configured && !p.free ? '<span class="provider-tag setup-tag">SETUP</span>' : ''}
       </div>
     </div>

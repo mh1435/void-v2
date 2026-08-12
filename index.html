@@ -893,6 +893,10 @@ if ('serviceWorker' in navigator) {
           <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
           <div class="menu-label"><span>Access</span></div>
         </div>
+        <div class="menu-item" data-open-panel="panel-activitylog">
+          <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-3-3L3 17.9"/></svg></div>
+          <div class="menu-label"><span>Activity Log</span></div>
+        </div>
       </div>
 
       <!-- Interface -->
@@ -977,6 +981,19 @@ if ('serviceWorker' in navigator) {
       <div class="setting-row stacked">
         <div class="setting-label"><span>Mistral Access Token</span></div>
         <input type="password" class="text-input" id="input-mistral-key" placeholder="ms_xxxxxxxx">
+      </div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Claude (Anthropic) API Key</span></div>
+        <input type="password" class="text-input" id="input-claude-key" placeholder="sk-ant-xxxxxxxx">
+      </div>
+      <div class="settings-section-label" style="margin-top:18px;">LOCAL LLM</div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Server URL</span><span class="setting-sub">OpenAI-compatible endpoint — Ollama, LM Studio, etc.</span></div>
+        <input type="text" class="text-input" id="input-localllm-url" placeholder="http://192.168.1.10:11434/v1/chat/completions">
+      </div>
+      <div class="setting-row stacked">
+        <div class="setting-label"><span>Model name</span></div>
+        <input type="text" class="text-input" id="input-localllm-model" placeholder="llama3.1">
       </div>
       <button class="primary-btn full" id="save-keys-btn">COMMIT CONFIGURATION</button>
     </div>
@@ -1510,6 +1527,19 @@ if ('serviceWorker' in navigator) {
         <button class="ghost-btn compact" id="perm-notiflisten-btn">Enable</button>
       </div>
       <p class="muted small" style="margin:4px 2px 0;">Lets VOID read your current notifications when you ask ("read my notifications").</p>
+    </div>
+  </div>
+
+  <!-- ACTIVITY LOG -->
+  <div class="settings-panel" id="panel-activitylog">
+    <div class="panel-header">
+      <button class="icon-btn back-btn" data-close-panel aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+      <span>Activity Log</span>
+      <button class="ghost-btn compact" id="activitylog-clear-btn" style="margin-left:auto;">Clear</button>
+    </div>
+    <div class="panel-content">
+      <p class="muted small" style="margin:0 2px 12px;">Every wake-word trigger, device-control command, and error, timestamped.</p>
+      <div id="activitylog-list"></div>
     </div>
   </div>
 
