@@ -56,6 +56,14 @@ public class VoidAccessibilityPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    // call.getDouble() returns a boxed Double — javac won't combine unboxing
+    // with a narrowing cast in one step ("(float) Double" doesn't compile),
+    // so unbox to a primitive double first, then narrow that.
+    private float getFloat(PluginCall call, String key, double def) {
+        double d = call.getDouble(key, def);
+        return (float) d;
+    }
+
     @PluginMethod public void back(PluginCall call) {
         if (svc() == null) { notEnabled(call); return; }
         okOrFail(call, svc().back());
@@ -106,8 +114,8 @@ public class VoidAccessibilityPlugin extends Plugin {
     public void tap(PluginCall call) {
         VoidAccessibilityService s = svc();
         if (s == null) { notEnabled(call); return; }
-        float x = (float) call.getDouble("x", -1.0);
-        float y = (float) call.getDouble("y", -1.0);
+        float x = getFloat(call, "x", -1.0);
+        float y = getFloat(call, "y", -1.0);
         if (x < 0 || y < 0) { call.reject("x and y are required"); return; }
         s.tap(x, y, ok -> okOrFail(call, ok));
     }
@@ -116,8 +124,8 @@ public class VoidAccessibilityPlugin extends Plugin {
     public void longPress(PluginCall call) {
         VoidAccessibilityService s = svc();
         if (s == null) { notEnabled(call); return; }
-        float x = (float) call.getDouble("x", -1.0);
-        float y = (float) call.getDouble("y", -1.0);
+        float x = getFloat(call, "x", -1.0);
+        float y = getFloat(call, "y", -1.0);
         if (x < 0 || y < 0) { call.reject("x and y are required"); return; }
         s.longPress(x, y, ok -> okOrFail(call, ok));
     }
@@ -126,10 +134,10 @@ public class VoidAccessibilityPlugin extends Plugin {
     public void swipe(PluginCall call) {
         VoidAccessibilityService s = svc();
         if (s == null) { notEnabled(call); return; }
-        float x1 = (float) call.getDouble("x1", -1.0);
-        float y1 = (float) call.getDouble("y1", -1.0);
-        float x2 = (float) call.getDouble("x2", -1.0);
-        float y2 = (float) call.getDouble("y2", -1.0);
+        float x1 = getFloat(call, "x1", -1.0);
+        float y1 = getFloat(call, "y1", -1.0);
+        float x2 = getFloat(call, "x2", -1.0);
+        float y2 = getFloat(call, "y2", -1.0);
         long duration = call.getInt("durationMs", 260);
         if (x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0) { call.reject("x1,y1,x2,y2 are required"); return; }
         s.swipe(x1, y1, x2, y2, duration, ok -> okOrFail(call, ok));
@@ -149,10 +157,10 @@ public class VoidAccessibilityPlugin extends Plugin {
         VoidAccessibilityService s = svc();
         if (s == null) { notEnabled(call); return; }
         android.util.DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
-        float cx = (float) call.getDouble("centerX", dm.widthPixels / 2.0);
-        float cy = (float) call.getDouble("centerY", dm.heightPixels / 2.0);
-        float startSpacing = (float) call.getDouble("startSpacing", dm.widthPixels * 0.15);
-        float endSpacing = (float) call.getDouble("endSpacing", dm.widthPixels * 0.6);
+        float cx = getFloat(call, "centerX", dm.widthPixels / 2.0);
+        float cy = getFloat(call, "centerY", dm.heightPixels / 2.0);
+        float startSpacing = getFloat(call, "startSpacing", dm.widthPixels * 0.15);
+        float endSpacing = getFloat(call, "endSpacing", dm.widthPixels * 0.6);
         long duration = call.getInt("durationMs", 300);
         s.pinch(cx, cy, startSpacing, endSpacing, duration, ok -> okOrFail(call, ok));
     }
