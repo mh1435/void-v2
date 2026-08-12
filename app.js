@@ -2577,7 +2577,10 @@ function setAssistantState(state, opts = {}) {
   if (reply && opts.reply !== undefined) reply.textContent = opts.reply;
 
   const tapHint = document.getElementById('va-tap-hint');
-  if (tapHint) tapHint.style.display = state === 'listening' ? 'none' : '';
+  if (tapHint) {
+    tapHint.style.display = state === 'listening' ? 'none' : '';
+    tapHint.textContent = { thinking: 'Tap to stop', speaking: 'Tap to interrupt' }[state] || 'Tap to activate';
+  }
   const pillMic = document.getElementById('va-pill-mic');
   if (pillMic) pillMic.textContent = state === 'listening' ? '🎙 Listening' : '🎙 Ready';
   const pillState = document.getElementById('va-pill-state');
@@ -2805,10 +2808,17 @@ function setupChat() {
   document.getElementById('va-chat-link')?.addEventListener('click', closeVoiceOverlay);
 
   // Tap the orb to (re)start listening — e.g. after a reply finishes and
-  // it's waiting idle, or if the mic wasn't already open.
+  // it's waiting idle, or if the mic wasn't already open. Manual barge-in:
+  // tapping while VOID is talking or generating actually interrupts it
+  // (stops the TTS audio / aborts the in-flight reply) instead of just
+  // stacking a new mic session on top, then immediately starts listening —
+  // no waiting for VOID to finish before you can speak again.
   document.getElementById('va-orb-wrap')?.addEventListener('click', () => {
     const ov = document.getElementById('va-overlay');
-    if (ov?.dataset.state === 'listening' || ov?.dataset.state === 'thinking') return;
+    const state = ov?.dataset.state;
+    if (state === 'listening') return;
+    if (state === 'speaking') { stopSpeaking(); buzz(30); }
+    else if (state === 'thinking') { try { App.currentAbort?.abort(); } catch (_) {} buzz(30); }
     App.startListening?.();
   });
 
