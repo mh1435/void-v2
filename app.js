@@ -2297,9 +2297,20 @@ function setupChat() {
   let listening = false;
   let nativeSTTPermGranted = false;
 
+  // Filler/noise-only transcripts to ignore in live voice mode — the mic
+  // resumes listening ~300ms after VOID stops talking, easily catching a
+  // trailing echo of its own voice or ambient noise. Without this, that
+  // gets sent as a real message and can misfire other intent matching.
+  const VOICE_NOISE_RE = /^(?:h+u+h+|u+h+|u+m+|h+m+m*|a+h+|o+h+|e+r+|y+e+a*h*|o+k+a*y*|hm+)[.,!?…\s]*$/i;
+
   function handleHeardText(text) {
     if (!text) return;
     if (App.voiceConvo) {
+      if (VOICE_NOISE_RE.test(text.trim())) {
+        // Ignore it and just keep listening — don't dispatch noise as a command.
+        setTimeout(() => App.startListening?.(), 300);
+        return;
+      }
       // Live voice mode: send what was heard immediately, hands-free
       if (App.vaActive) setAssistantState('thinking', { transcript: text });
       input.value = text;
@@ -3509,11 +3520,20 @@ async function generateAssistantReply(triggerText) {
     box.scrollTop = box.scrollHeight;
   }
 
-  // Always try the shared VOID core first
+  // Always try the shared VOID core first — retried once, since it's the
+  // most reliable path and most failures here are a one-off network blip,
+  // not the service actually being down. Without this, a single dropped
+  // packet used to cascade straight through every fallback provider and
+  // land on Pollinations' free tier, which is flaky under load.
   if (VOID_CORE_API.url) {
-    try {
-      reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
-    } catch(e) { lastError = e; }
+    for (let attempt = 0; attempt < 2 && !reply && !abortSignal.aborted; attempt++) {
+      try {
+        reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
+      } catch(e) {
+        lastError = e;
+        if (attempt === 0) await new Promise(r => setTimeout(r, 600));
+      }
+    }
   }
 
   // User hit Stop with nothing streamed yet — don't cascade into other providers.
@@ -3580,7 +3600,12 @@ async function generateAssistantReply(triggerText) {
     if (abortSignal.aborted) {
       appendMessage('system', '⏹ Stopped.');
     } else {
-      appendMessage('system', `ERROR :: ${lastError ? lastError.message : 'All providers unavailable.'}`);
+      // Every provider (including the retried primary) failed — this is rare
+      // enough that it's almost always a connectivity blip, not a real outage.
+      // Show something actionable instead of a raw "Pollinations 402"-style
+      // status code that means nothing to the user and hides what actually
+      // failed first.
+      appendMessage('system', '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.');
     }
   }
   } finally {
