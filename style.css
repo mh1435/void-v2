@@ -3753,15 +3753,16 @@ body.reduced-motion *::after {
   box-shadow: var(--glass-shadow);
   z-index: 600;
   max-width: calc(100vw - 24px);
-  position: relative; overflow: hidden; isolation: isolate;
+  overflow: hidden; isolation: isolate;
 }
 .bottom-nav > * { position: relative; z-index: 1; }
 
-/* ── "Real" liquid glass on the two surfaces you actually look at all the
-   time — the floating dock and the composer: a specular highlight (light
-   catching curved glass from the upper-left) plus a faint static grain so
-   it doesn't read as a perfectly smooth CSS blur. Frozen stays matte/flat
-   on purpose (that's its whole point), so this is Liquid-only. ── */
+/* ── "Real" glass on the two surfaces you actually look at all the time —
+   the floating dock and the composer. Liquid and Frozen each get their own
+   character instead of sharing one generic treatment: Liquid is glossy
+   (sharp corner highlight, a genuinely lit gradient border ring, fine
+   grain); Frozen is matte (diffuse even haze, no shine, heavier/coarser
+   grain — real frosted glass has more visible texture, not less). ── */
 :root[data-glass="liquid"] .bottom-nav::before,
 :root[data-glass="liquid"] .chat-box::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
@@ -3781,6 +3782,44 @@ body.reduced-motion *::after {
 :root[data-glass="liquid"][data-light] .chat-box::before {
   background: radial-gradient(130% 90% at 12% -20%, rgba(255,255,255,0.85), transparent 55%),
               radial-gradient(90% 60% at 100% 120%, rgba(124,111,255,0.10), transparent 60%);
+}
+/* A flat border color is still just a border. Two background layers — one
+   clipped to the padding-box (the normal glass fill), one to the
+   border-box (a lit gradient, visible only through the transparent
+   border's own width) — gives a border that's actually brighter where
+   light would hit it, and unlike border-image it respects border-radius
+   perfectly since there's no image slicing involved. */
+:root[data-glass="liquid"] .bottom-nav,
+:root[data-glass="liquid"] .chat-box {
+  border: 1px solid transparent;
+  background:
+    var(--glass-bg-strong) padding-box,
+    linear-gradient(160deg, rgba(255,255,255,0.65), rgba(255,255,255,0.06) 45%, rgba(124,111,255,0.4) 100%) border-box;
+}
+:root[data-glass="liquid"][data-light] .bottom-nav,
+:root[data-glass="liquid"][data-light] .chat-box {
+  background:
+    var(--glass-bg-strong) padding-box,
+    linear-gradient(160deg, rgba(255,255,255,0.95), rgba(255,255,255,0.25) 45%, rgba(124,111,255,0.3) 100%) border-box;
+}
+
+:root[data-glass="frozen"] .bottom-nav::before,
+:root[data-glass="frozen"] .chat-box::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(160% 100% at 50% -30%, rgba(255,255,255,0.22), transparent 65%);
+  mix-blend-mode: overlay;
+}
+:root[data-glass="frozen"] .bottom-nav::after,
+:root[data-glass="frozen"] .chat-box::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 90px 90px;
+  opacity: 0.08;
+  mix-blend-mode: overlay;
+}
+:root[data-glass="frozen"][data-light] .bottom-nav::before,
+:root[data-glass="frozen"][data-light] .chat-box::before {
+  background: radial-gradient(160% 100% at 50% -30%, rgba(255,255,255,0.55), transparent 65%);
 }
 .bnav-item {
   display: flex; align-items: center; gap: 6px;
