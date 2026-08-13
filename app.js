@@ -29,6 +29,7 @@ const App = {
   },
   tasks: [],
   commands: [],
+  routines: [],      // [{ id, name, trigger, steps: ['weather','tasks','notifications','news'] }]
   memoryFacts: [],   // auto-extracted facts about the user, persisted per account
   bookmarks: [],     // starred assistant messages
   documents: [],     // created/edited documents, per account
@@ -62,6 +63,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
 - Device control (Android app, needs the user to enable "VOID Device Control" in Settings → Accessibility once): navigate the device ("go back", "go home", "recent apps", "show notifications", "lock screen", "split screen"), take a screenshot, scroll/swipe, tap or long-press anything by description ("click the submit button"), fill in text fields ("type john@x.com into the email field"), read and describe what's on screen ("what's on my screen?"), and read current notifications ("read my notifications") — separately needs Notification access enabled in Settings
 - Send a message to a contact (Android app, needs Contacts access enabled in Settings → Access once): "text Mom saying I'll be late", "send a message to Kassie on WhatsApp: omw" — looks the contact up by name and opens WhatsApp/SMS with the chat open and the message already typed in; it only auto-taps Send too if Device Control is ALSO enabled, otherwise it's left staged for the user's final tap. Never claim a message was definitely delivered — the app only knows it opened the deep link, not what happened inside the other app after that.
+- Routines (Settings → Routines): the user can create a named routine with a trigger phrase and a set of steps (weather, today's tasks, notifications, top headlines) — saying the exact trigger phrase runs every included step and reads back the combined result in one go. This is entirely user-configured; you have no way to create, list, or run one yourself, and there are none unless the user has set one up.
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 - Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
@@ -312,21 +314,27 @@ function isGenericNewsQuery(text) {
   return /^(?:what'?s (?:the |in the |today'?s )?news(?: today)?|today'?s news|top headlines|latest news|give me the news|news update|what'?s happening (?:in the world|today)|any news today)[.?!]*$/i.test(text.trim());
 }
 
-async function getNewsHeadlinesCtx(text) {
-  if (!isGenericNewsQuery(text)) return { ctx: '', source: null };
+// Shared by the AI-context lookup below and the Routines "news" step —
+// one real fetch against Wikipedia's Current Events feed either way.
+async function fetchTopHeadlines(limit = 5) {
   try {
     const now = new Date();
     const path = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${String(now.getUTCDate()).padStart(2, '0')}`;
     const r = await fetch(`https://en.wikipedia.org/api/rest_v1/feed/featured/${path}`);
-    if (!r.ok) return { ctx: '', source: null };
+    if (!r.ok) return [];
     const d = await r.json();
-    const items = (d.news || []).slice(0, 5).map(n => (n.story || '').replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-    if (!items.length) return { ctx: '', source: null };
-    return {
-      ctx: `\n\nTOP HEADLINES today (Wikipedia Current Events): ${items.map((t, i) => `${i + 1}. ${t}`).join(' ')}`,
-      source: { label: 'Wikipedia Current Events', url: 'https://en.wikipedia.org/wiki/Portal:Current_events' },
-    };
-  } catch (_) { return { ctx: '', source: null }; }
+    return (d.news || []).slice(0, limit).map(n => (n.story || '').replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+  } catch (_) { return []; }
+}
+
+async function getNewsHeadlinesCtx(text) {
+  if (!isGenericNewsQuery(text)) return { ctx: '', source: null };
+  const items = await fetchTopHeadlines(5);
+  if (!items.length) return { ctx: '', source: null };
+  return {
+    ctx: `\n\nTOP HEADLINES today (Wikipedia Current Events): ${items.map((t, i) => `${i + 1}. ${t}`).join(' ')}`,
+    source: { label: 'Wikipedia Current Events', url: 'https://en.wikipedia.org/wiki/Portal:Current_events' },
+  };
 }
 
 // "Summarize this video: <youtube link>" — real transcript access requires
@@ -1557,7 +1565,7 @@ function bootApp() {
     setupChatMenu, setupSyncPanel, setupMemoryPanel, setupDocFormatPicker,
     setupDocumentsPanel, setupGemsPanel, setupGitHubPanel, setupGitHubPushSheet,
     setupStudyMode, setupNavDrawer, setupClonedPanels, refreshPlanUI,
-    handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadChats,
+    handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadRoutines, setupRoutinesPanel, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
     setupDashboard, setupBottomNav, setupCanvas, setupActivityLogPanel, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
     renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
@@ -3777,6 +3785,16 @@ async function sendMessage() {
       input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
       appendImageMessage(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data)}`, 'QR code');
     }
+    return;
+  }
+
+  // User-defined routines — checked first, before any built-in intent, so a
+  // custom trigger phrase always wins over a generic interpretation of the
+  // same words.
+  const routine = detectRoutineTrigger(text);
+  if (routine) {
+    appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runRoutine(routine);
     return;
   }
 
@@ -7180,6 +7198,143 @@ function checkScheduledBriefing() {
   App.settings.briefFiredDate = today;
   saveSettings();
   runDailyBriefing();
+}
+
+/* ============ Routines ============ */
+// Named, repeatable multi-step commands composing pieces that already work
+// independently (weather, tasks, notifications, news) into one phrase —
+// "good morning" instead of asking for each separately. Deliberately built
+// from a fixed set of real, verified data sources rather than letting a
+// routine chain arbitrary device-control actions unsupervised.
+
+const ROUTINE_STEP_META = {
+  weather: { label: 'Weather', icon: '⛅' },
+  tasks: { label: "Today's tasks", icon: '⏰' },
+  notifications: { label: 'Notifications', icon: '🔔' },
+  news: { label: 'Top headlines', icon: '📰' },
+};
+
+function loadRoutines() {
+  try {
+    const raw = localStorage.getItem(userKey('routines'));
+    App.routines = raw ? JSON.parse(raw) : [];
+  } catch (_) { App.routines = []; }
+  renderRoutinesList();
+}
+
+function saveRoutines() {
+  try { localStorage.setItem(userKey('routines'), JSON.stringify(App.routines || [])); } catch (_) {}
+}
+
+// Matches "good morning" against a routine trigger even with trailing
+// punctuation/whitespace, but not as a substring of an unrelated sentence
+// — a routine should fire on the phrase itself, not hijack every message
+// that happens to contain it.
+function detectRoutineTrigger(text) {
+  const norm = s => s.trim().toLowerCase().replace(/[.,!?]+$/, '');
+  const t = norm(text);
+  return (App.routines || []).find(r => norm(r.trigger) === t) || null;
+}
+
+async function buildRoutineStepText(step) {
+  if (step === 'weather') {
+    if (!App.liveContext?.city) { try { await initLiveContext(); } catch (_) {} }
+    if (!App.liveContext?.weather) return null;
+    return `⛅ ${App.liveContext.city ? `${App.liveContext.city}: ` : ''}${App.liveContext.weather}`;
+  }
+  if (step === 'tasks') {
+    const now = Date.now();
+    const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+    const dayEnd = dayStart + 86400000;
+    const dueToday = (App.tasks || []).filter(t => !t.done && t.due && t.due >= dayStart && t.due < dayEnd);
+    if (!dueToday.length) return '⏰ Nothing due today.';
+    return `⏰ Due today:\n${dueToday.map(t => `• ${t.text} (${new Date(t.due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n')}`;
+  }
+  if (step === 'notifications') {
+    const plugin = deviceControlPlugin();
+    if (!plugin) return null;
+    const r = await plugin.readNotifications({}).catch(() => null);
+    if (!r?.ok) return null;
+    const list = r.notifications || [];
+    if (!list.length) return '🔔 No notifications right now.';
+    return `🔔 Notifications:\n${list.slice(0, 5).map(n => `• ${n.title || n.app}: ${n.text || ''}`.trim()).join('\n')}`;
+  }
+  if (step === 'news') {
+    const items = await fetchTopHeadlines(3);
+    if (!items.length) return null;
+    return `📰 Top headlines:\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+  }
+  return null;
+}
+
+async function runRoutine(routine) {
+  const typingId = appendTyping();
+  logActivity('command', `Routine: "${routine.trigger}" (${routine.name})`);
+  const parts = [];
+  for (const step of routine.steps || []) {
+    try {
+      const text = await buildRoutineStepText(step);
+      if (text) parts.push(text);
+    } catch (_) {}
+  }
+  removeTyping(typingId);
+  const out = parts.length
+    ? `**${routine.name}**\n\n${parts.join('\n\n')}`
+    : `**${routine.name}** — none of this routine's steps had anything to report right now.`;
+  App.chatHistory.push({ role: 'assistant', content: out });
+  saveChatHistory();
+  appendMessage('assistant', out, App.chatHistory.length - 1);
+  if (App.settings.voiceEnabled) speak(out);
+}
+
+function renderRoutinesList() {
+  const list = document.getElementById('routines-list');
+  const empty = document.getElementById('routines-empty');
+  if (!list) return;
+  const routines = App.routines || [];
+  list.querySelectorAll('.routine-item').forEach(r => r.remove());
+  if (empty) empty.style.display = routines.length ? 'none' : '';
+  routines.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'routine-item';
+    const stepLabels = (r.steps || []).map(s => `${ROUTINE_STEP_META[s]?.icon || ''} ${ROUTINE_STEP_META[s]?.label || s}`).join(' · ');
+    row.innerHTML = `
+      <div class="routine-item-info">
+        <div class="routine-item-name">${escapeHTML(r.name)}</div>
+        <div class="routine-item-trigger">Say "${escapeHTML(r.trigger)}" — ${escapeHTML(stepLabels)}</div>
+      </div>
+      <button class="small-action-btn routine-delete" data-index="${i}" aria-label="Delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.routine-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      App.routines.splice(parseInt(btn.dataset.index, 10), 1);
+      renderRoutinesList();
+      saveRoutines();
+    });
+  });
+}
+
+function setupRoutinesPanel() {
+  const nameInput = document.getElementById('routine-name-input');
+  const triggerInput = document.getElementById('routine-trigger-input');
+  const addBtn = document.getElementById('add-routine-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      const trigger = triggerInput.value.trim();
+      const steps = Array.from(document.querySelectorAll('.routine-step-check:checked')).map(c => c.dataset.step);
+      if (!name || !trigger || !steps.length) return;
+      App.routines.push({ id: 'r-' + Math.random().toString(36).slice(2, 9), name, trigger, steps });
+      nameInput.value = ''; triggerInput.value = '';
+      document.querySelectorAll('.routine-step-check').forEach(c => { c.checked = false; });
+      renderRoutinesList();
+      saveRoutines();
+    });
+  }
 }
 
 function fireReminder(text) {

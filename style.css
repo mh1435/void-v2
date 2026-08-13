@@ -3988,3 +3988,27 @@ body.reduced-motion *::after {
 }
 .canvas-tool-btn:active { background: var(--accent-soft); color: var(--accent); }
 .canvas-tool-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Routines: create/list rows in Settings ── */
+.routine-steps-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin: 4px 0 14px;
+}
+.routine-step-option {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 9px 11px; font-size: 12.5px; color: var(--text); cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.routine-step-option:active { background: var(--accent-soft); }
+.routine-step-option input { accent-color: var(--accent); }
+
+#routines-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.routine-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px;
+  padding: 12px 13px;
+}
+.routine-item-info { flex: 1; min-width: 0; }
+.routine-item-name { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.routine-item-trigger { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
