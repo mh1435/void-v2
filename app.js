@@ -683,9 +683,12 @@ async function sendMessageToContact(contactQuery, appHint, message) {
   const target = results[0];
   const digits = target.phone.replace(/[^\d+]/g, '');
   const appLabel = appHint === 'whatsapp' ? 'WhatsApp' : 'Messages';
+  // iOS Messages parses the pre-fill body after "&", not "?" — Android and
+  // every desktop browser use "?". Same sms: scheme, different separator.
+  const smsSep = window.Capacitor?.getPlatform?.() === 'ios' ? '&' : '?';
   const url = appHint === 'whatsapp'
     ? `https://wa.me/${digits.replace(/^\+/, '')}?text=${encodeURIComponent(message)}`
-    : `sms:${digits}?body=${encodeURIComponent(message)}`;
+    : `sms:${digits}${smsSep}body=${encodeURIComponent(message)}`;
 
   const ambiguous = results.length > 1 ? ` (found ${results.length} matching contacts, using ${target.name})` : '';
   appendMessage('system', `📨 Opening ${appLabel} to ${target.name}${ambiguous} — "${message}"`);
