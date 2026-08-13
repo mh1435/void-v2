@@ -7164,7 +7164,10 @@ async function runDailyBriefing() {
   if (window.Notification && Notification.permission === 'granted') {
     try { new Notification('VOID — Daily Briefing', { body: text.replace(/[*#📋📍🕒⛅⏰📌💭]/g, '').trim().slice(0, 180) }); } catch (_) {}
   }
-  if (App.settings.voiceEnabled) speak('Here is your daily briefing.');
+  // Actually read the briefing itself, not just an announcement that one
+  // exists — speechText() strips the markdown/emoji so it doesn't come out
+  // as "asterisk asterisk Daily Briefing asterisk asterisk."
+  if (App.settings.voiceEnabled) speak(text);
 }
 
 function checkScheduledBriefing() {
