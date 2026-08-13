@@ -20,35 +20,43 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  /* Glass surface tokens — sleek-minimal + glassmorphic base */
-  --glass-bg: color-mix(in srgb, var(--card) 55%, transparent);
-  --glass-bg-strong: color-mix(in srgb, var(--bg) 78%, transparent);
-  --glass-border: rgba(255, 255, 255, 0.09);
+  /* Glass surface tokens — sleek-minimal + glassmorphic base.
+     --glass-bg/-strong are gradients, not flat colors: real glass catches
+     more light at the top edge than the bottom, so a flat tint always reads
+     as "a translucent PNG," not a material. --glass-shadow layers an inset
+     highlight (top) and inset shadow (bottom) on top of the drop shadow —
+     the edge-lighting cue that actually sells "glass" over "blurred rect."
+     Every one of the ~140 elements using these tokens picks this up for
+     free since they're CSS custom properties, not per-selector overrides. */
+  --glass-bg: linear-gradient(160deg, color-mix(in srgb, var(--card) 62%, transparent), color-mix(in srgb, var(--card) 46%, transparent));
+  --glass-bg-strong: linear-gradient(160deg, color-mix(in srgb, var(--bg) 84%, transparent), color-mix(in srgb, var(--bg) 72%, transparent));
+  --glass-border: rgba(255, 255, 255, 0.12);
   --glass-blur: 22px;
   --glass-saturate: 160%;
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
 }
 
 /* ── Glass style: Liquid (Apple-like — brighter, more transparent, glossy) ── */
 :root[data-glass="liquid"] {
-  --glass-bg: color-mix(in srgb, var(--card) 38%, transparent);
-  --glass-bg-strong: color-mix(in srgb, var(--bg) 62%, transparent);
-  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-bg: linear-gradient(160deg, color-mix(in srgb, var(--card) 46%, transparent), color-mix(in srgb, var(--card) 26%, transparent));
+  --glass-bg-strong: linear-gradient(160deg, color-mix(in srgb, var(--bg) 70%, transparent), color-mix(in srgb, var(--bg) 50%, transparent));
+  --glass-border: rgba(255, 255, 255, 0.28);
   --glass-blur: 18px;
-  --glass-saturate: 190%;
-  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  --glass-saturate: 200%;
+  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.14);
 }
 :root[data-glass="liquid"][data-light] {
-  --glass-border: rgba(0, 0, 0, 0.10);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.06);
 }
 /* ── Glass style: Frozen (frosted — heavier blur, more opaque, matte) ── */
 :root[data-glass="frozen"] {
-  --glass-bg: color-mix(in srgb, var(--card) 78%, transparent);
-  --glass-bg-strong: color-mix(in srgb, var(--bg) 88%, transparent);
-  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-bg: linear-gradient(160deg, color-mix(in srgb, var(--card) 82%, transparent), color-mix(in srgb, var(--card) 72%, transparent));
+  --glass-bg-strong: linear-gradient(160deg, color-mix(in srgb, var(--bg) 91%, transparent), color-mix(in srgb, var(--bg) 83%, transparent));
+  --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: 34px;
   --glass-saturate: 130%;
-  --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.22);
 
   /* Gaming hub tokens */
   --hub-display: 'Chakra Petch', var(--sans);
@@ -1675,12 +1683,16 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   --hub-amber: #b87800; --hub-red: #cc2222;
   color-scheme: light;
 }
-/* Shared glass tokens for every light theme variant (light/cream/paper/softgray) */
+/* Shared glass tokens for every light theme variant (light/cream/paper/softgray).
+   Same gradient + inset-highlight treatment as the dark tokens above, just
+   built from white instead of color-mix(--card/--bg) — a flat white overlay
+   reads as a translucent sticker on a light background even more than it
+   does on dark, so the top-lit gradient and inset edge-light matter here too. */
 :root[data-light] {
-  --glass-bg: rgba(255,255,255,0.55);
-  --glass-bg-strong: rgba(255,255,255,0.72);
-  --glass-border: rgba(0,0,0,0.08);
-  --glass-shadow: 0 4px 20px rgba(20,20,30,0.08);
+  --glass-bg: linear-gradient(160deg, rgba(255,255,255,0.66), rgba(255,255,255,0.40));
+  --glass-bg-strong: linear-gradient(160deg, rgba(255,255,255,0.82), rgba(255,255,255,0.60));
+  --glass-border: rgba(0,0,0,0.09);
+  --glass-shadow: 0 4px 20px rgba(20,20,30,0.08), inset 0 1px 0 rgba(255,255,255,0.85), inset 0 -1px 0 rgba(20,20,30,0.05);
 }
 :root[data-light] html,
 :root[data-light] body { background: var(--bg); color: var(--text); }
@@ -3736,7 +3748,7 @@ body.reduced-motion *::after {
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   padding: 5px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--glass-shadow);
   z-index: 600;
   max-width: calc(100vw - 24px);
 }
