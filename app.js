@@ -832,7 +832,17 @@ async function runDeviceControlAction(action) {
       const typingId = appendTyping();
       const r = await plugin.screenshot().catch(() => null);
       removeTyping(typingId);
-      if (r?.ok && r.dataUrl) appendImageMessage(r.dataUrl, 'Screenshot');
+      if (r?.ok && r.dataUrl) {
+        appendImageMessage(r.dataUrl, 'Screenshot');
+        // Rides along on whatever the user types next, exactly like manually
+        // attaching a photo — so "what's this error say" or "click the right
+        // button" right after actually reaches the AI with the screenshot
+        // attached, instead of the picture being purely decorative. Reuses
+        // the same pending-image mechanism the share-a-photo flow uses.
+        App.pendingImage = r.dataUrl;
+        applyPendingImageShare();
+        appendMessage('system', 'Ask me anything about it, or tell me what to do next.');
+      }
       else appendMessage('system', `📵 ${r?.error || "Couldn't take a screenshot."}`);
       return;
     }
