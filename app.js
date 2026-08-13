@@ -3994,13 +3994,18 @@ async function generateAssistantReply(triggerText) {
   // land on Pollinations' free tier, which is flaky under load.
   let primaryError = null;
   if (VOID_CORE_API.url) {
-    for (let attempt = 0; attempt < 2 && !reply && !abortSignal.aborted; attempt++) {
+    // 3 attempts now, not 2 — a real user-observed case had a transient 502
+    // from the upstream model survive two tries in a row (600ms apart), so
+    // one more attempt with a longer gap covers a slightly longer blip
+    // without meaningfully delaying the common case where it just works.
+    const BACKOFF_MS = [600, 1200];
+    for (let attempt = 0; attempt < 3 && !reply && !abortSignal.aborted; attempt++) {
       try {
         reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
       } catch(e) {
         lastError = e;
         primaryError = e; // kept separately — the fallback chain below overwrites lastError, and
-        if (attempt === 0) await new Promise(r => setTimeout(r, 600)); // losing why the reliable primary failed is the actual diagnostic gap
+        if (attempt < 2) await new Promise(r => setTimeout(r, BACKOFF_MS[attempt])); // losing why the reliable primary failed is the actual diagnostic gap
       }
     }
   }
