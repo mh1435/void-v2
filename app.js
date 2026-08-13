@@ -6307,6 +6307,27 @@ async function fetchDeviceStats() {
   }
 }
 
+// Pushes a short live stat line to the home screen widget (Android only —
+// the widget's RemoteViews can't fetch anything itself, so this is the only
+// way its text ever changes). A due task is more actionable than a
+// conversation count, so it takes priority when there is one.
+function updateHomeWidget() {
+  const plugin = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidWidget : null;
+  if (!plugin) return;
+  const now = Date.now();
+  const nextDue = (App.tasks || [])
+    .filter(t => !t.done && t.due)
+    .sort((a, b) => a.due - b.due)[0];
+  let text;
+  if (nextDue && nextDue.due <= now + 24 * 60 * 60 * 1000) {
+    text = `⏰ ${nextDue.text}`;
+  } else {
+    const n = (App.chats || []).length;
+    text = `${n} chat${n === 1 ? '' : 's'} · ${dashboardApiConnected() ? 'Connected' : 'Not connected'}`;
+  }
+  plugin.update({ text }).catch(() => {});
+}
+
 function renderDashboard() {
   const root = document.getElementById('dashboard-root');
   if (!root) return;
@@ -6436,6 +6457,7 @@ function renderDashboard() {
   if (App.deviceBattery === undefined && App.deviceLatencyMs === undefined && !App._deviceStatsFetching) {
     fetchDeviceStats();
   }
+  updateHomeWidget();
 }
 
 function switchChat(id) {
@@ -7499,6 +7521,7 @@ function loadTasks() {
 
 function saveTasks() {
   try { localStorage.setItem(userKey('tasks'), JSON.stringify(App.tasks)); } catch(e) {}
+  updateHomeWidget();
 }
 
 function renderTasks() {

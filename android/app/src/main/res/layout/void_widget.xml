@@ -18,11 +18,14 @@
         android:letterSpacing="0.2" />
 
     <TextView
+        android:id="@+id/widget_stat"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:text="Ask anything →"
         android:textColor="#8a8a92"
-        android:textSize="13sp" />
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
 </LinearLayout>
