@@ -448,7 +448,9 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   border: 1px solid var(--glass-border);
   border-radius: 26px; padding: 12px 14px 10px;
   box-shadow: var(--glass-shadow);
+  position: relative; overflow: hidden; isolation: isolate;
 }
+.chat-box > * { position: relative; z-index: 1; }
 .chat-box:focus-within {
   border-color: rgba(124, 111, 255, 0.4);
   box-shadow: var(--glass-shadow), 0 0 0 3px var(--accent-soft);
@@ -3751,6 +3753,34 @@ body.reduced-motion *::after {
   box-shadow: var(--glass-shadow);
   z-index: 600;
   max-width: calc(100vw - 24px);
+  position: relative; overflow: hidden; isolation: isolate;
+}
+.bottom-nav > * { position: relative; z-index: 1; }
+
+/* ── "Real" liquid glass on the two surfaces you actually look at all the
+   time — the floating dock and the composer: a specular highlight (light
+   catching curved glass from the upper-left) plus a faint static grain so
+   it doesn't read as a perfectly smooth CSS blur. Frozen stays matte/flat
+   on purpose (that's its whole point), so this is Liquid-only. ── */
+:root[data-glass="liquid"] .bottom-nav::before,
+:root[data-glass="liquid"] .chat-box::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(130% 90% at 12% -20%, rgba(255,255,255,0.55), transparent 55%),
+              radial-gradient(90% 60% at 100% 120%, rgba(124,111,255,0.18), transparent 60%);
+  mix-blend-mode: overlay;
+}
+:root[data-glass="liquid"] .bottom-nav::after,
+:root[data-glass="liquid"] .chat-box::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+}
+:root[data-glass="liquid"][data-light] .bottom-nav::before,
+:root[data-glass="liquid"][data-light] .chat-box::before {
+  background: radial-gradient(130% 90% at 12% -20%, rgba(255,255,255,0.85), transparent 55%),
+              radial-gradient(90% 60% at 100% 120%, rgba(124,111,255,0.10), transparent 60%);
 }
 .bnav-item {
   display: flex; align-items: center; gap: 6px;
