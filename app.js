@@ -3892,13 +3892,15 @@ async function generateAssistantReply(triggerText) {
   // not the service actually being down. Without this, a single dropped
   // packet used to cascade straight through every fallback provider and
   // land on Pollinations' free tier, which is flaky under load.
+  let primaryError = null;
   if (VOID_CORE_API.url) {
     for (let attempt = 0; attempt < 2 && !reply && !abortSignal.aborted; attempt++) {
       try {
         reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
       } catch(e) {
         lastError = e;
-        if (attempt === 0) await new Promise(r => setTimeout(r, 600));
+        primaryError = e; // kept separately — the fallback chain below overwrites lastError, and
+        if (attempt === 0) await new Promise(r => setTimeout(r, 600)); // losing why the reliable primary failed is the actual diagnostic gap
       }
     }
   }
@@ -3982,7 +3984,13 @@ async function generateAssistantReply(triggerText) {
       // status code that means nothing to the user and hides what actually
       // failed first.
       appendMessage('system', '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.');
-      logActivity('error', `Chat: all providers failed${lastError ? ' (' + lastError.message + ')' : ''}`);
+      // Log VOID CORE's own failure reason specifically, not just whichever
+      // fallback happened to fail last (usually Pollinations) — that's the
+      // one that actually explains why the reliable primary went down.
+      const detail = primaryError
+        ? `primary: ${primaryError.message}${lastError && lastError !== primaryError ? `, last fallback: ${lastError.message}` : ''}`
+        : (lastError ? lastError.message : '');
+      logActivity('error', `Chat: all providers failed${detail ? ' (' + detail + ')' : ''}`);
     }
   }
   } finally {
