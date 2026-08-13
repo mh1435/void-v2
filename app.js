@@ -3362,24 +3362,12 @@ async function callOpenAICompatStream(url, key, model, messages, onChunk, signal
 async function quickAI(systemPrompt, userText) {
   const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }];
   try { if (VOID_CORE_API.url) return await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs); } catch (_) {}
-  try { return await callPollinations(msgs); } catch (_) {}
   return null;
 }
 
 // Tiny haptic tap where it feels right (send, pin, pomodoro done)
 function buzz(ms = 35) {
   if (App.settings.haptic !== false && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
-}
-
-async function callPollinations(messages) {
-  const res = await fetch('https://text.pollinations.ai/openai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'openai', messages, max_tokens: 1024 })
-  });
-  if (!res.ok) throw new Error(`Pollinations ${res.status}`);
-  const data = await res.json();
-  return data.choices[0].message.content;
 }
 
 let sendMessageInFlight = false;
@@ -4013,7 +4001,7 @@ async function generateAssistantReply(triggerText) {
   // User hit Stop with nothing streamed yet — don't cascade into other providers.
   if (!reply && !abortSignal.aborted) {
   const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm', 'pollinations'];
+  const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm'];
   const tried = new Set();
 
   for (const p of tryProviders) {
@@ -4044,8 +4032,6 @@ async function generateAssistantReply(triggerText) {
       } else if (p === 'localllm' && App.settings.localLLMUrl) {
         reply = await callOpenAICompatStream(App.settings.localLLMUrl,
           '', App.settings.localLLMModel || 'local-model', messages, onChunk, abortSignal); break;
-      } else if (p === 'pollinations') {
-        reply = await callPollinations(messages); break;
       }
     } catch(e) { lastError = e; }
   }
@@ -6879,7 +6865,6 @@ function renderProviderPicker() {
     { id: 'mistral', name: 'Mistral', sub: 'European AI', configured: !!App.settings.mistralKey },
     { id: 'claude', name: 'Claude', sub: 'Anthropic — strong reasoning', configured: !!App.settings.claudeKey },
     { id: 'localllm', name: 'Local LLM', sub: 'Your own server (Ollama, LM Studio, …)', configured: !!App.settings.localLLMUrl },
-    { id: 'pollinations', name: 'Pollinations.ai', sub: 'Free - no key needed', configured: true, free: true },
   ];
 
   const active = (App.settings.providerOrder || [])[0];
@@ -8709,7 +8694,6 @@ const VoidFloat = (() => {
         if (VOID_CORE_API.url) reply = await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs);
       } catch(_) {}
       if (!reply && App.settings.geminiKey) { try { reply = await callGemini(msgs); } catch(_) {} }
-      if (!reply) { try { reply = await callPollinations(msgs); } catch(_) {} }
 
       removeBubble(typingId);
       if (reply) {
