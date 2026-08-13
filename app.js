@@ -6075,7 +6075,7 @@ function renderCanvas() {
   const addMenu = document.getElementById('canvas-add-menu');
   if (addMenu) addMenu.innerHTML = canvasWidgetPickerButtonsHTML();
   inner.innerHTML = widgets.map(w => `
-    <div class="canvas-widget" data-widget-id="${w.id}" data-type="${w.type}" style="left:${w.x}px; top:${w.y}px;">
+    <div class="canvas-widget glass-hero" data-widget-id="${w.id}" data-type="${w.type}" style="left:${w.x}px; top:${w.y}px;">
       ${App.canvasEditMode ? `<button class="cw-del-btn" data-del-widget="${w.id}">✕</button>` : ''}
       <div class="cw-body">${canvasWidgetInnerHTML(w)}</div>
     </div>`).join('');
@@ -6310,21 +6310,21 @@ function renderDashboard() {
     </div>
 
     <div class="dash-stats-row">
-      <div class="dash-stat-card">
+      <div class="dash-stat-card glass-hero">
         <div class="dash-stat-num">${chats.length}</div>
         <div class="dash-stat-label">Conversations</div>
       </div>
-      <div class="dash-stat-card">
+      <div class="dash-stat-card glass-hero">
         <div class="dash-stat-num">${totalMessages}</div>
         <div class="dash-stat-label">Messages</div>
       </div>
-      <div class="dash-stat-card">
+      <div class="dash-stat-card glass-hero">
         <div class="dash-stat-num">${aiReplies}</div>
         <div class="dash-stat-label">AI replies</div>
       </div>
     </div>
 
-    <div class="dash-status-card">
+    <div class="dash-status-card glass-hero">
       <div class="dash-status-title">System status</div>
       <div class="dash-status-row"><span>AI Model</span><span class="dash-status-val"><span class="dash-dot"></span>${escapeHTML(dashboardProviderLabel())}</span></div>
       <div class="dash-status-row"><span>Mode</span><span class="dash-status-val"><span class="dash-dot"></span>${escapeHTML((App.settings.responseMode || 'standard').replace(/^./, c => c.toUpperCase()))}</span></div>
@@ -6332,7 +6332,7 @@ function renderDashboard() {
       <div class="dash-status-row"><span>Text-to-Speech</span><span class="dash-status-val"><span class="dash-dot${App.settings.voiceEnabled ? '' : ' off'}"></span>${App.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span></div>
     </div>
 
-    <div class="dash-status-card">
+    <div class="dash-status-card glass-hero">
       <div class="dash-status-title">Device</div>
       <div class="dash-status-row"><span>Battery</span><span class="dash-status-val"><span class="dash-dot${App.deviceBattery && App.deviceBattery.level <= 20 && !App.deviceBattery.charging ? ' off' : ''}"></span>${App.deviceBattery ? `${App.deviceBattery.level}%${App.deviceBattery.charging ? ' ⚡' : ''}` : '—'}</span></div>
       <div class="dash-status-row"><span>VOID CORE ping</span><span class="dash-status-val"><span class="dash-dot${App.deviceLatencyMs == null ? ' off' : ''}"></span>${App.deviceLatencyMs != null ? `${App.deviceLatencyMs} ms` : (App.deviceLatencyMs === null ? 'Unreachable' : '—')}</span></div>

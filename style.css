@@ -448,9 +448,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   border: 1px solid var(--glass-border);
   border-radius: 26px; padding: 12px 14px 10px;
   box-shadow: var(--glass-shadow);
-  position: relative; overflow: hidden; isolation: isolate;
 }
-.chat-box > * { position: relative; z-index: 1; }
 .chat-box:focus-within {
   border-color: rgba(124, 111, 255, 0.4);
   box-shadow: var(--glass-shadow), 0 0 0 3px var(--accent-soft);
@@ -3684,14 +3682,16 @@ body.reduced-motion *::after {
 .dash-stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
 .dash-stat-card {
   background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px;
-  padding: 14px 10px; text-align: left;
+  padding: 14px 10px; text-align: left; box-shadow: var(--glass-shadow);
+  position: relative;
 }
 .dash-stat-num { font-size: 22px; font-weight: 800; color: var(--text); font-family: var(--hub-display); }
 .dash-stat-label { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
 
 .dash-status-card {
   background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px;
-  padding: 14px 16px; margin-bottom: 20px;
+  padding: 14px 16px; margin-bottom: 20px; box-shadow: var(--glass-shadow);
+  position: relative;
 }
 .dash-status-title { font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
 .dash-status-row {
@@ -3757,29 +3757,52 @@ body.reduced-motion *::after {
 }
 .bottom-nav > * { position: relative; z-index: 1; }
 
-/* ── "Real" glass on the two surfaces you actually look at all the time —
-   the floating dock and the composer. Liquid and Frozen each get their own
-   character instead of sharing one generic treatment: Liquid is glossy
-   (sharp corner highlight, a genuinely lit gradient border ring, fine
-   grain); Frozen is matte (diffuse even haze, no shine, heavier/coarser
-   grain — real frosted glass has more visible texture, not less). ── */
+/* ── "Real" glass, reusable: any element can opt in with class="glass-hero"
+   (bottom nav and composer already get it by name below). Liquid and
+   Frozen each get their own character instead of sharing one generic
+   treatment: Liquid is glossy (sharp corner highlight, a genuinely lit
+   gradient border ring, fine grain); Frozen is matte (diffuse even haze,
+   no shine, heavier/coarser grain — real frosted glass has more visible
+   texture, not less).
+   NOTE: this sets overflow:hidden — don't add .glass-hero to anything that
+   needs to scroll or pop content outside its own box (learned the hard
+   way: an earlier version of this block also silently broke .bottom-nav's
+   position:fixed by redeclaring position on the same rule — the fix keeps
+   position declared exactly once, here, not repeated per glass-hero user). ── */
+/* .bottom-nav is NOT listed here — it already declares position:fixed in
+   its own rule, and adding "position: relative" via a second rule of equal
+   specificity would silently override it back to relative (this exact bug
+   shipped once already). It gets overflow/isolation from its own rule
+   instead, further up this file. Likewise .glass-hero itself only sets
+   overflow/isolation, never position — some of its users (e.g. Canvas
+   widgets) need position:absolute for drag placement, so each user
+   declares its own position value rather than inheriting one here. */
+.chat-box, .glass-hero { overflow: hidden; isolation: isolate; }
+.chat-box { position: relative; }
+.bottom-nav > *, .chat-box > *, .glass-hero > * { position: relative; z-index: 1; }
+
 :root[data-glass="liquid"] .bottom-nav::before,
-:root[data-glass="liquid"] .chat-box::before {
+:root[data-glass="liquid"] .chat-box::before,
+:root[data-glass="liquid"] .glass-hero::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
   background: radial-gradient(130% 90% at 12% -20%, rgba(255,255,255,0.55), transparent 55%),
               radial-gradient(90% 60% at 100% 120%, rgba(124,111,255,0.18), transparent 60%);
   mix-blend-mode: overlay;
 }
 :root[data-glass="liquid"] .bottom-nav::after,
-:root[data-glass="liquid"] .chat-box::after {
+:root[data-glass="liquid"] .chat-box::after,
+:root[data-glass="liquid"] .glass-hero::after {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 120px 120px;
   opacity: 0.045;
   mix-blend-mode: overlay;
 }
 :root[data-glass="liquid"][data-light] .bottom-nav::before,
-:root[data-glass="liquid"][data-light] .chat-box::before {
+:root[data-glass="liquid"][data-light] .chat-box::before,
+:root[data-glass="liquid"][data-light] .glass-hero::before {
   background: radial-gradient(130% 90% at 12% -20%, rgba(255,255,255,0.85), transparent 55%),
               radial-gradient(90% 60% at 100% 120%, rgba(124,111,255,0.10), transparent 60%);
 }
@@ -3789,6 +3812,14 @@ body.reduced-motion *::after {
    border's own width) — gives a border that's actually brighter where
    light would hit it, and unlike border-image it respects border-radius
    perfectly since there's no image slicing involved. */
+/* The lit gradient border ring stays exclusive to bottom-nav/chat-box (not
+   generalized to .glass-hero): it works by swapping the whole
+   background/border-color to a fixed --glass-bg-strong fill, but other
+   .glass-hero users (Dashboard cards use the lighter --glass-bg, Canvas
+   widgets need their own untouched background) would get a visibly
+   different — wrong — opacity if this were applied to them too. Those
+   still get the highlight + grain overlays above, just with their own
+   background/border left alone. */
 :root[data-glass="liquid"] .bottom-nav,
 :root[data-glass="liquid"] .chat-box {
   border: 1px solid transparent;
@@ -3804,21 +3835,26 @@ body.reduced-motion *::after {
 }
 
 :root[data-glass="frozen"] .bottom-nav::before,
-:root[data-glass="frozen"] .chat-box::before {
+:root[data-glass="frozen"] .chat-box::before,
+:root[data-glass="frozen"] .glass-hero::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
   background: radial-gradient(160% 100% at 50% -30%, rgba(255,255,255,0.22), transparent 65%);
   mix-blend-mode: overlay;
 }
 :root[data-glass="frozen"] .bottom-nav::after,
-:root[data-glass="frozen"] .chat-box::after {
+:root[data-glass="frozen"] .chat-box::after,
+:root[data-glass="frozen"] .glass-hero::after {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 90px 90px;
   opacity: 0.08;
   mix-blend-mode: overlay;
 }
 :root[data-glass="frozen"][data-light] .bottom-nav::before,
-:root[data-glass="frozen"][data-light] .chat-box::before {
+:root[data-glass="frozen"][data-light] .chat-box::before,
+:root[data-glass="frozen"][data-light] .glass-hero::before {
   background: radial-gradient(160% 100% at 50% -30%, rgba(255,255,255,0.55), transparent 65%);
 }
 .bnav-item {
@@ -3889,9 +3925,15 @@ body.reduced-motion *::after {
 .canvas-widget {
   position: absolute; width: 172px;
   background: var(--glass-bg-strong); border: 1px solid var(--glass-border); border-radius: 16px;
-  padding: 14px 14px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 14px 14px 12px; box-shadow: var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   touch-action: none; cursor: default;
+  /* .glass-hero sets overflow:hidden, but .cw-del-btn is deliberately
+     positioned outside this box (top:-8px; right:-8px) to sit astride the
+     corner — hidden overflow would clip half of it off. border-radius on
+     the ::before/::after highlight+grain layers keeps them properly
+     rounded without needing this. */
+  overflow: visible;
 }
 .canvas-widget.dragging { cursor: grabbing; box-shadow: 0 16px 40px rgba(0,0,0,0.5); z-index: 10; }
 .cw-title { font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; }
