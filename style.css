@@ -233,8 +233,10 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   display: flex;
   flex-direction: column;
   opacity: 0; pointer-events: none;
+  transform: scale(1.02);
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.view-tab.active { opacity: 1; pointer-events: auto; }
+.view-tab.active { opacity: 1; pointer-events: auto; transform: scale(1); }
 
 /* --- Chat Interface Layout --- */
 .chat-container { flex: 1; display: flex; flex-direction: column; height: 100%; position: relative; }
@@ -651,6 +653,7 @@ div:has(> .widget-close), div:has(> [data-remove]) {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px; cursor: pointer; font-size: 13px;
   border-bottom: 1px solid var(--glass-border);
+  transition: background-color 0.15s ease;
 }
 .persona-item:last-child { border-bottom: none; }
 .persona-item:active { background: var(--accent-soft); }
@@ -3711,6 +3714,7 @@ body.reduced-motion *::after {
 .dash-action-btn {
   display: flex; align-items: center; gap: 8px; background: var(--glass-bg); border: 1px solid var(--glass-border);
   border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 .dash-action-btn:active { background: var(--accent-soft); color: var(--accent); }
 
@@ -3718,6 +3722,7 @@ body.reduced-motion *::after {
 .dash-recent-item {
   display: flex; align-items: center; gap: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border);
   border-radius: 12px; padding: 11px 12px; cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 .dash-recent-item:active { background: var(--accent-soft); }
 .dash-recent-ico {
@@ -3919,6 +3924,7 @@ body.reduced-motion *::after {
 .canvas-empty-btn {
   background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text);
   font-size: 12.5px; font-weight: 600; padding: 9px 14px; border-radius: 12px; cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 .canvas-empty-btn:active { background: var(--accent-soft); color: var(--accent); }
 
