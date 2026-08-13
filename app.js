@@ -61,6 +61,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - /define <word>, /price <coin>, /image <prompt>, /convert <amount> <from> to <to>, /brief (daily briefing) quick commands
 - Device utilities (Android app): open ANY installed app by name, any Settings screen, and any link — pasted URLs deep-link into the right app ("open proton vpn", "open wifi settings", "open youtube.com")
 - Device control (Android app, needs the user to enable "VOID Device Control" in Settings → Accessibility once): navigate the device ("go back", "go home", "recent apps", "show notifications", "lock screen", "split screen"), take a screenshot, scroll/swipe, tap or long-press anything by description ("click the submit button"), fill in text fields ("type john@x.com into the email field"), read and describe what's on screen ("what's on my screen?"), and read current notifications ("read my notifications") — separately needs Notification access enabled in Settings
+- Send a message to a contact (Android app, needs Contacts access enabled in Settings → Access once): "text Mom saying I'll be late", "send a message to Kassie on WhatsApp: omw" — looks the contact up by name and opens WhatsApp/SMS with the chat open and the message already typed in; it only auto-taps Send too if Device Control is ALSO enabled, otherwise it's left staged for the user's final tap. Never claim a message was definitely delivered — the app only knows it opened the deep link, not what happened inside the other app after that.
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 - Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
@@ -627,6 +628,77 @@ function detectDeviceControlAction(text) {
 
 function deviceControlPlugin() {
   return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidAccessibility : null;
+}
+
+function contactsPlugin() {
+  return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidContacts : null;
+}
+
+/* ============ Send a message to a contact, in any app ============ */
+// "text Mom saying I'll be late", "send a message to Kassie on whatsapp: omw".
+// Real, working handoff: resolve the name via the on-device Contacts plugin,
+// then open WhatsApp/SMS deep-linked straight to that contact with the
+// message already typed in — that's a documented, reliable URI scheme both
+// apps support, unlike trying to accessibility-navigate a generic "find
+// contact by name, tap it, type, tap send" flow through arbitrary third-party
+// app UIs (which vary per app/version and can't be tested without a real
+// device of every app installed). If Device Control is also enabled, VOID
+// takes the last step too — tapping Send once the chat is open — otherwise
+// the message is left staged, ready for you to tap Send yourself.
+const SEND_MESSAGE_RE = /^(?:please\s+)?(?:send\s+(?:a\s+)?message|text|message)\s+(?:to\s+)?(.+?)(?:\s+(?:on|via|through)\s+(whatsapp|sms|text\s*message))?\s*(?:saying|that says|:|-)\s*(.+)$/i;
+
+function detectSendMessageIntent(text) {
+  const m = text.trim().match(SEND_MESSAGE_RE);
+  if (!m) return null;
+  const contact = m[1].trim();
+  const appHint = (m[2] || '').toLowerCase().includes('whatsapp') ? 'whatsapp' : 'sms';
+  const message = m[3].trim();
+  if (!contact || !message || contact.length > 60) return null;
+  return { contact, appHint, message };
+}
+
+async function sendMessageToContact(contactQuery, appHint, message) {
+  const plugin = contactsPlugin();
+  if (!plugin) {
+    appendMessage('system', `Sending messages needs the VOID Android app, with Contacts access enabled in Settings → Access.`);
+    return;
+  }
+  let found;
+  try { found = await plugin.find({ query: contactQuery }); } catch (e) { found = { ok: false, error: e.message }; }
+  if (!found?.ok) {
+    if (found?.error === 'NOT_ENABLED') {
+      appendMessage('system', `I need Contacts access to find "${contactQuery}" — enable it in Settings → Access → Contacts.`);
+    } else {
+      appendMessage('system', `Couldn't search contacts (${found?.error || 'unknown error'}).`);
+    }
+    logActivity('error', `Send message: contact lookup failed for "${contactQuery}" (${found?.error || 'unknown'})`);
+    return;
+  }
+  const results = found.results || [];
+  if (!results.length) {
+    appendMessage('system', `I couldn't find a contact named "${contactQuery}".`);
+    logActivity('error', `Send message: no contact found for "${contactQuery}"`);
+    return;
+  }
+  const target = results[0];
+  const digits = target.phone.replace(/[^\d+]/g, '');
+  const appLabel = appHint === 'whatsapp' ? 'WhatsApp' : 'Messages';
+  const url = appHint === 'whatsapp'
+    ? `https://wa.me/${digits.replace(/^\+/, '')}?text=${encodeURIComponent(message)}`
+    : `sms:${digits}?body=${encodeURIComponent(message)}`;
+
+  const ambiguous = results.length > 1 ? ` (found ${results.length} matching contacts, using ${target.name})` : '';
+  appendMessage('system', `📨 Opening ${appLabel} to ${target.name}${ambiguous} — "${message}"`);
+  logActivity('command', `Send message to ${target.name} via ${appLabel}: "${message}"`);
+  await openLink(url);
+
+  // Best-effort final tap — only fires if Device Control is enabled; the
+  // real success/failure of THIS step is invisible to the web layer (it's
+  // a tap inside another app), so it's never claimed as confirmed sent.
+  const dc = deviceControlPlugin();
+  if (dc) {
+    setTimeout(() => { dc.clickByDescription({ query: 'send' }).catch(() => {}); }, 2200);
+  }
 }
 
 /* ============ Activity log ============ */
@@ -2022,6 +2094,15 @@ async function refreshPermissions() {
     setEl('perm-accessibility-status', 'Needs Android app');
     setEl('perm-notiflisten-status', 'Needs Android app');
   }
+
+  const cp = contactsPlugin();
+  if (cp) {
+    const contacts = await cp.isEnabled().catch(() => ({ value: false }));
+    setEl('perm-contacts-status', contacts?.value ? 'Enabled' : 'Not enabled');
+    const contactsBtn = document.getElementById('perm-contacts-btn'); if (contactsBtn) contactsBtn.textContent = contacts?.value ? 'Enabled' : 'Enable';
+  } else {
+    setEl('perm-contacts-status', 'Needs Android app');
+  }
 }
 function cap1(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown'; }
 
@@ -2120,6 +2201,13 @@ function setupClonedPanels() {
     const plugin = deviceControlPlugin();
     if (!plugin) { appendMessage?.('system', '📵 Notification access needs the VOID Android app.'); return; }
     await plugin.openNotificationSettings().catch(() => {});
+  });
+  const contactsBtn = document.getElementById('perm-contacts-btn');
+  if (contactsBtn) contactsBtn.addEventListener('click', async () => {
+    const plugin = contactsPlugin();
+    if (!plugin) { appendMessage?.('system', '📵 Contacts access needs the VOID Android app.'); return; }
+    await plugin.requestAccess().catch(() => {});
+    refreshPermissions();
   });
 
   // Color mode segmented
@@ -3688,6 +3776,15 @@ async function sendMessage() {
       input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
       appendImageMessage(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data)}`, 'QR code');
     }
+    return;
+  }
+
+  // Send a message to a contact — checked before device control/app-opening
+  // so "text Mom saying..." isn't mistaken for a generic app launch.
+  const sendMsg = detectSendMessageIntent(text);
+  if (sendMsg) {
+    appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await sendMessageToContact(sendMsg.contact, sendMsg.appHint, sendMsg.message);
     return;
   }
 
