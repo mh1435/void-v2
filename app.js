@@ -3397,9 +3397,34 @@ async function callOpenAICompatStream(url, key, model, messages, onChunk, signal
   return full;
 }
 
-// One-shot AI call outside the chat history — used by /translate etc.
+// One-shot AI call outside the chat history — used by /translate, intent
+// routing, memory extraction, follow-up suggestions, etc. Same personal-key
+// priority as the main chat reply: a configured key is tried first (fast,
+// no shared-backend dependency), VOID CORE is the fallback either way.
 async function quickAI(systemPrompt, userText) {
   const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }];
+  const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
+  const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm'];
+  const tried = new Set();
+  for (const p of tryProviders) {
+    if (tried.has(p)) continue;
+    tried.add(p);
+    try {
+      if (p === 'gemini' && App.settings.geminiKey) return await callGemini(msgs);
+      if (p === 'groq' && App.settings.groqKey) return await callOpenAICompat('https://api.groq.com/openai/v1/chat/completions',
+        App.settings.groqKey, App.settings.groqModel || 'llama-3.1-8b-instant', msgs);
+      if (p === 'openrouter' && App.settings.apiKey) return await callOpenAICompat('https://openrouter.ai/api/v1/chat/completions',
+        App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', msgs);
+      if (p === 'together' && App.settings.togetherKey) return await callOpenAICompat('https://api.together.xyz/v1/chat/completions',
+        App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', msgs);
+      if (p === 'mistral' && App.settings.mistralKey) return await callOpenAICompat('https://api.mistral.ai/v1/chat/completions',
+        App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', msgs);
+      if (p === 'claude' && App.settings.claudeKey && VOID_CORE_API.url) return await callOpenAICompat(`${VOID_CORE_API.url}/v1/claude`,
+        App.settings.claudeKey, App.settings.claudeModel || 'claude-sonnet-4-5-20250929', msgs);
+      if (p === 'localllm' && App.settings.localLLMUrl) return await callOpenAICompat(App.settings.localLLMUrl,
+        '', App.settings.localLLMModel || 'local-model', msgs);
+    } catch (_) { /* try the next configured provider */ }
+  }
   try { if (VOID_CORE_API.url) return await callOpenAICompat(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, msgs); } catch (_) {}
   return null;
 }
@@ -4034,72 +4059,76 @@ async function generateAssistantReply(triggerText) {
     box.scrollTop = box.scrollHeight;
   }
 
-  // A personal key is a fast, real fallback — no need to burn 3 full VOID
-  // CORE attempts (each with its own request time plus backoff) before
-  // reaching it. Without one, VOID CORE is the only hope, so it's worth
-  // riding out a longer blip. Computed once here and reused below when
-  // reporting a total failure.
+  // Computed once here and reused below when reporting a total failure.
   const hasBackupKey = !!(App.settings.geminiKey || App.settings.groqKey || App.settings.apiKey
     || App.settings.togetherKey || App.settings.mistralKey || App.settings.claudeKey || App.settings.localLLMUrl);
 
-  // Always try the shared VOID core first — retried, since most failures
-  // here are a one-off network blip, not the service actually being down.
-  // Without this, a single dropped packet used to cascade straight through
-  // every fallback provider and land on Pollinations' free tier, which is
-  // flaky under load.
+  // Tries each configured personal key in providerOrder, first one to
+  // succeed wins. Returns null (never throws) if none are configured or
+  // all of them fail — the caller decides what to do next.
+  async function tryPersonalKeys() {
+    const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
+    const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm'];
+    const tried = new Set();
+    for (const p of tryProviders) {
+      if (tried.has(p)) continue;
+      tried.add(p);
+      if (abortSignal.aborted) return null;
+      try {
+        if (p === 'gemini' && App.settings.geminiKey) {
+          return await callGemini(messages, abortSignal);
+        } else if (p === 'groq' && App.settings.groqKey) {
+          return await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
+            App.settings.groqKey, App.settings.groqModel || 'llama-3.1-8b-instant', messages, onChunk, abortSignal);
+        } else if (p === 'openrouter' && App.settings.apiKey) {
+          return await callOpenAICompatStream('https://openrouter.ai/api/v1/chat/completions',
+            App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk, abortSignal);
+        } else if (p === 'together' && App.settings.togetherKey) {
+          return await callOpenAICompatStream('https://api.together.xyz/v1/chat/completions',
+            App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages, onChunk, abortSignal);
+        } else if (p === 'mistral' && App.settings.mistralKey) {
+          return await callOpenAICompatStream('https://api.mistral.ai/v1/chat/completions',
+            App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk, abortSignal);
+        } else if (p === 'claude' && App.settings.claudeKey && VOID_CORE_API.url) {
+          // Anthropic blocks direct browser calls (no CORS allow-list), so this
+          // goes through VOID CORE's /v1/claude passthrough instead — the key
+          // still comes from and stays with the user, just relayed server-side.
+          return await callOpenAICompatStream(`${VOID_CORE_API.url}/v1/claude`,
+            App.settings.claudeKey, App.settings.claudeModel || 'claude-sonnet-4-5-20250929', messages, onChunk, abortSignal);
+        } else if (p === 'localllm' && App.settings.localLLMUrl) {
+          return await callOpenAICompatStream(App.settings.localLLMUrl,
+            '', App.settings.localLLMModel || 'local-model', messages, onChunk, abortSignal);
+        }
+      } catch(e) { lastError = e; }
+    }
+    return null;
+  }
+
   let primaryError = null;
-  if (VOID_CORE_API.url) {
-    const maxAttempts = hasBackupKey ? 2 : 3;
+  if (hasBackupKey) {
+    // A personal key means VOID CORE's shared, rate-limited backend and
+    // Cloudflare deploys are no longer load-bearing — the real key is the
+    // reliable path, so it goes first. VOID CORE only gets a single quick
+    // shot afterward, as a safety net if the key itself is out of quota.
+    reply = await tryPersonalKeys();
+    if (!reply && !abortSignal.aborted && VOID_CORE_API.url) {
+      try {
+        reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
+      } catch(e) { lastError = e; primaryError = e; }
+    }
+  } else if (VOID_CORE_API.url) {
+    // No personal key configured — VOID CORE (retried) is the only path.
     const BACKOFF_MS = [400, 900];
-    for (let attempt = 0; attempt < maxAttempts && !reply && !abortSignal.aborted; attempt++) {
+    for (let attempt = 0; attempt < 3 && !reply && !abortSignal.aborted; attempt++) {
       try {
         reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
       } catch(e) {
         lastError = e;
-        primaryError = e; // kept separately — the fallback chain below overwrites lastError, and
-        if (attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, BACKOFF_MS[attempt])); // losing why the reliable primary failed is the actual diagnostic gap
+        primaryError = e; // kept separately — the failure-message block below reports
+        if (attempt < 2) await new Promise(r => setTimeout(r, BACKOFF_MS[attempt])); // this specifically, since it's the only path that was tried
       }
     }
   }
-
-  // User hit Stop with nothing streamed yet — don't cascade into other providers.
-  if (!reply && !abortSignal.aborted) {
-  const order = App.settings.providerOrder || ['gemini', 'groq', 'openrouter'];
-  const tryProviders = [...order, 'together', 'mistral', 'claude', 'localllm'];
-  const tried = new Set();
-
-  for (const p of tryProviders) {
-    if (tried.has(p)) continue;
-    tried.add(p);
-    if (abortSignal.aborted) break;
-    try {
-      if (p === 'gemini' && App.settings.geminiKey) {
-        reply = await callGemini(messages, abortSignal); break;
-      } else if (p === 'groq' && App.settings.groqKey) {
-        reply = await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
-          App.settings.groqKey, App.settings.groqModel || 'llama-3.1-8b-instant', messages, onChunk, abortSignal); break;
-      } else if (p === 'openrouter' && App.settings.apiKey) {
-        reply = await callOpenAICompatStream('https://openrouter.ai/api/v1/chat/completions',
-          App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk, abortSignal); break;
-      } else if (p === 'together' && App.settings.togetherKey) {
-        reply = await callOpenAICompatStream('https://api.together.xyz/v1/chat/completions',
-          App.settings.togetherKey, App.settings.togetherModel || 'meta-llama/Llama-3.2-70B-Instruct-Turbo', messages, onChunk, abortSignal); break;
-      } else if (p === 'mistral' && App.settings.mistralKey) {
-        reply = await callOpenAICompatStream('https://api.mistral.ai/v1/chat/completions',
-          App.settings.mistralKey, App.settings.mistralModel || 'mistral-large-latest', messages, onChunk, abortSignal); break;
-      } else if (p === 'claude' && App.settings.claudeKey && VOID_CORE_API.url) {
-        // Anthropic blocks direct browser calls (no CORS allow-list), so this
-        // goes through VOID CORE's /v1/claude passthrough instead — the key
-        // still comes from and stays with the user, just relayed server-side.
-        reply = await callOpenAICompatStream(`${VOID_CORE_API.url}/v1/claude`,
-          App.settings.claudeKey, App.settings.claudeModel || 'claude-sonnet-4-5-20250929', messages, onChunk, abortSignal); break;
-      } else if (p === 'localllm' && App.settings.localLLMUrl) {
-        reply = await callOpenAICompatStream(App.settings.localLLMUrl,
-          '', App.settings.localLLMModel || 'local-model', messages, onChunk, abortSignal); break;
-      }
-    } catch(e) { lastError = e; }
-  }
-  } // end if (!reply) fallback chain
 
   if (reply) {
     App.chatHistory.push({ role: 'assistant', content: reply, sources });
