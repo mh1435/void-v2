@@ -3270,7 +3270,23 @@ function updateModelIndicator() {
 
 /* ============ AI Provider Calls ============ */
 
-async function callGemini(messages) {
+// Fetches on a weak/throttled connection can otherwise hang indefinitely —
+// browsers apply no default timeout, so a stalled TCP connection just sits
+// there forever with no error and no fallback ever triggers. Every AI call
+// below bounds itself to this so a bad connection fails fast instead of
+// leaving the user staring at typing dots with no way out but Stop.
+const AI_CALL_TIMEOUT_MS = 15000;
+function withTimeout(signal, ms = AI_CALL_TIMEOUT_MS) {
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([signal, AbortSignal.timeout(ms)].filter(Boolean));
+  }
+  const ctrl = new AbortController();
+  if (signal) { if (signal.aborted) ctrl.abort(); else signal.addEventListener('abort', () => ctrl.abort()); }
+  setTimeout(() => ctrl.abort(), ms);
+  return ctrl.signal;
+}
+
+async function callGemini(messages, signal) {
   const key = App.settings.geminiKey;
   const model = App.settings.geminiModel || 'gemini-2.5-flash';
   const system = messages.find(m => m.role === 'system');
@@ -3287,7 +3303,7 @@ async function callGemini(messages) {
   if (system) body.systemInstruction = { parts: [{ text: system.content }] };
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: withTimeout(signal) }
   );
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -3297,12 +3313,13 @@ async function callGemini(messages) {
   return data.candidates[0].content.parts[0].text;
 }
 
-async function callOpenAICompat(url, key, model, messages) {
+async function callOpenAICompat(url, key, model, messages, signal) {
   const headers = { 'Content-Type': 'application/json' };
   if (key) headers['Authorization'] = `Bearer ${key}`;
   const res = await fetch(url, {
     method: 'POST',
     headers,
+    signal: withTimeout(signal),
     body: JSON.stringify({ model, messages, max_tokens: 1024 })
   });
   if (!res.ok) {
@@ -3330,7 +3347,7 @@ async function callOpenAICompatStream(url, key, model, messages, onChunk, signal
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    signal,
+    signal: withTimeout(signal),
     body: JSON.stringify({ model, messages, max_tokens: 1024, stream: true })
   });
   if (!res.ok) {
@@ -4042,7 +4059,7 @@ async function generateAssistantReply(triggerText) {
     if (abortSignal.aborted) break;
     try {
       if (p === 'gemini' && App.settings.geminiKey) {
-        reply = await callGemini(messages); break;
+        reply = await callGemini(messages, abortSignal); break;
       } else if (p === 'groq' && App.settings.groqKey) {
         reply = await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
           App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages, onChunk, abortSignal); break;
