@@ -4101,12 +4101,17 @@ async function generateAssistantReply(triggerText) {
     if (abortSignal.aborted) {
       appendMessage('system', '⏹ Stopped.');
     } else {
-      // Every provider (including the retried primary) failed — this is rare
-      // enough that it's almost always a connectivity blip, not a real outage.
-      // Show something actionable instead of a raw "Pollinations 402"-style
-      // status code that means nothing to the user and hides what actually
-      // failed first.
-      appendMessage('system', '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.');
+      // Every provider (including the retried primary) failed. If the user has
+      // no personal backup key, there was truly nowhere else for the fallback
+      // chain to go — that's VOID CORE's shared free backend being briefly out
+      // of capacity, not a connection problem, so say that plainly and point
+      // at the actual fix instead of a generic "check your connection" message
+      // (which is misleading here and leaves the user stuck every time it recurs).
+      const hasBackupKey = !!(App.settings.geminiKey || App.settings.groqKey || App.settings.apiKey
+        || App.settings.togetherKey || App.settings.mistralKey || App.settings.claudeKey || App.settings.localLLMUrl);
+      appendMessage('system', hasBackupKey
+        ? '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.'
+        : '⚠️ VOID CORE (the shared free AI) is briefly overloaded. Add a free backup key in Settings → API Keys (Gemini or Groq — 2 minutes) so VOID switches over automatically next time this happens.');
       // Log VOID CORE's own failure reason specifically, not just whichever
       // fallback happened to fail last (usually Pollinations) — that's the
       // one that actually explains why the reliable primary went down.
