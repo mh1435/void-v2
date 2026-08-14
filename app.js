@@ -3989,11 +3989,21 @@ async function generateAssistantReply(triggerText) {
   const lastMsg = App.chatHistory[App.chatHistory.length - 1];
   const askingAboutImage = lastMsg && Array.isArray(lastMsg.content)
     && lastMsg.content.some(p => p && p.type === 'image_url');
-  const weatherCtx = askingAboutImage ? '' : await getWeatherLookupCtx(triggerText || '');
-  const knowledge = askingAboutImage ? { ctx: '', source: null } : await getKnowledgeLookupCtx(triggerText || '');
-  const web = askingAboutImage ? { ctx: '', source: null } : await getWebSearchCtx(triggerText || '');
-  const news = askingAboutImage ? { ctx: '', source: null } : await getNewsHeadlinesCtx(triggerText || '');
-  const youtube = askingAboutImage ? { ctx: '', source: null } : await getYouTubeLookupCtx(triggerText || '');
+  // These 5 lookups are independent of each other — run them concurrently
+  // instead of one after another. Most return instantly with no network call
+  // (their regexes just don't match), but any message that DOES trigger two
+  // or more (e.g. a weather question with a news mention) used to pay for
+  // both round trips back to back; now it pays for the slower of the two.
+  const empty = { ctx: '', source: null };
+  const [weatherCtx, knowledge, web, news, youtube] = askingAboutImage
+    ? ['', empty, empty, empty, empty]
+    : await Promise.all([
+        getWeatherLookupCtx(triggerText || ''),
+        getKnowledgeLookupCtx(triggerText || ''),
+        getWebSearchCtx(triggerText || ''),
+        getNewsHeadlinesCtx(triggerText || ''),
+        getYouTubeLookupCtx(triggerText || ''),
+      ]);
   const sources = [knowledge.source, web.source, news.source, youtube.source].filter(Boolean);
   // Keep image payloads only on the newest message — older base64 images
   // would balloon every request if re-sent each turn.
@@ -4024,25 +4034,30 @@ async function generateAssistantReply(triggerText) {
     box.scrollTop = box.scrollHeight;
   }
 
-  // Always try the shared VOID core first — retried once, since it's the
-  // most reliable path and most failures here are a one-off network blip,
-  // not the service actually being down. Without this, a single dropped
-  // packet used to cascade straight through every fallback provider and
-  // land on Pollinations' free tier, which is flaky under load.
+  // A personal key is a fast, real fallback — no need to burn 3 full VOID
+  // CORE attempts (each with its own request time plus backoff) before
+  // reaching it. Without one, VOID CORE is the only hope, so it's worth
+  // riding out a longer blip. Computed once here and reused below when
+  // reporting a total failure.
+  const hasBackupKey = !!(App.settings.geminiKey || App.settings.groqKey || App.settings.apiKey
+    || App.settings.togetherKey || App.settings.mistralKey || App.settings.claudeKey || App.settings.localLLMUrl);
+
+  // Always try the shared VOID core first — retried, since most failures
+  // here are a one-off network blip, not the service actually being down.
+  // Without this, a single dropped packet used to cascade straight through
+  // every fallback provider and land on Pollinations' free tier, which is
+  // flaky under load.
   let primaryError = null;
   if (VOID_CORE_API.url) {
-    // 3 attempts now, not 2 — a real user-observed case had a transient 502
-    // from the upstream model survive two tries in a row (600ms apart), so
-    // one more attempt with a longer gap covers a slightly longer blip
-    // without meaningfully delaying the common case where it just works.
-    const BACKOFF_MS = [600, 1200];
-    for (let attempt = 0; attempt < 3 && !reply && !abortSignal.aborted; attempt++) {
+    const maxAttempts = hasBackupKey ? 2 : 3;
+    const BACKOFF_MS = [400, 900];
+    for (let attempt = 0; attempt < maxAttempts && !reply && !abortSignal.aborted; attempt++) {
       try {
         reply = await callOpenAICompatStream(VOID_CORE_API.url, VOID_CORE_API.key, VOID_CORE_API.model, messages, onChunk, abortSignal);
       } catch(e) {
         lastError = e;
         primaryError = e; // kept separately — the fallback chain below overwrites lastError, and
-        if (attempt < 2) await new Promise(r => setTimeout(r, BACKOFF_MS[attempt])); // losing why the reliable primary failed is the actual diagnostic gap
+        if (attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, BACKOFF_MS[attempt])); // losing why the reliable primary failed is the actual diagnostic gap
       }
     }
   }
@@ -4124,8 +4139,6 @@ async function generateAssistantReply(triggerText) {
       // of capacity, not a connection problem, so say that plainly and point
       // at the actual fix instead of a generic "check your connection" message
       // (which is misleading here and leaves the user stuck every time it recurs).
-      const hasBackupKey = !!(App.settings.geminiKey || App.settings.groqKey || App.settings.apiKey
-        || App.settings.togetherKey || App.settings.mistralKey || App.settings.claudeKey || App.settings.localLLMUrl);
       appendMessage('system', hasBackupKey
         ? '⚠️ Couldn\'t reach VOID right now — check your connection and try again in a moment.'
         : '⚠️ VOID CORE (the shared free AI) is briefly overloaded. Add a free backup key in Settings → API Keys (Gemini or Groq — 2 minutes) so VOID switches over automatically next time this happens.');
