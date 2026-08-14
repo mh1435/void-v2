@@ -653,14 +653,18 @@ function contactsPlugin() {
 // device of every app installed). If Device Control is also enabled, VOID
 // takes the last step too — tapping Send once the chat is open — otherwise
 // the message is left staged, ready for you to tap Send yourself.
-const SEND_MESSAGE_RE = /^(?:please\s+)?(?:send\s+(?:a\s+)?message|text|message)\s+(?:to\s+)?(.+?)(?:\s+(?:on|via|through)\s+(whatsapp|sms|text\s*message))?\s*(?:saying|that says|:|-)\s*(.+)$/i;
+// The app hint ("on whatsapp"/"via sms") can land either before or after the
+// contact name ("message on whatsapp to Mom: hi" vs "text Mom on whatsapp: hi") —
+// both phrasings are common from voice dictation, so both optional slots are matched.
+const SEND_MESSAGE_RE = /^(?:please\s+)?(?:send\s+(?:a\s+)?message|text|message)\s+(?:(?:on|via|through)\s+(whatsapp|sms|text\s*message)\s+)?(?:to\s+)?(.+?)(?:\s+(?:on|via|through)\s+(whatsapp|sms|text\s*message))?\s*(?:saying|that says|:|-)\s*(.+)$/i;
 
 function detectSendMessageIntent(text) {
   const m = text.trim().match(SEND_MESSAGE_RE);
   if (!m) return null;
-  const contact = m[1].trim();
-  const appHint = (m[2] || '').toLowerCase().includes('whatsapp') ? 'whatsapp' : 'sms';
-  const message = m[3].trim();
+  const contact = m[2].trim();
+  const appHintRaw = m[1] || m[3] || '';
+  const appHint = appHintRaw.toLowerCase().includes('whatsapp') ? 'whatsapp' : 'sms';
+  const message = m[4].trim();
   if (!contact || !message || contact.length > 60) return null;
   return { contact, appHint, message };
 }
