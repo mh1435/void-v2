@@ -7,7 +7,7 @@ const App = {
     theme: 'frost',
     apiKey: '', model: 'meta-llama/llama-3.2-3b-instruct:free',
     geminiKey: '', geminiModel: 'gemini-2.5-flash',
-    groqKey: '', groqModel: 'llama-3.3-70b-versatile',
+    groqKey: '', groqModel: 'llama-3.1-8b-instant',
     togetherKey: '', togetherModel: 'meta-llama/Llama-3.2-70B-Instruct-Turbo',
     mistralKey: '', mistralModel: 'mistral-large-latest',
     claudeKey: '', claudeModel: 'claude-sonnet-4-5-20250929',
@@ -4077,7 +4077,7 @@ async function generateAssistantReply(triggerText) {
         reply = await callGemini(messages, abortSignal); break;
       } else if (p === 'groq' && App.settings.groqKey) {
         reply = await callOpenAICompatStream('https://api.groq.com/openai/v1/chat/completions',
-          App.settings.groqKey, App.settings.groqModel || 'llama-3.3-70b-versatile', messages, onChunk, abortSignal); break;
+          App.settings.groqKey, App.settings.groqModel || 'llama-3.1-8b-instant', messages, onChunk, abortSignal); break;
       } else if (p === 'openrouter' && App.settings.apiKey) {
         reply = await callOpenAICompatStream('https://openrouter.ai/api/v1/chat/completions',
           App.settings.apiKey, App.settings.model || 'meta-llama/llama-3.2-3b-instruct:free', messages, onChunk, abortSignal); break;
