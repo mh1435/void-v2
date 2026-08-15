@@ -1716,20 +1716,12 @@ function applyTheme(name) {
   applyAccentColor(App.settings.accentColor, App.settings.accentColor2);
 }
 
-// Apple devices get "liquid" glass (brighter, translucent, glossy — like iOS);
-// everything else gets "frozen" (frosted) glass. Users can override in Settings.
-function isApplePlatform() {
-  const ua = navigator.userAgent || '';
-  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-  const mac = /Macintosh|Mac OS X/.test(ua);
-  return iOS || mac;
-}
-
 function applyGlassStyle(style) {
   App.settings.glass = style || 'auto';
-  const resolved = App.settings.glass === 'auto'
-    ? (isApplePlatform() ? 'liquid' : 'frozen')
-    : App.settings.glass;
+  // "Liquid" (bright, translucent, glossy — the iOS-style Liquid Glass look)
+  // is the default for everyone now, not just Apple devices. "Frozen" (matte,
+  // heavier blur) stays available as a manual pick in Settings.
+  const resolved = App.settings.glass === 'auto' ? 'liquid' : App.settings.glass;
   document.documentElement.setAttribute('data-glass', resolved);
   document.querySelectorAll('#glass-seg .seg-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.glass === App.settings.glass));
@@ -1908,7 +1900,10 @@ const PLAN_RANK = { free: 0, pro: 1, max: 2 };
 const FREE_DAILY_LIMIT = 50;
 const FREE_STUDY_LIMIT = 5;
 
-function getPlan() { return (App.currentUser && localStorage.getItem(userKey('plan'))) || 'free'; }
+// Personal-use build — no payments, everything unlocked. Hardcoded rather
+// than deleting the plan-gated code paths below, since that would mean
+// re-threading isPro()/isMax() checks through every feature that uses them.
+function getPlan() { return 'max'; }
 function isPro() { return getPlan() !== 'free'; }
 function isMax() { return getPlan() === 'max'; }
 
