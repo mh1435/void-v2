@@ -42,6 +42,13 @@
          resolve a name to a phone number. VOID never writes/modifies contacts. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Cadence handoff: "tell cadence to log 30 minutes of reading". Gated
+         by Cadence's own custom permission so only apps that request it can
+         trigger its RunCommandReceiver; no runtime prompt (protectionLevel
+         is "normal"). Harmless if Cadence isn't installed — CadencePlugin
+         checks first and reports "not_installed" rather than erroring. -->
+    <uses-permission android:name="app.cadence.focus.permission.RUN_COMMAND" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

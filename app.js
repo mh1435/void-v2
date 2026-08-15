@@ -64,6 +64,7 @@ const VOID_SYSTEM = `You are VOID, an intelligent AI assistant built into the VO
 - Device control (Android app, needs the user to enable "VOID Device Control" in Settings → Accessibility once): navigate the device ("go back", "go home", "recent apps", "show notifications", "lock screen", "split screen"), take a screenshot, scroll/swipe, tap or long-press anything by description ("click the submit button"), fill in text fields ("type john@x.com into the email field"), read and describe what's on screen ("what's on my screen?"), and read current notifications ("read my notifications") — separately needs Notification access enabled in Settings
 - Send a message to a contact (Android app, needs Contacts access enabled in Settings → Access once): "text Mom saying I'll be late", "send a message to Kassie on WhatsApp: omw" — looks the contact up by name and opens WhatsApp/SMS with the chat open and the message already typed in; it only auto-taps Send too if Device Control is ALSO enabled, otherwise it's left staged for the user's final tap. Never claim a message was definitely delivered — the app only knows it opened the deep link, not what happened inside the other app after that.
 - Routines (Settings → Routines): the user can create a named routine with a trigger phrase and a set of steps (weather, today's tasks, notifications, top headlines) — saying the exact trigger phrase runs every included step and reads back the combined result in one go. This is entirely user-configured; you have no way to create, list, or run one yourself, and there are none unless the user has set one up.
+- Cadence handoff (Android app, needs Cadence installed on the same device): "tell cadence to log 30 minutes of reading", "cadence, start a 25 minute focus session" — forwards the command to Cadence (a separate habit/focus-timer app), which understands the natural language itself; you have no way to know what habits or timers the user has in Cadence, and can't invoke this yourself.
 - Song detection: "what song is this" / the Song ID tool in the + menu identifies music playing nearby (via Google or Shazam)
 - Learn mode: "teach me X" or the Learn tool — a simplified voice-narrated lesson with quiz/example/deeper follow-ups
 - Study Hub: attach a lecture recording (auto-transcribed), a whiteboard/slide photo, or notes — VOID makes cheat sheets, flashcards, summaries, and quizzes from it (saved as exportable documents)
@@ -640,6 +641,54 @@ function deviceControlPlugin() {
 
 function contactsPlugin() {
   return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidContacts : null;
+}
+
+function cadencePlugin() {
+  return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.Cadence : null;
+}
+
+/* ============ Hand a command to Cadence (a separate app) ============ */
+// "tell cadence to log 30 minutes of reading", "cadence, start a 25 minute
+// focus session". Cadence already understands natural language for its own
+// habits/timers/navigation — VOID doesn't parse any of that, it just
+// recognizes the message is meant for Cadence and forwards the rest verbatim.
+// The bare "cadence, ..." form requires the comma/colon so ordinary sentences
+// that merely mention the word ("what's a good cadence for reading") don't
+// false-trigger.
+const CADENCE_RE = /^(?:(?:please\s+)?(?:tell|ask)\s+cadence\s+to\s+(.+)|cadence[,:]\s*(.+))$/i;
+
+function detectCadenceIntent(text) {
+  const m = text.trim().match(CADENCE_RE);
+  if (!m) return null;
+  const command = (m[1] || m[2] || '').trim();
+  return command ? { command } : null;
+}
+
+async function runCadenceCommand(commandText) {
+  const plugin = cadencePlugin();
+  if (!plugin) {
+    appendMessage('system', 'Sending commands to Cadence needs the VOID Android app.');
+    logActivity('error', `Cadence: no plugin available for "${commandText}"`);
+    return;
+  }
+  let res;
+  try { res = await plugin.runCommand({ command: commandText }); } catch (e) { res = { ok: false, error: e.message }; }
+  if (res?.ok && res.message) {
+    appendMessage('system', `🌱 Cadence: ${res.message}`);
+    logActivity('command', `Cadence: "${commandText}" → ${res.message}`);
+  } else if (res?.ok && res.live) {
+    appendMessage('system', '🌱 Sent to Cadence.');
+    logActivity('command', `Cadence (live): "${commandText}"`);
+  } else if (res?.ok && res.queued) {
+    appendMessage('system', `🌱 Cadence heard you — "${commandText}" will apply next time you open it.`);
+    logActivity('command', `Cadence (queued): "${commandText}"`);
+  } else if (res?.error === 'not_installed') {
+    appendMessage('system', "Cadence isn't installed on this device.");
+    logActivity('error', `Cadence: not installed ("${commandText}")`);
+  } else {
+    appendMessage('system', "Cadence didn't respond — it may need updating, or try again.");
+    logActivity('error', `Cadence: no response (${res?.error || 'unknown'}) for "${commandText}"`);
+  }
 }
 
 /* ============ Send a message to a contact, in any app ============ */
@@ -3836,6 +3885,16 @@ async function sendMessage() {
   if (routine) {
     appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     await runRoutine(routine);
+    return;
+  }
+
+  // Hand off to Cadence — an explicit named target, same tier as the
+  // send-message handoff below, checked first so "tell cadence to..." can't
+  // be misread as a send-message or generic app-launch intent.
+  const cadence = detectCadenceIntent(text);
+  if (cadence) {
+    appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runCadenceCommand(cadence.command);
     return;
   }
 

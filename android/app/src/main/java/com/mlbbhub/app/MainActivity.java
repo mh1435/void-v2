@@ -31,6 +31,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(VoidAccessibilityPlugin.class);
         registerPlugin(VoidContactsPlugin.class);
         registerPlugin(VoidWidgetPlugin.class);
+        registerPlugin(CadencePlugin.class);
         super.onCreate(savedInstanceState);
         captureShare(getIntent());
         captureImageShare(getIntent());
