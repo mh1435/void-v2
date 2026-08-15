@@ -691,6 +691,70 @@ async function runCadenceCommand(commandText) {
   }
 }
 
+// Recognizes an open-ended "what do I have today" style question. Kept in
+// sync with Cadence's own TODAY_QUERY_PATTERNS (index.html) since VOID always
+// sends the one fixed canonical phrase below rather than the user's literal
+// words — Cadence only strictly needs to recognize that one phrase, but both
+// pattern lists cover the same realistic phrasings for their own direct users.
+const TODAY_SUMMARY_PATTERNS = [
+  /^what(?:'s| is| do i have| have i got)?\s+(?:do i have(?: to do)?|is|are|on|going on|happening)?\s*(?:on\s+)?(?:my\s+)?(?:plate|schedule|agenda|day)?\s*(?:for\s+)?today$/,
+  /^what am i doing today$/,
+  /^what'?s happening today$/,
+  /^do i have anything(?: else)? today$/,
+  /^summari[sz]e (?:my )?today$/,
+  /^(?:give me )?(?:my |a |today'?s )?(?:summary|rundown|overview)(?: for| of)? today$/,
+  /^today'?s\s+(?:summary|rundown|overview|agenda|schedule)$/,
+];
+function detectTodaySummaryIntent(text) {
+  const t = text.trim().toLowerCase().replace(/[.,!?]+$/, '');
+  return TODAY_SUMMARY_PATTERNS.some(re => re.test(t));
+}
+
+// Query-flavored Cadence call, separate from runCadenceCommand() — that
+// function's response copy ("will apply next time you open it") is written
+// for command confirmations, wrong tone for a read. Shared by the standalone
+// "what do I have today" handler and the Routines 'cadence' step below.
+async function fetchCadenceTodaySummary() {
+  const plugin = cadencePlugin();
+  if (!plugin) return { ok: false, reason: 'no_plugin' };
+  let res;
+  try { res = await plugin.runCommand({ command: 'what do I have today' }); }
+  catch (e) { return { ok: false, reason: 'error', error: e.message }; }
+  if (res?.ok && res.message) return { ok: true, text: res.message };
+  // Cadence foregrounded: the command went to its live page, which has no
+  // way to hand a result back through the broadcast — no text available.
+  if (res?.ok && res.live) return { ok: false, reason: 'live' };
+  if (res?.ok && res.queued) return { ok: false, reason: 'unavailable' };
+  if (res?.error === 'not_installed') return { ok: false, reason: 'not_installed' };
+  return { ok: false, reason: 'unavailable' };
+}
+
+async function runTodaySummary() {
+  const typingId = appendTyping();
+  const parts = [];
+
+  const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const dayEnd = dayStart + 86400000;
+  const dueToday = (App.tasks || []).filter(t => !t.done && t.due && t.due >= dayStart && t.due < dayEnd);
+  parts.push(dueToday.length
+    ? `📋 VOID tasks due today:\n${dueToday.map(t => `• ${t.text} (${new Date(t.due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n')}`
+    : '📋 No VOID tasks due today.');
+
+  if (cadencePlugin()) {
+    const cad = await fetchCadenceTodaySummary();
+    if (cad.ok) parts.push(`🌱 Cadence:\n${cad.text}`);
+    else if (cad.reason === 'live') parts.push("🌱 Cadence is open right now — check it directly for today's full picture.");
+    else if (cad.reason !== 'not_installed') parts.push("🌱 Couldn't reach Cadence just now.");
+  }
+
+  removeTyping(typingId);
+  const out = `**Today**\n\n${parts.join('\n\n')}`;
+  App.chatHistory.push({ role: 'assistant', content: out });
+  saveChatHistory();
+  appendMessage('assistant', out, App.chatHistory.length - 1);
+  if (App.settings.voiceEnabled) speak(out);
+}
+
 /* ============ Send a message to a contact, in any app ============ */
 // "text Mom saying I'll be late", "send a message to Kassie on whatsapp: omw".
 // Real, working handoff: resolve the name via the on-device Contacts plugin,
@@ -3895,6 +3959,15 @@ async function sendMessage() {
   if (cadence) {
     appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
     await runCadenceCommand(cadence.command);
+    return;
+  }
+
+  // "What do I have today" — checked here (not left to fall through to the
+  // AI) since looksLikePlainChat() would otherwise route any bare "what..."
+  // question around every intent detector with zero real task/Cadence data.
+  if (detectTodaySummaryIntent(text)) {
+    appendMessage('user', text); input.value = ''; input.style.height = 'auto'; updateSendMicBtn();
+    await runTodaySummary();
     return;
   }
 
@@ -7356,6 +7429,7 @@ const ROUTINE_STEP_META = {
   tasks: { label: "Today's tasks", icon: '⏰' },
   notifications: { label: 'Notifications', icon: '🔔' },
   news: { label: 'Top headlines', icon: '📰' },
+  cadence: { label: 'Cadence today', icon: '🌱' },
 };
 
 function loadRoutines() {
@@ -7407,6 +7481,13 @@ async function buildRoutineStepText(step) {
     const items = await fetchTopHeadlines(3);
     if (!items.length) return null;
     return `📰 Top headlines:\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+  }
+  if (step === 'cadence') {
+    if (!cadencePlugin()) return null;
+    const cad = await fetchCadenceTodaySummary();
+    if (cad.ok) return `🌱 Cadence:\n${cad.text}`;
+    if (cad.reason === 'live') return '🌱 Cadence is open right now — check it directly.';
+    return null; // not installed / unreachable — skip silently, same as other optional steps
   }
   return null;
 }
