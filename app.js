@@ -21,6 +21,7 @@ const App = {
     voiceEngine: 'device', realisticVoice: 'autumn',
     wakeWord: false,
     floatingAssistantEnabled: false,
+    autoReplyEnabled: false,
     haptic: true,
     accentColor: '', accentColor2: '',
     persona: '',
@@ -855,6 +856,21 @@ function logActivity(type, text) {
   if (list && document.getElementById('panel-activitylog')?.classList.contains('active')) renderActivityLog();
 }
 
+// Auto-reply events (sent, or skipped and why) happen natively — possibly
+// while the app was fully closed — and get queued on the Android side since
+// there's no WebView around at that moment to call logActivity() directly.
+// This drains that queue into the Activity Log; call on boot and whenever
+// the app comes back to the foreground.
+async function drainAutoReplyLogIntoActivityLog() {
+  const plugin = window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidAccessibility : null;
+  if (!plugin?.drainAutoReplyLog) return;
+  let res;
+  try { res = await plugin.drainAutoReplyLog(); } catch (_) { return; }
+  for (const entry of res?.entries || []) {
+    logActivity(/^Auto-replied/.test(entry.text) ? 'command' : 'error', entry.text);
+  }
+}
+
 function setupActivityLogPanel() {
   loadActivityLog();
   document.getElementById('activitylog-clear-btn')?.addEventListener('click', () => {
@@ -1685,8 +1701,12 @@ function bootApp() {
     handlePaymentReturn, verifyPlanFromServer, loadTasks, loadCommands, loadRoutines, setupRoutinesPanel, loadChats,
     loadMemoryFacts, loadBookmarks, loadDocuments, loadGems, loadPages, setupPagesHub,
     setupDashboard, setupBottomNav, setupCanvas, setupActivityLogPanel, loadGitHub, updateUserDisplay, initLiveContext, initQuoteWidget,
-    renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour,
+    renderWelcomeGreeting, checkForAppUpdate, applyPendingShare, maybeStartTour, drainAutoReplyLogIntoActivityLog,
   ].forEach(safe);
+
+  // Auto-reply events can also queue up natively while the app is closed —
+  // catch up on them whenever the app comes back to the foreground, not just at boot.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) drainAutoReplyLogIntoActivityLog(); });
 }
 
 /* ============ First-run feature tour ============ */
@@ -2335,6 +2355,36 @@ function setupClonedPanels() {
     if (!plugin) { appendMessage?.('system', '📵 Notification access needs the VOID Android app.'); return; }
     await plugin.openNotificationSettings().catch(() => {});
   });
+
+  const autoReplyToggle = document.getElementById('toggle-auto-reply');
+  if (autoReplyToggle) {
+    autoReplyToggle.checked = !!App.settings.autoReplyEnabled;
+    autoReplyToggle.addEventListener('change', async () => {
+      const plugin = deviceControlPlugin();
+      if (!plugin) {
+        autoReplyToggle.checked = false;
+        appendMessage?.('system', '📵 Auto-reply needs the VOID Android app.');
+        return;
+      }
+      const wantsOn = autoReplyToggle.checked;
+      if (wantsOn) {
+        const notif = await plugin.isNotificationAccessEnabled().catch(() => ({ value: false }));
+        if (!notif?.value) {
+          autoReplyToggle.checked = false;
+          appendMessage?.('system', '🔔 Enable Notification Access above first, then turn this on.');
+          await plugin.openNotificationSettings().catch(() => {});
+          return;
+        }
+      }
+      const res = await plugin.setAutoReply({ enabled: wantsOn }).catch(() => ({ ok: false }));
+      if (!res?.ok) { autoReplyToggle.checked = !wantsOn; return; }
+      App.settings.autoReplyEnabled = wantsOn;
+      saveSettings();
+      appendMessage?.('system', wantsOn
+        ? '😎 Auto-reply on — VOID will fire back goofy slang replies to incoming messages on its own.'
+        : '👋 Auto-reply off.');
+    });
+  }
   const contactsBtn = document.getElementById('perm-contacts-btn');
   if (contactsBtn) contactsBtn.addEventListener('click', async () => {
     const plugin = contactsPlugin();

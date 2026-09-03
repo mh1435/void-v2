@@ -261,4 +261,48 @@ public class VoidAccessibilityPlugin extends Plugin {
         ret.put("notifications", arr);
         call.resolve(ret);
     }
+
+    /** Turns auto-reply on/off. Requires Notification access to already be
+     *  granted — VoidNotificationListenerService.onNotificationPosted() reads
+     *  this flag natively on every notification, so it's persisted via
+     *  AutoReplyPrefs rather than kept only in JS-land App.settings. */
+    @PluginMethod
+    public void setAutoReply(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", false);
+        boolean notifAccess = NotificationManagerCompat.getEnabledListenerPackages(getContext())
+            .contains(getContext().getPackageName());
+        if (enabled && !notifAccess) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("error", "NOTIFICATION_ACCESS_REQUIRED");
+            call.resolve(ret);
+            return;
+        }
+        AutoReplyPrefs.setEnabled(getContext(), enabled);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        ret.put("enabled", enabled);
+        call.resolve(ret);
+    }
+
+    /** Drains auto-reply events (sent, or skipped and why) queued natively
+     *  while the WebView wasn't around to log them — the caller pushes each
+     *  one through logActivity() so the Activity Log stays complete. */
+    @PluginMethod
+    public void drainAutoReplyLog(PluginCall call) {
+        org.json.JSONArray entries = AutoReplyLog.drain(getContext());
+        JSArray arr = new JSArray();
+        for (int i = 0; i < entries.length(); i++) {
+            org.json.JSONObject e = entries.optJSONObject(i);
+            if (e == null) continue;
+            JSObject o = new JSObject();
+            o.put("time", e.optLong("time"));
+            o.put("text", e.optString("text"));
+            arr.put(o);
+        }
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        ret.put("entries", arr);
+        call.resolve(ret);
+    }
 }

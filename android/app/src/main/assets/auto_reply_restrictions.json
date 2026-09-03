@@ -1,0 +1,24 @@
+{
+  "_comment": "Checked by AutoReplyFilters before an auto-reply is sent. sensitiveInputKeywords: if the INCOMING message contains any of these, VOID skips auto-replying entirely and leaves it for the user. bannedOutputWords: if VOID's own generated reply contains any of these, the reply is dropped and nothing is sent.",
+  "cooldownSeconds": 45,
+  "maxReplyWords": 25,
+  "sensitiveInputKeywords": [
+    "emergency", "911", "999", "112",
+    "hospital", "ambulance", "er now", "surgery",
+    "accident", "crash", "collision",
+    "died", "passed away", "funeral", "death", "dying",
+    "suicide", "kill myself", "self harm", "self-harm", "hurt myself", "end it all",
+    "abuse", "assault", "attacked", "rape",
+    "police", "arrested", "jail", "custody",
+    "urgent", "call me now", "call me asap", "need you now",
+    "help me", "i need help", "please help",
+    "scared", "terrified", "in danger",
+    "crying", "can't stop crying",
+    "can't breathe", "chest pain", "overdose", "bleeding"
+  ],
+  "bannedOutputWords": [
+    "nigger", "nigga", "faggot", "fag", "retard", "retarded", "tranny",
+    "kike", "spic", "chink", "gook", "wetback", "coon", "beaner",
+    "cunt", "whore", "slut", "rape", "kill yourself", "kys"
+  ]
+}
