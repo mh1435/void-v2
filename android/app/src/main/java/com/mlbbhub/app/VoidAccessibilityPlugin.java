@@ -1,7 +1,9 @@
 package com.mlbbhub.app;
 
+import android.content.ComponentName;
 import android.content.Intent;
 import android.provider.Settings;
+import android.service.notification.NotificationListenerService;
 
 import androidx.core.app.NotificationManagerCompat;
 
@@ -221,8 +223,21 @@ public class VoidAccessibilityPlugin extends Plugin {
     public void isNotificationAccessEnabled(PluginCall call) {
         boolean enabled = NotificationManagerCompat.getEnabledListenerPackages(getContext())
             .contains(getContext().getPackageName());
+        // The OS can report access as granted before it's actually (re)bound
+        // our listener service yet — most commonly right after the user just
+        // granted it in Settings. Report the real OS-level permission (what
+        // the user actually controls) rather than staying stuck on "Not
+        // enabled" for something already granted, and nudge Android to
+        // connect the listener now instead of leaving it to bind whenever it
+        // feels like it (which can otherwise take a force-stop/reopen or a
+        // reboot in practice).
+        if (enabled && !VoidNotificationListenerService.isRunning()) {
+            try {
+                NotificationListenerService.requestRebind(new ComponentName(getContext(), VoidNotificationListenerService.class));
+            } catch (Exception ignored) {}
+        }
         JSObject ret = new JSObject();
-        ret.put("value", enabled && VoidNotificationListenerService.isRunning());
+        ret.put("value", enabled);
         call.resolve(ret);
     }
 
