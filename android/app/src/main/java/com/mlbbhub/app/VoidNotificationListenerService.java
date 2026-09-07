@@ -46,24 +46,36 @@ public class VoidNotificationListenerService extends NotificationListenerService
         if (getPackageName().equals(sbn.getPackageName())) return; // never reply to our own notifications
 
         Notification n = sbn.getNotification();
-        if (n == null || n.actions == null) return;
-        Notification.Action replyAction = null;
-        RemoteInput replyInput = null;
-        for (Notification.Action action : n.actions) {
-            RemoteInput[] inputs = action.getRemoteInputs();
-            if (inputs == null) continue;
-            for (RemoteInput ri : inputs) { replyAction = action; replyInput = ri; break; }
-            if (replyAction != null) break;
-        }
-        if (replyAction == null || replyInput == null) return; // no quick-reply action = not a repliable message
+        if (n == null) return;
 
         Bundle extras = n.extras;
         CharSequence textCs = extras != null ? extras.getCharSequence(Notification.EXTRA_TEXT) : null;
-        if (textCs == null || textCs.toString().trim().isEmpty()) return;
+        if (textCs == null || textCs.toString().trim().isEmpty()) return; // not a message-shaped notification
         final String message = textCs.toString();
 
+        Notification.Action replyAction = null;
+        RemoteInput replyInput = null;
+        if (n.actions != null) {
+            for (Notification.Action action : n.actions) {
+                RemoteInput[] inputs = action.getRemoteInputs();
+                if (inputs == null) continue;
+                for (RemoteInput ri : inputs) { replyAction = action; replyInput = ri; break; }
+                if (replyAction != null) break;
+            }
+        }
+        if (replyAction == null || replyInput == null) {
+            // This app's notification carries no quick-reply action, so there's
+            // nothing for the OS-level reply mechanism to use — logged so this
+            // shows up in the Activity Log instead of looking like nothing happened.
+            AutoReplyLog.add(this, "Got a message from " + sbn.getPackageName() + " but it has no quick-reply action — can't auto-reply to this app/notification.");
+            return;
+        }
+
         final String conversationKey = sbn.getPackageName() + ":" + sbn.getKey();
-        if (!AutoReplyCooldown.shouldReply(this, conversationKey)) return;
+        if (!AutoReplyCooldown.shouldReply(this, conversationKey)) {
+            AutoReplyLog.add(this, "Skipped auto-reply to " + sbn.getPackageName() + " — still in cooldown from a recent reply.");
+            return;
+        }
         if (AutoReplyFilters.looksSensitive(this, message)) {
             AutoReplyLog.add(this, "Skipped a sensitive-looking message from " + sbn.getPackageName() + " — left for you to answer.");
             return;
@@ -74,7 +86,10 @@ public class VoidNotificationListenerService extends NotificationListenerService
         final android.content.Context ctx = getApplicationContext();
         new Thread(() -> {
             String reply = AutoReplyAI.generateReply(ctx, message);
-            if (reply == null) return; // network/AI failure — silently skip, nothing to send
+            if (reply == null) {
+                AutoReplyLog.add(ctx, "Couldn't generate an auto-reply to " + sbn.getPackageName() + " — the AI request failed or returned nothing.");
+                return;
+            }
             if (!AutoReplyFilters.isSafe(ctx, reply)) {
                 AutoReplyLog.add(ctx, "Blocked a generated reply that didn't pass the safety check.");
                 return;
