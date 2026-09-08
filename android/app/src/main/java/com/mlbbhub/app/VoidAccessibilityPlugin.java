@@ -36,9 +36,37 @@ public class VoidAccessibilityPlugin extends Plugin {
 
     @PluginMethod
     public void isEnabled(PluginCall call) {
+        // Same false-negative class as notification access had: the OS can
+        // report the accessibility service as granted (Settings.Secure) before
+        // it's actually bound (VoidAccessibilityService.isRunning() still
+        // false), most commonly right after the user just flipped it on in
+        // Settings. Report the real OS-level grant directly instead of the
+        // instance-liveness proxy. There's no public rebind API for
+        // AccessibilityService the way NotificationListenerService has one, so
+        // this can't proactively nudge a bind the way notification access
+        // does — but it stops the UI lying about a permission that's already
+        // granted.
         JSObject ret = new JSObject();
-        ret.put("value", VoidAccessibilityService.isRunning());
+        ret.put("value", isAccessibilityServiceGranted() || VoidAccessibilityService.isRunning());
         call.resolve(ret);
+    }
+
+    private boolean isAccessibilityServiceGranted() {
+        try {
+            int enabled = Settings.Secure.getInt(
+                getContext().getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 0);
+            if (enabled != 1) return false;
+            String services = Settings.Secure.getString(
+                getContext().getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (services == null || services.isEmpty()) return false;
+            String target = getContext().getPackageName() + "/" + VoidAccessibilityService.class.getName();
+            for (String s : services.split(":")) {
+                if (s.equalsIgnoreCase(target)) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Deep-links to Android's Accessibility settings list; the user taps

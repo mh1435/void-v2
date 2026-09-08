@@ -87,7 +87,11 @@ public class FloatingService extends Service {
     private int     initParamsX, initParamsY;
 
     private WindowManager.LayoutParams params;
-    private final List<String[]>       history  = new ArrayList<>();
+    // synchronizedList so add()/reads from the main thread (send(),
+    // onCommandRecognized()) and the executor thread (callAPI()) don't race —
+    // a plain ArrayList mutated from both risked a ConcurrentModificationException
+    // or a corrupted request body when a new command arrived mid-request.
+    private final List<String[]>       history  = Collections.synchronizedList(new ArrayList<>());
     private final ExecutorService      executor = Executors.newSingleThreadExecutor();
 
     /* ─── Lifecycle ─────────────────────────────────────────── */
@@ -950,7 +954,13 @@ public class FloatingService extends Service {
         try {
             JSONArray msgs = new JSONArray();
             msgs.put(new JSONObject().put("role", "system").put("content", SYS_PROMPT));
-            List<String[]> slice = history.subList(Math.max(0, history.size() - 10), history.size());
+            // subList() is a live view — synchronizedList only makes single
+            // calls atomic, not the compound "read size, then iterate" here,
+            // so snapshot into an independent copy while holding the lock.
+            List<String[]> slice;
+            synchronized (history) {
+                slice = new ArrayList<>(history.subList(Math.max(0, history.size() - 10), history.size()));
+            }
             for (int i = 0; i < slice.size(); i++) {
                 String[] m = slice.get(i);
                 boolean isLastUserTurn = attachImage && i == slice.size() - 1 && "user".equals(m[0]);

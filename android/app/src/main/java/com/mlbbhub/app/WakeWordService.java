@@ -66,7 +66,16 @@ public class WakeWordService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_RESUME.equals(intent.getAction())) {
+        boolean isResume = intent != null && ACTION_RESUME.equals(intent.getAction());
+        // resumeListening() below calls an existing instance directly, so this
+        // ACTION_RESUME path is only reached when the previous instance had
+        // already died (e.g. killed by OEM background management) and a brand
+        // new instance was just created to handle it — `running` is false on
+        // that fresh instance, since resumeListeningInternal() only knows how
+        // to un-pause a model that's already listening. Fall through to the
+        // normal cold-start path so the mic actually comes back instead of the
+        // service sitting on "Starting…" forever.
+        if (isResume && running) {
             resumeListeningInternal();
             return START_STICKY;
         }
