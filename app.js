@@ -1988,6 +1988,7 @@ function setupSettingsPanels() {
       App.settings.haptic = haptic.checked;
       saveSettings();
       if (haptic.checked && navigator.vibrate) navigator.vibrate(15);
+      document.querySelectorAll('.cap-toggle[data-cap="haptic"]').forEach(el => { el.checked = haptic.checked; });
     });
   }
 
@@ -2328,8 +2329,9 @@ function setupClonedPanels() {
     App.settings[k] = t.checked;
     saveSettings();
     refreshSettingsSubvalues();
-    // keep the voice panel toggle and floating button in sync where relevant
+    // keep other controls bound to the same setting in sync where relevant
     if (k === 'voiceEnabled') { const v = document.getElementById('toggle-voice-enabled'); if (v) v.checked = t.checked; }
+    if (k === 'haptic') { const h = document.getElementById('haptic-toggle'); if (h) h.checked = t.checked; }
   }));
 
   // Permissions
@@ -2480,6 +2482,9 @@ function openSettingsPanel(panelId) {
     syncFontSizeSeg();
   } else if (panelId === 'panel-notifications') {
     refreshNotifStatus();
+  } else if (panelId === 'panel-floating') {
+    const t = document.getElementById('toggle-floating-assistant');
+    if (t) t.checked = !!App.settings.floatingAssistantEnabled;
   } else if (panelId === 'panel-sync') {
     showSyncCode();
     const st = document.getElementById('sync-status');
@@ -2573,6 +2578,7 @@ function setupPreferencesPanel() {
       App.settings.floatingAssistantEnabled = floatToggle.checked;
       saveSettings();
       setFloatingAssistant(floatToggle.checked);
+      document.querySelectorAll('.cap-toggle[data-cap="floatingAssistantEnabled"]').forEach(el => { el.checked = floatToggle.checked; });
     });
   }
 
@@ -2581,6 +2587,8 @@ function setupPreferencesPanel() {
   if (capFloatToggle) {
     capFloatToggle.addEventListener('change', () => {
       setFloatingAssistant(capFloatToggle.checked);
+      const t = document.getElementById('toggle-floating-assistant');
+      if (t) t.checked = capFloatToggle.checked;
     });
   }
 
@@ -6799,6 +6807,10 @@ function openNavDrawer() {
   const nm = document.getElementById('nav-profile-name');
   if (av) av.textContent = (App.currentUser || 'V')[0].toUpperCase();
   if (nm) nm.textContent = App.currentUser ? App.currentUser.split('@')[0] : 'USER';
+  // The same haptic setting also has a toggle in the Capabilities panel —
+  // re-sync here so flipping it there doesn't leave this one stale.
+  const hapticToggle = document.getElementById('haptic-toggle');
+  if (hapticToggle) hapticToggle.checked = App.settings.haptic !== false;
   if (d) d.classList.add('open');
   if (s) s.classList.add('show');
 }
@@ -7266,13 +7278,6 @@ function updateUserDisplay() {
   if (!App.currentUser) return;
   const profile = getUserProfile();
   const displayName = profile?.name || App.currentUser.split('@')[0];
-  const initial = displayName.charAt(0).toUpperCase();
-
-  const avatarInitialEl = document.getElementById('avatar-initial');
-  if (avatarInitialEl) avatarInitialEl.textContent = initial;
-
-  const settingsAvatarEl = document.getElementById('settings-avatar');
-  if (settingsAvatarEl) settingsAvatarEl.textContent = initial;
 
   const settingsNameEl = document.getElementById('settings-name');
   if (settingsNameEl) settingsNameEl.textContent = displayName;
@@ -7458,7 +7463,7 @@ async function runDailyBriefing() {
   const text = await buildDailyBriefingText();
   appendMessage('system', text);
   if (window.Notification && Notification.permission === 'granted') {
-    try { new Notification('VOID — Daily Briefing', { body: text.replace(/[*#📋📍🕒⛅⏰📌💭]/g, '').trim().slice(0, 180) }); } catch (_) {}
+    try { new Notification('VOID — Daily Briefing', { body: text.replace(/[*#📋📍🕒⛅⏰📌💭]/g, '').trim().slice(0, 180), silent: App.settings.notifSound === false }); } catch (_) {}
   }
   // Actually read the briefing itself, not just an announcement that one
   // exists — speechText() strips the markdown/emoji so it doesn't come out
@@ -7625,7 +7630,7 @@ function setupRoutinesPanel() {
 
 function fireReminder(text) {
   if (window.Notification && Notification.permission === 'granted') {
-    try { new Notification('VOID reminder', { body: text }); } catch(_) {}
+    try { new Notification('VOID reminder', { body: text, silent: App.settings.notifSound === false }); } catch(_) {}
   }
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:10px;right:10px;top:calc(var(--safe-top,0px) + 8px);z-index:9999;'
@@ -7876,9 +7881,6 @@ function setupGameHub() {
   if (studyBtn) {
     studyBtn.addEventListener('click', () => openStudyPanel());
   }
-
-  const studyBtnGlobal = document.getElementById('btn-open-study-global');
-  if (studyBtnGlobal) studyBtnGlobal.addEventListener('click', () => openStudyPanel());
 
   const wsGamingBtn = document.getElementById('ws-gaming-btn');
   if (wsGamingBtn) wsGamingBtn.addEventListener('click', showGamingView);
@@ -8231,6 +8233,10 @@ function renderFocusStats() {
 
 /* openStudyPanel — called from STUDY pill, shows the location grid */
 function openStudyPanel() {
+  if (App.settings.studyMode === false) {
+    appendMessage?.('system', '📚 Study mode is off — turn it back on in Settings → Capabilities to use it.');
+    return;
+  }
   switchTab('tab-study-grid');
   renderStudyGrid(STUDY_LOCATIONS);
   renderFocusStats();
