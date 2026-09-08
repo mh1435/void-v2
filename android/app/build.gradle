@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.mlbbhub.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        aidl = true // needed for IUserService.aidl (Shizuku's privileged-process bridge)
+    }
     defaultConfig {
         applicationId "com.mlbbhub.app"
         minSdkVersion rootProject.ext.minSdkVersion

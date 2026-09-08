@@ -1,6 +1,9 @@
 package com.mlbbhub.app;
 
+import android.content.ComponentName;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.os.IBinder;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -9,9 +12,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import rikka.shizuku.Shizuku;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 
 /**
  * Bridges to Shizuku (https://shizuku.rikka.app) for shell-level (adb)
@@ -27,6 +27,37 @@ import java.io.InputStreamReader;
 public class ShizukuPlugin extends Plugin {
 
     private static final int REQUEST_CODE = 9001;
+
+    // Shared across calls so we only pay the bind cost once per app session —
+    // bindUserService() spins up a whole separate privileged process.
+    private static volatile IUserService userService;
+    private static final Object serviceLock = new Object();
+
+    private final ServiceConnection userServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            synchronized (serviceLock) {
+                userService = IUserService.Stub.asInterface(binder);
+                serviceLock.notifyAll();
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            synchronized (serviceLock) {
+                userService = null;
+            }
+        }
+    };
+
+    private Shizuku.UserServiceArgs userServiceArgs() {
+        return new Shizuku.UserServiceArgs(
+                new ComponentName(getContext().getPackageName(), UserService.class.getName()))
+            .daemon(false)
+            .processNameSuffix("shizuku_svc")
+            .debuggable(false)
+            .version(1);
+    }
 
     private boolean shizukuInstalled() {
         try {
@@ -123,20 +154,32 @@ public class ShizukuPlugin extends Plugin {
         new Thread(() -> {
             JSObject ret = new JSObject();
             try {
-                Process p = Shizuku.newProcess(new String[]{"sh", "-c", command}, null, null);
-                StringBuilder out = new StringBuilder();
-                try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                    String line;
-                    while ((line = r.readLine()) != null) out.append(line).append('\n');
+                IUserService svc = obtainUserService();
+                if (svc == null) {
+                    ret.put("ok", false);
+                    ret.put("error", "BIND_TIMEOUT");
+                } else {
+                    String output = svc.exec(command);
+                    ret.put("ok", true);
+                    ret.put("output", output == null ? "" : output);
                 }
-                p.waitFor();
-                ret.put("ok", true);
-                ret.put("output", out.toString());
             } catch (Exception e) {
                 ret.put("ok", false);
                 ret.put("error", "EXEC_FAILED: " + e.getMessage());
             }
             call.resolve(ret);
         }).start();
+    }
+
+    // Binds the privileged UserService process if not already connected, and
+    // waits (up to 5s) for the connection — bindUserService() is async, its
+    // result only arrives via ServiceConnection.onServiceConnected().
+    private IUserService obtainUserService() throws InterruptedException {
+        synchronized (serviceLock) {
+            if (userService != null) return userService;
+            Shizuku.bindUserService(userServiceArgs(), userServiceConnection);
+            serviceLock.wait(5000);
+            return userService;
+        }
     }
 }
