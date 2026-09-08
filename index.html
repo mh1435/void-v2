@@ -1537,6 +1537,18 @@ if ('serviceWorker' in navigator) {
       <p class="muted small" style="margin:4px 2px 10px;">Some phones (Xiaomi/MIUI, Samsung, etc.) kill VOID's background listeners even after you grant permissions above. Exempting VOID from battery optimization here helps notification listening, auto-reply, and the wake word all stay running. If it's still unreliable afterward, also check your phone's own Autostart/Battery saver app-specific settings and lock VOID in your recent-apps list.</p>
       <div class="setting-row">
         <div class="setting-label">
+          <span>ADB Access (Shizuku)</span>
+          <span class="setting-sub" id="perm-shizuku-status">Not connected</span>
+        </div>
+        <button class="ghost-btn compact" id="perm-shizuku-btn">Grant</button>
+      </div>
+      <p class="muted small" style="margin:4px 2px 10px;">Advanced: if you have the separate Shizuku app installed and running (paired via wireless debugging, or root), VOID can use it for shell-level diagnostics and actions a normal app can't do — like directly checking whether the notification listener is bound at the OS level. Needs Shizuku running first; VOID can't install or start it for you.</p>
+      <div class="setting-row" id="shizuku-diagnose-row" style="display:none">
+        <div class="setting-label"><span>Diagnose notification listener</span><span class="setting-sub">Runs a real adb-level check and shows the raw result</span></div>
+        <button class="ghost-btn compact" id="shizuku-diagnose-btn">Run</button>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">
           <span>Contacts</span>
           <span class="setting-sub" id="perm-contacts-status">Not enabled</span>
         </div>
