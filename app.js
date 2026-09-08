@@ -6,7 +6,7 @@
 // a device is actually running the latest JS — the app loads live from a
 // hosted server, so this is the fastest way to rule out a stale/cached build
 // without guessing during a live debugging session.
-const BUILD_TAG = '2026-09-08-notif-drain-fix';
+const BUILD_TAG = '2026-09-08-shizuku';
 
 const App = {
   settings: {
@@ -652,6 +652,10 @@ function contactsPlugin() {
 
 function cadencePlugin() {
   return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.Cadence : null;
+}
+
+function shizukuPlugin() {
+  return window.Capacitor?.isNativePlatform?.() ? window.Capacitor?.Plugins?.VoidShizuku : null;
 }
 
 /* ============ Hand a command to Cadence (a separate app) ============ */
@@ -2260,6 +2264,30 @@ async function refreshPermissions() {
     setEl('perm-battery-status', 'Needs Android app');
   }
 
+  const shizuku = shizukuPlugin();
+  const diagRow = document.getElementById('shizuku-diagnose-row');
+  if (shizuku) {
+    const avail = await shizuku.isAvailable().catch(() => ({ installed: false, running: false }));
+    const shizukuBtn = document.getElementById('perm-shizuku-btn');
+    if (!avail?.installed) {
+      setEl('perm-shizuku-status', 'Shizuku app not installed');
+      if (shizukuBtn) shizukuBtn.textContent = 'Grant';
+      if (diagRow) diagRow.style.display = 'none';
+    } else if (!avail?.running) {
+      setEl('perm-shizuku-status', 'Shizuku installed but not running');
+      if (shizukuBtn) shizukuBtn.textContent = 'Grant';
+      if (diagRow) diagRow.style.display = 'none';
+    } else {
+      const perm = await shizuku.checkPermission().catch(() => ({ granted: false }));
+      setEl('perm-shizuku-status', perm?.granted ? 'Granted' : 'Running — not granted yet');
+      if (shizukuBtn) shizukuBtn.textContent = perm?.granted ? 'Granted' : 'Grant';
+      if (diagRow) diagRow.style.display = perm?.granted ? '' : 'none';
+    }
+  } else {
+    setEl('perm-shizuku-status', 'Needs Android app');
+    if (diagRow) diagRow.style.display = 'none';
+  }
+
   const cp = contactsPlugin();
   if (cp) {
     const contacts = await cp.isEnabled().catch(() => ({ value: false }));
@@ -2374,6 +2402,41 @@ function setupClonedPanels() {
     const plugin = deviceControlPlugin();
     if (!plugin) { appendMessage?.('system', '📵 This needs the VOID Android app.'); return; }
     await plugin.requestIgnoreBatteryOptimizations().catch(() => {});
+  });
+
+  const shizukuBtn = document.getElementById('perm-shizuku-btn');
+  if (shizukuBtn) shizukuBtn.addEventListener('click', async () => {
+    const shizuku = shizukuPlugin();
+    if (!shizuku) { appendMessage?.('system', '📵 This needs the VOID Android app.'); return; }
+    const avail = await shizuku.isAvailable().catch(() => ({ installed: false, running: false }));
+    if (!avail?.installed) {
+      appendMessage?.('system', '🔌 Shizuku isn\'t installed. Install the Shizuku app first, then set it up (wireless debugging pairing, or root) before this will work.');
+      return;
+    }
+    if (!avail?.running) {
+      appendMessage?.('system', '🔌 Shizuku is installed but not running — open Shizuku and start its service first (via wireless debugging or root), then try Grant again.');
+      return;
+    }
+    const res = await shizuku.requestPermission().catch(() => ({ granted: false }));
+    appendMessage?.('system', res?.granted ? '✅ Shizuku access granted.' : '❌ Shizuku access not granted.');
+    refreshPermissions();
+  });
+
+  const shizukuDiagBtn = document.getElementById('shizuku-diagnose-btn');
+  if (shizukuDiagBtn) shizukuDiagBtn.addEventListener('click', async () => {
+    const shizuku = shizukuPlugin();
+    if (!shizuku) return;
+    appendMessage?.('system', '🔎 Running: dumpsys notification (via Shizuku)…');
+    const res = await shizuku.runCommand({ command: "dumpsys notification | grep -i -A3 'com.mlbbhub.app'" }).catch(() => ({ ok: false, error: 'EXEC_FAILED' }));
+    if (!res?.ok) {
+      appendMessage?.('system', '❌ Diagnostic failed: ' + (res?.error || 'unknown error'));
+      return;
+    }
+    const out = (res.output || '').trim();
+    appendMessage?.('system', out
+      ? '📋 Notification listener diagnostic:\n```\n' + out.slice(0, 1500) + '\n```'
+      : '📋 No mention of VOID in dumpsys notification output — the OS genuinely does not have VOID\'s listener registered at all right now.');
+    logActivity?.('command', 'Ran Shizuku notification-listener diagnostic.');
   });
 
   const autoReplyToggle = document.getElementById('toggle-auto-reply');

@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.mlbbhub.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        aidl = true // needed for IUserService.aidl (Shizuku's privileged-process bridge)
+    }
     defaultConfig {
         applicationId "com.mlbbhub.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -49,6 +52,12 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     // Offline wake-word / speech recognition engine (no API key, works in background)
     implementation "com.alphacephei:vosk-android:0.3.47"
+    // Shizuku — lets a user who's paired wireless debugging (or rooted) grant
+    // VOID shell-level (adb) privileges for things a normal app can't do on
+    // its own. Entirely opt-in: every feature that uses it checks
+    // availability/permission first and falls back to "needs Shizuku" errors.
+    implementation "dev.rikka.shizuku:api:13.1.5"
+    implementation "dev.rikka.shizuku:provider:13.1.5"
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
