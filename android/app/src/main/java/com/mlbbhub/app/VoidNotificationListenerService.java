@@ -35,10 +35,16 @@ public class VoidNotificationListenerService extends NotificationListenerService
     public static boolean isRunning() { return INSTANCE != null; }
 
     @Override
-    public void onListenerConnected() { INSTANCE = this; }
+    public void onListenerConnected() {
+        INSTANCE = this;
+        AutoReplyLog.add(this, "Notification listener connected.");
+    }
 
     @Override
-    public void onListenerDisconnected() { if (INSTANCE == this) INSTANCE = null; }
+    public void onListenerDisconnected() {
+        if (INSTANCE == this) INSTANCE = null;
+        AutoReplyLog.add(this, "Notification listener disconnected — Android unbound it (likely killed by battery/background management).");
+    }
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
