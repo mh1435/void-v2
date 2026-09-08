@@ -14,15 +14,15 @@ const PROVIDERS = [
   { id: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', keyEnv: 'GEMINI_KEY' },
 ];
 
-const WORKER_VERSION = 'v9-vision-debug';
+const WORKER_VERSION = 'v10-vision-model-fix';
 
 // When a request includes an image, only vision-capable models can "see" it.
 // Route those to the right model per provider (text-only models silently
 // ignore images, which looks like "VOID can't see pictures").
 // Groq's Llama-4 Scout is the workhorse fallback when Gemini is rate-limited.
 const VISION_MODELS = {
-  groq:       'meta-llama/llama-4-scout-17b-16e-instruct',
-  openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+  groq:       'qwen/qwen3.6-27b',
+  openrouter: 'qwen/qwen2.5-vl-72b-instruct',
   mistral:    'pixtral-12b-2409',
   together:   'meta-llama/Llama-4-Scout-17B-16E-Instruct',
 };
@@ -203,7 +203,7 @@ async function handleVisionGemini(messages, max_tokens, env) {
   }
   const body = { contents, generationConfig: { maxOutputTokens: max_tokens } };
   if (systemText.trim()) body.system_instruction = { parts: [{ text: systemText.trim() }] };
-  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', {
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
     method: 'POST',
     headers: { 'x-goog-api-key': env.GEMINI_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
