@@ -2,6 +2,12 @@
    VOID // CORE APPLICATION LOGIC
    ========================================================= */
 
+// Bumped by hand on every deploy so it's visible (bottom of Settings) whether
+// a device is actually running the latest JS — the app loads live from a
+// hosted server, so this is the fastest way to rule out a stale/cached build
+// without guessing during a live debugging session.
+const BUILD_TAG = '2026-09-08-notif-drain-fix';
+
 const App = {
   settings: {
     theme: 'frost',
@@ -1684,6 +1690,7 @@ function bootApp() {
   // One failing subsystem must never kill the whole app: before this guard, a
   // single throw here left EVERY button dead (nothing after it got wired).
   const safe = (fn) => { try { fn(); } catch (e) { console.error('boot step failed:', fn.name || fn, e); } };
+  safe(() => setEl('build-tag', 'Build: ' + BUILD_TAG));
   safe(loadSettings);
   safe(() => applyTheme(App.settings.theme));
   safe(() => applyGlassStyle(App.settings.glass));
