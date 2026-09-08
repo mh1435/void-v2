@@ -15,6 +15,12 @@
     <!-- Notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Lets us prompt the user to exempt VOID from battery optimization —
+         needed on OEM skins (MIUI, One UI, etc.) that otherwise kill the
+         notification-listener/wake-word background services even when the
+         user has separately granted those permissions. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Device utilities: see installed apps so "open <any app>" can launch them.
          Fine for a sideloaded APK (Play Store restricts this permission). -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />

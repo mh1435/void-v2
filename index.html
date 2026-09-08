@@ -1539,6 +1539,14 @@ if ('serviceWorker' in navigator) {
       </div>
       <div class="setting-row">
         <div class="setting-label">
+          <span>Background reliability</span>
+          <span class="setting-sub" id="perm-battery-status">Not exempt</span>
+        </div>
+        <button class="ghost-btn compact" id="perm-battery-btn">Fix</button>
+      </div>
+      <p class="muted small" style="margin:4px 2px 10px;">Some phones (Xiaomi/MIUI, Samsung, etc.) kill VOID's background listeners even after you grant permissions above. Exempting VOID from battery optimization here helps notification listening, auto-reply, and the wake word all stay running. If it's still unreliable afterward, also check your phone's own Autostart/Battery saver app-specific settings and lock VOID in your recent-apps list.</p>
+      <div class="setting-row">
+        <div class="setting-label">
           <span>Contacts</span>
           <span class="setting-sub" id="perm-contacts-status">Not enabled</span>
         </div>
