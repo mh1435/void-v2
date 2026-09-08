@@ -2475,6 +2475,10 @@ function openSettingsPanel(panelId) {
     refreshPermissions();
   } else if (panelId === 'panel-activitylog') {
     renderActivityLog();
+    // Pull anything the native side logged while the WebView wasn't around
+    // (e.g. auto-reply events) before showing this screen — otherwise a
+    // real event can sit invisible until the next full app close/reopen.
+    drainAutoReplyLogIntoActivityLog().then(renderActivityLog);
   } else if (panelId === 'panel-colormode') {
     syncColorModeSeg();
     applyGlassStyle(App.settings.glass);
