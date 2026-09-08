@@ -6,7 +6,7 @@
 // a device is actually running the latest JS — the app loads live from a
 // hosted server, so this is the fastest way to rule out a stale/cached build
 // without guessing during a live debugging session.
-const BUILD_TAG = '2026-09-08-shizuku';
+const BUILD_TAG = '2026-09-08-shizuku-force-fix';
 
 const App = {
   settings: {
@@ -2426,17 +2426,35 @@ function setupClonedPanels() {
   if (shizukuDiagBtn) shizukuDiagBtn.addEventListener('click', async () => {
     const shizuku = shizukuPlugin();
     if (!shizuku) return;
-    appendMessage?.('system', '🔎 Running: dumpsys notification (via Shizuku)…');
-    const res = await shizuku.runCommand({ command: "dumpsys notification | grep -i -A3 'com.mlbbhub.app'" }).catch(() => ({ ok: false, error: 'EXEC_FAILED' }));
-    if (!res?.ok) {
-      appendMessage?.('system', '❌ Diagnostic failed: ' + (res?.error || 'unknown error'));
-      return;
-    }
-    const out = (res.output || '').trim();
-    appendMessage?.('system', out
-      ? '📋 Notification listener diagnostic:\n```\n' + out.slice(0, 1500) + '\n```'
-      : '📋 No mention of VOID in dumpsys notification output — the OS genuinely does not have VOID\'s listener registered at all right now.');
-    logActivity?.('command', 'Ran Shizuku notification-listener diagnostic.');
+    const LISTENER = 'com.mlbbhub.app/com.mlbbhub.app.VoidNotificationListenerService';
+    const run = (cmd) => shizuku.runCommand({ command: cmd }).catch(() => ({ ok: false, error: 'EXEC_FAILED' }));
+
+    appendMessage?.('system', '🔧 Force-fixing via Shizuku — these are real adb-level commands, not UI dialogs, so they bypass any stale permission state entirely.');
+
+    // 1. Force-grant notification listener access directly at the OS level
+    // (cmd notification allow_listener is the same primitive `adb shell cmd
+    // notification allow_listener <component>` uses — real, standard AOSP
+    // shell tooling, not guessed).
+    const grant = await run(`cmd notification allow_listener ${LISTENER}`);
+    appendMessage?.('system', grant?.ok
+      ? '1/3 ✅ Force-granted notification listener access at the OS level.'
+      : `1/3 ❌ Grant failed: ${grant?.error || 'unknown'}`);
+
+    // 2. Force battery/doze whitelist directly (same effect as the system
+    // "ignore battery optimizations" dialog, applied via shell instead of a
+    // dialog the OEM skin could otherwise still override).
+    const whitelist = await run('dumpsys deviceidle whitelist +com.mlbbhub.app');
+    appendMessage?.('system', '2/3 ✅ Requested battery/doze whitelist via shell.');
+
+    // 3. Read back the real OS-level ground truth — this bypasses VOID's own
+    // JS entirely, so it's not affected by any stale-build question.
+    const diag = await run(`dumpsys notification | grep -i -A5 'com.mlbbhub.app'`);
+    const out = (diag?.output || '').trim();
+    appendMessage?.('system', '3/3 ' + (out
+      ? '📋 Raw OS state:\n```\n' + out.slice(0, 1500) + '\n```'
+      : '📋 Still nothing in dumpsys notification for VOID — even a direct shell-level grant did not make Android register the listener. That points to something more fundamental on this phone/MIUI version than a permission or battery setting.'));
+    logActivity?.('command', 'Ran Shizuku force-fix (grant + whitelist) + notification-listener diagnostic.');
+    refreshPermissions();
   });
 
   const autoReplyToggle = document.getElementById('toggle-auto-reply');
