@@ -2243,9 +2243,13 @@ async function refreshPermissions() {
     const notif = await plugin.isNotificationAccessEnabled().catch(() => ({ value: false }));
     setEl('perm-notiflisten-status', notif?.value ? 'Enabled' : 'Not enabled');
     const notifBtn = document.getElementById('perm-notiflisten-btn'); if (notifBtn) notifBtn.textContent = notif?.value ? 'Enabled' : 'Enable';
+    const batt = await plugin.isIgnoringBatteryOptimizations().catch(() => ({ value: false }));
+    setEl('perm-battery-status', batt?.value ? 'Exempt' : 'Not exempt');
+    const battBtn = document.getElementById('perm-battery-btn'); if (battBtn) battBtn.textContent = batt?.value ? 'Exempt' : 'Fix';
   } else {
     setEl('perm-accessibility-status', 'Needs Android app');
     setEl('perm-notiflisten-status', 'Needs Android app');
+    setEl('perm-battery-status', 'Needs Android app');
   }
 
   const cp = contactsPlugin();
@@ -2354,6 +2358,13 @@ function setupClonedPanels() {
     const plugin = deviceControlPlugin();
     if (!plugin) { appendMessage?.('system', '📵 Notification access needs the VOID Android app.'); return; }
     await plugin.openNotificationSettings().catch(() => {});
+  });
+
+  const battBtn = document.getElementById('perm-battery-btn');
+  if (battBtn) battBtn.addEventListener('click', async () => {
+    const plugin = deviceControlPlugin();
+    if (!plugin) { appendMessage?.('system', '📵 This needs the VOID Android app.'); return; }
+    await plugin.requestIgnoreBatteryOptimizations().catch(() => {});
   });
 
   const autoReplyToggle = document.getElementById('toggle-auto-reply');

@@ -249,6 +249,36 @@ public class VoidAccessibilityPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Granting "Notification access" alone isn't always enough to keep the
+     *  listener service actually running — aggressive OEM battery/background
+     *  management (MIUI, One UI, etc.) can still kill it. Standard Android
+     *  battery-optimization exemption is the one universal mitigation that
+     *  works the same way across every OEM skin. */
+    @PluginMethod
+    public void isIgnoringBatteryOptimizations(PluginCall call) {
+        android.os.PowerManager pm =
+            (android.os.PowerManager) getContext().getSystemService(android.content.Context.POWER_SERVICE);
+        boolean ignoring = pm != null && pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+        JSObject ret = new JSObject();
+        ret.put("value", ignoring);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            call.resolve(ret);
+        }
+    }
+
     /** appFilter (optional): only notifications whose package name contains this. */
     @PluginMethod
     public void readNotifications(PluginCall call) {
