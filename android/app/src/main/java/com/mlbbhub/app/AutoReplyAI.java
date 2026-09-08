@@ -49,6 +49,10 @@ final class AutoReplyAI {
             conn = (HttpURLConnection) new URL(VOID_CORE_URL).openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
+            // Android's default HttpURLConnection User-Agent ("Dalvik/...") is a
+            // common trigger for Cloudflare Worker/WAF bot heuristics that a
+            // browser's fetch() never hits — set a normal-looking one defensively.
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) VOID/1.0");
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
             conn.setDoOutput(true);
@@ -56,7 +60,13 @@ final class AutoReplyAI {
                 os.write(body.toString().getBytes(StandardCharsets.UTF_8));
             }
 
-            if (conn.getResponseCode() != 200) return null;
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                String errBody = readStream(conn.getErrorStream());
+                AutoReplyLog.add(ctx, "AI request failed: HTTP " + code
+                    + (errBody != null && !errBody.isEmpty() ? " — " + errBody.substring(0, Math.min(200, errBody.length())) : ""));
+                return null;
+            }
 
             StringBuilder sb = new StringBuilder();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
@@ -77,9 +87,23 @@ final class AutoReplyAI {
             }
             return content.isEmpty() ? null : content;
         } catch (Exception e) {
+            AutoReplyLog.add(ctx, "AI request failed: " + e.getClass().getSimpleName()
+                + (e.getMessage() != null ? " — " + e.getMessage() : ""));
             return null;
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    private static String readStream(java.io.InputStream in) {
+        if (in == null) return "";
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line);
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
         }
     }
 }
